@@ -1,0 +1,16 @@
+/* Workflow.css */
+body {
+  background-color: #f9f9f9;
+}
+
+.container {
+  max-width: 1000px;
+}
+
+.table td, .table th {
+  vertical-align: middle;
+}
+
+button {
+  min-width: 35px;
+}

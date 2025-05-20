@@ -1,0 +1,116 @@
+/* Statistique.css */
+
+/* Styles généraux */
+.stats-container {
+    background-color: #f8f9fa;
+    min-height: 100vh;
+  }
+  
+  /* Cartes */
+  .stats-card {
+    transition: all 0.3s ease;
+    border-radius: 10px;
+    overflow: hidden;
+    background-color: white;
+  }
+  
+  .stats-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1) !important;
+  }
+  
+  .stats-card .card-body {
+    padding: 1.5rem;
+  }
+  
+  /* Titres */
+  .card-title {
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 1.5rem;
+    font-size: 1.25rem;
+  }
+  
+  /* Graphiques */
+  .recharts-wrapper {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
+  
+  .recharts-legend-item-text {
+    color: #6c757d !important;
+  }
+  
+  .recharts-tooltip-label {
+    color: #495057;
+    font-weight: 500;
+  }
+  
+  /* Spinner de chargement */
+  .loading-spinner {
+    width: 3rem;
+    height: 3rem;
+    border-width: 0.25em;
+  }
+  
+  /* Responsive adjustments */
+  @media (max-width: 768px) {
+    .stats-card {
+      margin-bottom: 1rem;
+    }
+    
+    .card-title {
+      font-size: 1.1rem;
+    }
+  }
+  
+  /* Animation pour les barres du graphique */
+  @keyframes barAnimation {
+    from { opacity: 0; transform: scaleY(0); }
+    to { opacity: 1; transform: scaleY(1); }
+  }
+  
+  .recharts-bar-rectangle {
+    animation: barAnimation 0.8s ease-out forwards;
+  }
+  
+  /* Animation pour les secteurs du camembert */
+  @keyframes pieAnimation {
+    from { opacity: 0; transform: scale(0); }
+    to { opacity: 1; transform: scale(1); }
+  }
+  
+  .recharts-pie-sector {
+    animation: pieAnimation 0.8s ease-out forwards;
+    animation-delay: calc(var(--index) * 0.1s);
+  }
+  
+  /* Styles pour les légendes */
+  .recharts-legend-item {
+    display: inline-flex !important;
+    align-items: center !important;
+    margin-right: 16px !important;
+  }
+  
+  .recharts-legend-item .recharts-surface {
+    margin-right: 8px !important;
+  }
+  
+  /* Personnalisation du tooltip */
+  .custom-tooltip {
+    background-color: white !important;
+    border: none !important;
+    border-radius: 8px !important;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15) !important;
+    padding: 12px !important;
+  }
+  
+  .custom-tooltip .label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 4px;
+  }
+  
+  .custom-tooltip .value {
+    font-weight: 700;
+    color: #212529;
+  }

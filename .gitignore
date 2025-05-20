@@ -1,0 +1,28 @@
+# Ne pas suivre node_modules
+node_modules/
+
+# Ne pas suivre les fichiers compilés Python
+__pycache__/
+*.py[cod]
+
+# Dossiers virtuels
+venv/
+env/
+
+# Fichiers de configuration sensibles
+.env
+
+# Cache d’éditeur
+.vscode/
+.idea/
+
+# Systèmes
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Build
+dist/
+build/

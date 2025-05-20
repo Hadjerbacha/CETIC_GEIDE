@@ -1,0 +1,40 @@
+.hover-scale {
+    transition: transform 0.2s ease;
+  }
+  
+  .hover-scale:hover {
+    transform: scale(1.1);
+  }
+  
+  .icon-wrapper {
+    width: 40px;
+    height: 40px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  
+  .modern-modal .modal-content {
+    border-radius: 20px;
+    border: none;
+    box-shadow: 0 12px 48px rgba(0,0,0,0.15);
+  }
+  
+  .action-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+  }
+  
+  .action-btn:hover {
+    background-color: rgba(0,0,0,0.05);
+  }
+  
+  .rounded-pill {
+    padding: 8px 20px;
+  }

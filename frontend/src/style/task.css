@@ -1,0 +1,47 @@
+
+  h2 {
+    color: #343a40;
+    font-weight: 600;
+    font-size: 1.8rem;
+  }
+  
+  .table {
+    background-color: #fff;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.05);
+  }
+  
+  .table thead {
+    background-color: #007bff;
+    color: white;
+  }
+  
+  .table th, .table td {
+    vertical-align: middle !important;
+    text-align: center;
+  }
+  
+  select.form-select-sm {
+    min-width: 130px;
+    font-weight: 500;
+  }
+  
+  select.bg-secondary {
+    background-color: #6c757d !important;
+  }
+  select.bg-warning {
+    background-color: #ffc107 !important;
+  }
+  select.bg-primary {
+    background-color: #007bff !important;
+  }
+  select.bg-success {
+    background-color: #28a745 !important;
+  }
+  
+  .text-danger {
+    font-weight: 500;
+    color: #dc3545 !important;
+  }
+  

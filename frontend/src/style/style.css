@@ -1,0 +1,204 @@
+/* Conteneur principal */
+.container {
+    margin-top: 20px;
+    padding: 20px;
+  }
+  
+  /* Style du formulaire pour les workflows */
+  .workflow-form {
+    margin-bottom: 20px;
+    padding: 20px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    background-color: #f9f9f9;
+  }
+  
+  /* Style des boutons */
+  .custom-buttons-container {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+  
+  .custom-button {
+    background-color: white;
+    color: black;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 8px 16px;
+  }
+  
+  .custom-button:hover {
+    background-color: #f0f0f0;
+    color: #ff7f00;
+  }
+  
+  .custom-button1 {
+    background-color: white;
+    color: black;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 8px 16px;
+  }
+  
+  .custom-button1:hover {
+    background-color: #f0f0f0;
+    color: #008000;
+  }
+  
+  /* Style du tableau des workflows */
+  .table-container {
+    margin-top: 30px;
+    overflow-x: auto;
+  }
+  
+  .table {
+    border-collapse: collapse;
+    width: 100%;
+  }
+  
+  th, td {
+    text-align: left;
+    padding: 10px;
+    border: 1px solid #ddd;
+  }
+  
+  th {
+    background-color: #f8f8f8;
+  }
+  
+  tr:hover {
+    background-color: #f1f1f1;
+  }
+  
+  .action {
+    white-space: nowrap;
+    padding: 10px;
+    margin: 10px;
+  }
+  
+  .taille {
+    min-width: 120px;
+  }
+  
+  /* Style spécifique pour la table des tâches */
+  .task-table {
+    margin-top: 20px;
+  }
+  
+  .task-table th, .task-table td {
+    text-align: center;
+    padding: 10px;
+  }
+  
+  .task-table th {
+    background-color: #f1f1f1;
+  }
+  
+  .task-table .action-button {
+    margin-right: 5px;
+  }
+  
+  /* Style des icônes dans les boutons */
+  .custom-button .icon, .task-table .icon {
+    margin-right: 8px;
+  }
+  
+  /* Style pour les modals */
+  .modal-content {
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid #ddd;
+    background-color: #fff;
+  }
+  
+  .modal-header {
+    background-color: #f8f8f8;
+    border-bottom: 1px solid #ddd;
+  }
+  
+  .modal-footer {
+    background-color: #f8f8f8;
+    border-top: 1px solid #ddd;
+  }
+  
+  /* Style du formulaire dans le modal */
+  .form-group {
+    margin-bottom: 20px;
+  }
+  
+  .form-group label {
+    font-weight: bold;
+  }
+  
+  /* Personnalisation des formulaires avec Select */
+  .select-container {
+    margin-top: 10px;
+  }
+  
+  .select-container .react-select__control {
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 5px;
+  }
+  
+  /* Styles généraux des éléments dans la page */
+  h2, h3 {
+    text-align: center;
+  }
+  
+  h2 {
+    font-size: 1.8rem;
+  }
+  
+  h3 {
+    font-size: 1.6rem;
+    margin-top: 20px;
+  }
+  
+  button {
+    border-radius: 5px;
+    font-size: 1rem;
+    padding: 8px 16px;
+  }
+  
+  /* Styles pour le Header de la page */
+  .header {
+    margin-bottom: 30px;
+    text-align: center;
+  }
+  
+  .header h1 {
+    font-size: 2rem;
+    color: #333;
+  }
+  
+  /* Styles de responsive pour les petits écrans */
+  @media (max-width: 768px) {
+    .container {
+      padding: 10px;
+    }
+  
+    .workflow-form {
+      padding: 10px;
+    }
+  
+    .table-container {
+      margin-top: 15px;
+    }
+  
+    .table th, .table td {
+      padding: 8px;
+    }
+  
+    .custom-button {
+      padding: 6px 12px;
+      font-size: 0.9rem;
+    }
+  
+    .custom-button1 {
+      padding: 6px 12px;
+      font-size: 0.9rem;
+    }
+  }
+  

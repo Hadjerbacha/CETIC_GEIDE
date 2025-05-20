@@ -1,0 +1,748 @@
+.container {
+    display: flex;
+    min-height: 100vh;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  }
+  
+  .the-navbar {
+    background-color: #4a5b6a;
+    width: 220px;
+    display: flex;
+    flex-direction: column;
+    padding: 1rem 0;
+    
+    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1); /* Ombre à droite */
+  }
+  
+  .logo-container {
+    padding: 1rem;
+    text-align: center;
+    border-bottom: 1px solid #34495e;
+  }
+  
+  .logo {
+    max-width: 180px;
+    height: auto;
+  }
+  
+  .nav-buttons {
+    display: flex;
+    flex-direction: column;
+    padding: 1rem;
+    gap: 0.5rem;
+  }
+  
+  .nav-button {
+    background: none;
+    border: none;
+    color : white;
+    padding: 0.75rem 1rem;
+    text-align: left;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+  }
+  
+  .nav-button:hover {
+    background-color: #34495e;
+  }
+  
+  .content {
+    flex: 1;
+    padding: 2rem;
+    background-color: #f8f9fa;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.9); /* Ombre autour du content */
+    margin: 2rem; /* Facultatif : espace entre le bord et le content */
+    border-radius: 8px; /* Facultatif : coins arrondis pour un style plus doux */
+  }
+  
+  .navbar {
+    display: flex;
+    justify-content: flex-end;
+    margin-bottom: 2rem;
+  }
+  
+  
+  .nav-right {
+    display: flex;
+    gap: 1rem;
+    margin-left: auto;
+  }  
+  
+  .nav {
+    background-color: #3498db; /* Couleur de fond */
+    color: white; /* Couleur du texte */
+    border: none;
+    padding: 0.75rem 1.5rem; /* Espacement autour du texte */
+    border-radius: 6px; /* Coins arrondis */
+    cursor: pointer;
+    display: flex; /* Utilisation du flexbox pour centrer le texte */
+    justify-content: center; /* Centrage horizontal */
+    align-items: center; /* Centrage vertical */
+    font-size: 1rem; /* Taille de police */
+    transition: transform 0.3s ease; /* Transition douce pour l'effet de zoom */
+}
+
+.nav:hover {
+    transform: scale(1.1); /* Zoom au survol */
+    background-color: #2980b9; /* Changer la couleur de fond au survol */
+}
+
+.nav:active {
+    transform: scale(1); /* Retour à la taille d'origine lorsqu'on appuie sur le bouton */
+}
+
+  h1 {
+    color: #2c3e50;
+    margin-bottom: 1.5rem;
+  }
+  
+  .controls {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    align-items: center;
+    background-color: white;
+  }
+  
+  .controls input,
+  .controls select {
+    padding: 0.5rem;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  }
+  
+  .button {
+    background-color: #ffffff;
+    color: #3498db;
+    border: 1px solid #3498db;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  }
+  
+  .button:hover {
+    background-color: #3498db;
+    color: white;
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+    transform: translateY(-2px);
+  }
+  .button-re {
+    background-color: #ffffff;
+    color: #34db50;
+    border: 1px solid #34db50;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  }
+  
+  .button-re:hover {
+    background-color: #18882b;
+    color: white;
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+    transform: translateY(-2px);
+  }
+  .button-sup {
+    background-color: #ffffff;
+    color: #3498db;
+    border: 1px solid #3498db;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  }
+  
+  .button-sup:hover {
+    background-color: #6b0d0d;
+    color: white;
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+    transform: translateY(-2px);
+  }
+  
+  .button:disabled {
+    background-color: #ecf0f1;
+    color: #bdc3c7;
+    border-color: #bdc3c7;
+    cursor: not-allowed;
+  }
+  
+  
+  .error {
+    color: #e74c3c;
+    margin-bottom: 1rem;
+  }
+  
+  .document-upload {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    align-items: center;
+    background-color: white;
+    padding: 1rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+  }
+  
+  /* Style commun des inputs et selects */
+  .document-upload input,
+  .document-upload select {
+    padding: 0.6rem 1rem;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    background-color: #f8f9fa;
+    transition: all 0.3s ease;
+    font-size: 0.95rem;
+  }
+  
+  .document-upload input:focus,
+  .document-upload select:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+  }
+  
+  /* Style du bouton de fichier (input[type="file"]) */
+  .document-upload input[type="file"] {
+    display: none;
+  }
+  
+  .document-upload .file-label {
+    padding: 0.6rem 1.2rem;
+    background: linear-gradient(to right, #3498db, #175985);
+    color: white;
+    border-radius: 6px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: background 0.3s ease, transform 0.2s ease;
+  }
+  
+  .document-upload .file-label:hover {
+    background: linear-gradient(to right, #2980b9, #12496e);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+  }
+  
+  .document-upload .file-label:active {
+    transform: translateY(0);
+  }
+  
+  /* Bouton principal */
+  .document-upload button {
+    background: linear-gradient(to right, #3498db, #175985);
+    color: white;
+    padding: 0.6rem 1.2rem;
+    font-size: 0.95rem;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.3s ease, transform 0.2s ease;
+  }
+  
+  .document-upload button:hover {
+    background: linear-gradient (to right, #2980b9, #12496e);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+  }
+  
+  .document-upload button:disabled {
+    background-color: #95a5a6;
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+  
+  
+  
+  .document-table {
+    width: 100%;
+    border-collapse: collapse;
+    background-color: white;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+  
+  .document-table th,
+  .document-table td {
+    padding: 1rem;
+    text-align: left;
+    border-bottom: 1px solid #ecf0f1;
+  }
+  
+  .document-table th {
+    background-color: #2c3e50;
+    color: white;
+  }
+  
+  .document-table tr:hover {
+    background-color: #f8f9fa;
+  }
+  
+  .actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+  
+  @media (max-width: 768px) {
+    .container {
+      flex-direction: column;
+    }
+    
+    .the-navbar {
+      width: 100%;
+      flex-direction: row;
+      align-items: center;
+      box-shadow: 10px 10px 15px rgba(0.5, 0.5, 0.5, 0.5); /* Ombre plus prononcée */
+    }
+    .controls {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 2rem;
+        flex-wrap: wrap;
+        align-items: center;
+        background-color: white;
+        padding: 1rem;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+      }
+      
+      /* Style commun des inputs et selects */
+      .controls input,
+      .controls select {
+        padding: 0.6rem 1rem;
+        border: 1px solid #ced4da;
+        border-radius: 6px;
+        background-color: #f8f9fa;
+        transition: all 0.3s ease;
+        font-size: 0.95rem;
+      }
+      
+      .controls input:focus,
+      .controls select:focus {
+        outline: none;
+        border-color: #3498db;
+        box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+      }
+      
+      /* Bouton principal dans controls */
+      .controls .button {
+        background: linear-gradient(to right, #3498db, #5dade2);
+        color: white;
+        padding: 0.6rem 1.2rem;
+        font-size: 0.95rem;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: background 0.3s ease, transform 0.2s ease;
+      }
+      
+      .controls .button:hover {
+        background: linear-gradient(to right, #2980b9, #5499c7);
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+      }
+      
+      .controls .button:disabled {
+        background-color: #95a5a6;
+        cursor: not-allowed;
+        opacity: 0.6;
+      }
+      
+        
+    
+    .logo-container {
+      border-bottom: none;
+      border-right: 1px solid #34495e;
+      padding: 0.5rem;
+    }
+    
+    .logo {
+      max-width: 120px;
+    }
+    
+    .nav-buttons {
+      flex-direction: row;
+      flex-wrap: wrap;
+    }
+    
+    .actions {
+      flex-direction: column;
+    }
+  }
+
+  /* Conteneur des contrôles de recherche et filtrage (plus petit) */
+.controls {
+    display: flex;
+    gap: 0.8rem; /* Réduit l'espace entre les éléments */
+    flex-wrap: wrap;
+    align-items: center;
+    background-color: #ffffff;
+    color: #082335;
+    padding: 0.8rem; /* Moins de padding pour compacter la div */
+    border-radius: 6px; /* Coins légèrement arrondis */
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    margin-bottom: 1.5rem; /* Moins d'espace sous la div */
+}
+
+/* Champs de saisie et select */
+.controls input,
+.controls select {
+    padding: 0.5rem 0.8rem; /* Moins de padding pour réduire la taille */
+    font-size: 0.9rem; /* Taille de texte réduite */
+    border: 1px solid #ced4da;
+    color: #082335;
+    border-radius: 5px; /* Moins d'arrondi */
+    background-color: #f8f9fa;
+    transition: border-color 0.3s ease;
+    width: 160px; /* Réduit la largeur des champs */
+}
+
+/* Focus sur les champs */
+.controls input:focus,
+.controls select:focus {
+    outline: none;
+    border-color: #3498db;
+    box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+}
+
+/* Style du bouton de recherche ou filtrage (plus petit et compact) */
+.search-button {
+    background-color: #3498db;
+    color: #082335;
+    border: none;
+    padding: 0.5rem 1rem; /* Réduit la taille du bouton */
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.9rem; /* Taille de texte réduite */
+    transition: transform 0.3s ease, background-color 0.3s ease;
+}
+
+/* Zoom au survol du bouton */
+.search-button:hover {
+    transform: scale(1.05);
+    background-color: #2980b9;
+}
+
+/* Désactiver le bouton */
+.search-button:disabled {
+    background-color: #ecf0f1;
+    color: #082335;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+/* Ajustement des champs pour une meilleure présentation */
+.controls input[type="text"] {
+    flex: 2;
+}
+
+.controls input[type="date"],
+.controls select {
+    flex: 1;
+}
+
+/* Style des icônes (si utilisé) dans le bouton */
+.search-button i {
+    margin-right: 0.5rem;
+}
+
+.highlight {
+  background-color: yellow;
+  color: red;
+  font-weight: bold;
+  text-decoration: underline;
+  display: inline;
+}
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background-color: white;
+  padding: 20px;
+  border-radius: 5px;
+  width: 500px;
+  max-width: 90%;
+}
+
+.search-input {
+  width: 100%;
+  padding: 10px;
+  margin: 10px 0;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+}
+
+.modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+.button.cancel {
+  background-color: #f5f5f5;
+  color: #333;
+}
+
+.button.primary {
+  background-color: #4CAF50;
+  color: white;
+}
+
+.saved-collection {
+  background-color: #f0f8ff;
+  padding: 1rem;
+  border: 1px solid #ddd;
+  margin-bottom: 1rem;
+  border-radius: 8px;
+}
+
+.saved-collection ul {
+  list-style: none;
+  padding: 0;
+}
+
+.saved-collection li {
+  margin-bottom: 0.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.button-save {
+  background-color: #ffffdb;
+  color: black;
+  margin-left: 5px;
+  cursor: pointer;
+  border: 1px solid #bab409;
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+  
+}
+.button-save:hover {
+  background-color: #ffff85;
+  color: black;
+  margin-left: 5px;
+  cursor: pointer;
+  border: 1px solid #ffff85;
+  padding: 0.6rem 1.2rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+}
+/* Modal styles */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.modal-content {
+  background-color: white;
+  padding: 20px;
+  border-radius: 8px;
+  width: 300px;
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.modal-actions {
+  display: flex;
+  flex-direction: column;
+}
+
+.modal-actions input {
+  margin-bottom: 10px;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 20px;
+}
+
+.button-cancel {
+  background-color: #ff0000;
+  color: white;
+}
+
+/* Conteneur du prompt */
+.conflict-dialog {
+  margin-top: 1rem;
+  padding: 1rem;
+  border: 1px solid #ccc;
+  background: #f9f9f9;
+  border-radius: 4px;
+}
+
+/* Texte du prompt */
+.conflict-dialog p {
+  margin-bottom: 0.5rem;
+}
+
+/* Boutons Oui / Non */
+.button-oui,
+.button-non {
+  padding: 0.5rem 1rem;
+  margin-right: 0.5rem;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+/* Bouton Oui : vert léger */
+.button-oui {
+  background-color: #4caf50;
+  color: #fff;
+}
+
+/* Bouton Non : rouge léger */
+.button-non {
+  background-color: #f44336;
+  color: #fff;
+}
+
+/* Effet au survol */
+.button-oui:hover {
+  opacity: 0.9;
+}
+.button-non:hover {
+  opacity: 0.9;
+}
+
+.user-button {
+  margin-right: 10px;
+  padding: 5px 10px;
+  background-color: #007BFF;
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+.user-button:hover {
+  background-color: #0056b3;
+}
+
+
+.hidden {
+  display: none !important;
+}
+
+.modal-collection {
+  background-color: white;
+  padding: 2rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+  max-width: 500px;
+  margin: 0 auto;
+  font-family: 'Segoe UI', sans-serif;
+}
+
+.modal-collection h2 {
+  margin-bottom: 1.5rem;
+  font-size: 1.4rem;
+  color: #175985;
+  text-align: center;
+}
+
+.modal-collection select,
+.modal-collection input {
+  width: 100%;
+  padding: 0.6rem 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  background-color: #f8f9fa;
+  font-size: 0.95rem;
+  transition: all 0.3s ease;
+}
+
+.modal-collection select:focus,
+.modal-collection input:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+}
+
+.modal-collection .buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.modal-collection button {
+  background: linear-gradient(to right, #3498db, #175985);
+  color: white;
+  padding: 0.6rem 1.2rem;
+  font-size: 0.95rem;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.3s ease, transform 0.2s ease;
+}
+
+.modal-collection button:hover {
+  background: linear-gradient(to right, #2980b9, #12496e);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+}
+
+.modal-collection button:disabled {
+  background-color: #95a5a6;
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+
+
+.file-label {
+  background: linear-gradient(to right, #3498db, #175985);
+  color: white;
+  padding: 8px 14px;
+  border : none ;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-block;
+  transition: background-color 0.3s ease;
+}
+
+.file-label.uploaded :hover {
+  background: linear-gradient(to right, #2980b9, #12496e);
+  color: #fff;
+  background: linear-gradient(to right, #2980b9, #12496e);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(52, 152, 219, 0.3);
+
+}
