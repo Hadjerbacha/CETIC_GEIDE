@@ -8,9 +8,9 @@ const pdfParse = require('pdf-parse');
 const Tesseract = require('tesseract.js');
 const { auth } = require('../middleware/auth');
 const router = express.Router();
-const axios = require('axios'); 
+const axios = require('axios');
 const NLP_SERVICE_URL = 'http://localhost:5001/classify';
-const NLP_TIMEOUT =  30000; // 30 secondes timeout
+const NLP_TIMEOUT = 3000; // 3 secondes timeout
 // PostgreSQL Pool configuration
 const pool = new Pool({
   user: process.env.PG_USER || 'postgres',
@@ -43,73 +43,111 @@ const upload = multer({
 // Fonction de classification des documents (par exemple, CV ou Facture)
 
 
-// Modifiez la fonction classifyText
-const classifyText = async (text) => {
-  const defaultCategories = ["contrat", "facture", "rapport", "cv"];
-
-  const truncatedText = text.substring(0, 5000);
+async function classifyText(text) {
+  // Catégories possibles (doivent correspondre à celles du service Python)
+  const defaultCategories = [
+    "contrat", "rapport", "mémoire",
+    "présentation", "note interne",
+    "facture", "cv", "photo"
+  ];
 
   try {
     const response = await axios.post(
-      'http://127.0.0.1:5001/classify',
+      NLP_SERVICE_URL,
       {
-        text: truncatedText,
+        text: text,
         categories: defaultCategories
       },
       {
-        timeout: 10000, // max 10 secondes
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        }
+        timeout: NLP_TIMEOUT,
+        headers: { 'Content-Type': 'application/json' }
       }
     );
 
-    return response.data?.category || null;
+    return response.data.category;
 
   } catch (error) {
-    console.error('Erreur NLP (ou timeout dépassé) :', error.message);
-    
-    // 🔁 Fallback simple basé sur des mots-clés
+    console.error('Erreur NLP:', error.message);
+
+    // Fallback manuel si le service est indisponible
     const lowerText = text.toLowerCase();
 
-    if (lowerText.includes('contrat') || lowerText.includes('agreement') || lowerText.includes('signature')) {
-      return 'contrat';
-    }
-    if (lowerText.includes('facture') || lowerText.includes('invoice') || lowerText.includes('paiement')) {
-      return 'facture';
-    }
-    if (lowerText.includes('rapport') || lowerText.includes('report') || lowerText.includes('analyse')) {
-      return 'rapport';
-    }
-    if (lowerText.includes('cv') || lowerText.includes('curriculum') || lowerText.includes('expérience') || lowerText.includes('compétence')) {
-      return 'cv';
+    const keywordMap = {
+      'facture': ['facture', 'bon', 'montant', '€', 'euro', 'total à payer', 'tva'],
+      'contrat': ['contrat', 'accord', 'article', 'clause', 'signature'],
+      'rapport': ['rapport', 'analyse', 'conclusion', 'recommandation'],
+      'cv': ['curriculum vitae', 'cv', 'expérience', 'compétence', 'formation']
+    };
+
+    for (const [category, keywords] of Object.entries(keywordMap)) {
+      if (keywords.some(kw => lowerText.includes(kw))) {
+        return category;
+      }
     }
 
-    return 'autre'; // Fallback final si rien ne correspond
+    return 'autre';
   }
-};
-
-
-// GET : récupérer les utilisateurs ayant accès à un document spécifique
-router.get('/:id/permissions', auth, async (req, res) => {
-  const { id } = req.params;
+}
+router.get('/:id/my-permissions', auth, async (req, res) => {
+  const documentId = req.params.id;
+  const userId = req.user.id;
 
   try {
     const result = await pool.query(`
-      SELECT u.id, u.name, u.prenom, dp.access_type
-      FROM document_permissions dp
-      JOIN users u ON dp.user_id = u.id
-      WHERE dp.document_id = $1
-    `, [id]);
+      SELECT can_read, can_modify, can_delete, can_share, access_type
+      FROM document_permissions
+      WHERE document_id = $1 AND user_id = $2
+      ORDER BY 
+        CASE access_type
+          WHEN 'owner' THEN 1
+          WHEN 'custom' THEN 2
+          WHEN 'public' THEN 3
+          WHEN 'read' THEN 4
+          ELSE 5
+        END
+      LIMIT 1;
+    `, [documentId, userId]);
 
-    res.status(200).json(result.rows);
+    if (result.rowCount === 0) {
+      return res.status(403).json({ error: "Aucune permission trouvée pour ce document." });
+    }
+
+    res.status(200).json(result.rows[0]);
   } catch (err) {
-    console.error('Erreur lors de la récupération des permissions:', err.stack);
+    console.error('Erreur récupération des permissions:', err.stack);
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
+router.get('/:id/my-permissions', auth, async (req, res) => {
+  const documentId = req.params.id;
+  const userId = req.user.id;
 
+  try {
+    const result = await pool.query(`
+      SELECT can_read, can_modify, can_delete, can_share, access_type
+      FROM document_permissions
+      WHERE document_id = $1 AND user_id = $2
+      ORDER BY 
+        CASE access_type
+          WHEN 'owner' THEN 1
+          WHEN 'custom' THEN 2
+          WHEN 'public' THEN 3
+          WHEN 'read' THEN 4
+          ELSE 5
+        END
+      LIMIT 1;
+    `, [documentId, userId]);
+
+    if (result.rowCount === 0) {
+      return res.status(403).json({ error: "Aucune permission trouvée pour ce document." });
+    }
+
+    res.status(200).json(result.rows[0]);
+  } catch (err) {
+    console.error('Erreur récupération des permissions:', err.stack);
+    res.status(500).json({ error: 'Erreur serveur', details: err.message });
+  }
+});
 
 // Initialisation des tables de la base de données
 async function initializeDatabase() {
@@ -117,25 +155,23 @@ async function initializeDatabase() {
     // Table pour les documents
     await pool.query(`
       CREATE TABLE IF NOT EXISTS documents (
-  id SERIAL PRIMARY KEY,
-  name TEXT NOT NULL,
-  file_path TEXT NOT NULL,
-  category TEXT,
-  text_content TEXT,
-  summary TEXT,               -- 🆕 Description
-  tags TEXT[],                -- 🆕 Tableau de mots-clés
-  owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
-  visibility VARCHAR(20) DEFAULT 'private',
-  version INTEGER DEFAULT 1,
-  original_id INTEGER,
-  ocr_text TEXT,
-  date TIMESTAMP DEFAULT NOW()
-);
-
-
+        id SERIAL PRIMARY KEY,
+        name TEXT NOT NULL,
+        file_path TEXT NOT NULL,
+        category TEXT,
+        text_content TEXT,
+        summary TEXT,               -- 🆕 Description
+        tags TEXT[],                -- 🆕 Tableau de mots-clés
+        owner_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        visibility VARCHAR(20) DEFAULT 'private',
+        version INTEGER DEFAULT 1,
+        original_id INTEGER,
+        ocr_text TEXT,
+        date TIMESTAMP DEFAULT NOW()
+      );
     `);
 
-     // Table pour les versions de documents
+    // Table pour les versions de documents
     await pool.query(`
       CREATE TABLE IF NOT EXISTS document_versions (
         id SERIAL PRIMARY KEY,
@@ -154,7 +190,8 @@ async function initializeDatabase() {
       );
     `);
 
-     // Table pour les collections
+
+    // Table pour les collections
     await pool.query(`
       CREATE TABLE IF NOT EXISTS collections (
         id SERIAL PRIMARY KEY,
@@ -185,11 +222,9 @@ async function initializeDatabase() {
       );
     `);
 
-
-
-    console.log('Tables documents, collections, document_collections et document_permissions prêtes');
+    console.log('✅ Tables documents, versions, collections, document_collections et document_permissions prêtes');
   } catch (err) {
-    console.error('Erreur lors de l\'initialisation:', err.stack);
+    console.error('❌ Erreur lors de l\'initialisation des tables :', err.stack);
   }
 }
 
@@ -232,12 +267,13 @@ router.get('/', auth, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
-
-// upload document
 router.post('/', auth, upload.single('file'), async (req, res) => {
-  let { name, access, allowedUsers, summary, tags, prio } = req.body;
-  summary = summary || '';
-
+  let {
+    name, access, allowedUsers, summary = '', tags = '',
+    prio, id_share, id_group,
+    can_modify = false,
+    can_delete = false
+  } = req.body;
 
   if (!req.file) {
     return res.status(400).json({ error: 'Fichier non téléchargé' });
@@ -247,10 +283,12 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
   const file_path = `/uploads/${req.file.filename}`;
   const mimeType = mime.lookup(req.file.originalname);
 
+  const canModify = can_modify === 'true' || can_modify === true;
+  const canDelete = can_delete === 'true' || can_delete === true;
+  const rawCanShare = req.body.can_share === 'true' || req.body.can_share === true;
+
   try {
     let extractedText = '';
-    
-    // OCR ou parsing PDF
     if (mimeType === 'application/pdf') {
       const dataBuffer = fs.readFileSync(fullPath);
       const data = await pdfParse(dataBuffer);
@@ -262,12 +300,9 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'Type de fichier non pris en charge pour l\'OCR' });
     }
 
-    // Classification automatique si besoin
-    let finalCategory = await classifyText(extractedText);
-        console.log(`Document classé comme: ${finalCategory}`);
+    const finalCategory = await classifyText(extractedText);
+    console.log(`📂 Document classé comme: ${finalCategory}`);
 
-
-    // Recherche d'une version existante
     const existing = await pool.query(
       'SELECT * FROM documents WHERE name = $1 ORDER BY version DESC LIMIT 1',
       [name]
@@ -275,230 +310,295 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
 
     let version = 1;
     let original_id = null;
-    let result;
-
     if (existing.rowCount > 0) {
       const latestDoc = existing.rows[0];
-      version = parseInt(latestDoc.version, 10) + 1;
+      version = latestDoc.version + 1;
       original_id = latestDoc.original_id || latestDoc.id;
     }
 
-    // Traitement des tags
-    const parsedTags = typeof tags === 'string'
-      ? tags.split(',').map(tag => tag.trim())
-      : [];
+    const sanitizeVisibility = (val) => {
+      if (!val) return 'private';
+      if (Array.isArray(val)) return val[0];
+      if (typeof val === 'string') {
+        try {
+          const parsed = JSON.parse(val);
+          return Array.isArray(parsed) ? parsed[0] : val;
+        } catch {
+          return val;
+        }
+      }
+      return 'private';
+    };
+    const visibility = sanitizeVisibility(access);
 
-    // Insertion dans la table documents
+    let parsedTags = [];
+    try {
+      if (typeof tags === 'string' && tags.trim().startsWith('[')) {
+        parsedTags = JSON.parse(tags).map(t => t.trim()).filter(Boolean);
+      } else if (typeof tags === 'string') {
+        parsedTags = tags.split(',').map(t => t.trim()).filter(Boolean);
+      } else if (Array.isArray(tags)) {
+        parsedTags = tags.map(t => String(t).trim()).filter(Boolean);
+      }
+    } catch {
+      parsedTags = [];
+    }
+
+    const allowedPriorities = ['basse', 'moyenne', 'haute'];
+    const priority = allowedPriorities.includes((prio || '').toLowerCase()) ? prio.toLowerCase() : 'moyenne';
+
+    const parseIntArray = (value) => {
+      try {
+        const arr = typeof value === 'string' ? JSON.parse(value) : value;
+        return Array.isArray(arr) ? arr.map(Number).filter(n => !isNaN(n)) : [];
+      } catch {
+        return [];
+      }
+    };
+
+    id_share = parseIntArray(id_share);
+    id_group = parseIntArray(id_group);
+
+    // ✅ Insertion dans la table `documents`
     const insertQuery = `
-  INSERT INTO documents 
-  (name, file_path, category, text_content, owner_id, visibility,
-  ocr_text, version, original_id, summary, tags, priority)
-  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-  RETURNING *;
-`;
+      INSERT INTO documents 
+      (name, file_path, category, text_content, summary, tags, owner_id,
+       visibility, version, original_id, ocr_text, priority, id_share, id_group)
+      VALUES ($1, $2, $3, $4, $5, $6::text[], $7,
+              $8, $9, $10, $11, $12, $13::int[], $14::int[])
+      RETURNING *;
+    `;
 
     const insertValues = [
-  name,
-  file_path,
-  finalCategory,
-  extractedText,
-  req.user.id,
-  access,
-  extractedText,
-  version,
-  original_id,
-  summary,
-  parsedTags,
-  prio
-];
+      name,
+      file_path,
+      finalCategory,
+      extractedText,
+      summary,
+      parsedTags,
+      req.user.id,
+      visibility,
+      version,
+      original_id,
+      extractedText,
+      priority,
+      id_share,
+      id_group
+    ];
 
+    const result = await pool.query(insertQuery, insertValues);
 
-    result = await pool.query(insertQuery, insertValues);
+    if (result.rowCount === 0) {
+      console.warn('⚠️ Aucun document inséré dans la BDD.');
+      return res.status(500).json({ error: "L'insertion du document a échoué." });
+    }
+
+    // ✅ Déclaration ici (avant toute utilisation)
     const documentId = result.rows[0].id;
 
-    // Gestion des permissions
-    if (access === 'public') {
+    // ✅ Insertion dans la table `document_versions`
+    await pool.query(`
+      INSERT INTO document_versions (
+        document_id,
+        version_number,
+        file_path,
+        text_content,
+        ocr_text,
+        name,
+        contenu,
+        category,
+        visibility,
+        summary,
+        owner_id,
+        version_label,
+        version,
+        tags
+      ) VALUES (
+        $1, $2, $3, $4, $5,
+        $6, $7, $8, $9, $10,
+        $11, $12, $13, $14
+      )
+    `, [
+      documentId,
+      version,
+      file_path,
+      extractedText,
+      extractedText,
+      name,
+      extractedText,
+      finalCategory,
+      visibility,
+      summary,
+      req.user.id,
+      `v${version}`,
+      version,
+      parsedTags
+    ]);
+
+    // ✅ 1. Propriétaire avec tous les droits
+    await pool.query(
+      `INSERT INTO document_permissions 
+       (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
+       VALUES ($1, $2, 'owner', true, true, true, true)`,
+      [req.user.id, documentId]
+    );
+
+    // ✅ 2. Visibilité : public
+    if (visibility === 'public') {
       const allUsers = await pool.query('SELECT id FROM users');
       await Promise.all(allUsers.rows.map(user =>
         pool.query(
-          'INSERT INTO document_permissions (user_id, document_id, access_type) VALUES ($1, $2, $3)',
-          [user.id, documentId, 'public']
+          `INSERT INTO document_permissions 
+           (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
+           VALUES ($1, $2, 'public', true, $3, $4, $5)`,
+          [user.id, documentId, canModify, canDelete, rawCanShare]
         )
       ));
-    } else if (access === 'custom' && Array.isArray(allowedUsers)) {
-      await Promise.all(allowedUsers.map(userId =>
-        pool.query(
-          'INSERT INTO document_permissions (user_id, document_id, access_type) VALUES ($1, $2, $3)',
-          [userId, documentId, 'custom']
+    }
+
+    // ✅ 3. Visibilité : custom
+    if (visibility === 'custom' && Array.isArray(id_share)) {
+      await Promise.all(
+        id_share.map(userId =>
+          pool.query(
+            `INSERT INTO document_permissions 
+             (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
+             VALUES ($1, $2, 'custom', true, $3, $4, $5)`,
+            [userId, documentId, canModify, canDelete, rawCanShare]
+          )
         )
-      ));
-    } else {
-      await pool.query(
-        'INSERT INTO document_permissions (user_id, document_id, access_type) VALUES ($1, $2, $3)',
-        [req.user.id, documentId, 'read']
       );
     }
 
-    // Réponse
     res.status(201).json({
       ...result.rows[0],
       preview: extractedText.slice(0, 300) + '...',
-      permissions: access,
-      message: version > 1 ? 'Nouvelle version enregistrée avec succès' : 'Document ajouté avec succès'
+      permissions: visibility,
+      message: version > 1
+        ? 'Nouvelle version enregistrée avec succès'
+        : 'Document ajouté avec succès'
     });
 
   } catch (err) {
+    console.error('❌ Erreur lors de l\'upload:', err.stack);
+    if (req.file) fs.unlink(req.file.path, () => { });
+    res.status(500).json({ error: 'Erreur lors de l\'ajout du document', details: err.message });
+  }
+});
+
+
+
+
+
+router.put('/:id', auth, async (req, res) => {
+  const documentId = req.params.id;
+  let { visibility, id_group, id_share } = req.body;
+
+  // 🛡️ Défaut : tableau vide si non fourni ou pas un tableau
+  id_group = Array.isArray(id_group) ? id_group : [];
+  id_share = Array.isArray(id_share) ? id_share : [];
+
+  console.log('Données reçues :', { visibility, id_group, id_share });
+
+
+  try {
+    const query = `
+      UPDATE documents 
+      SET visibility = $1, id_group = $2, id_share = $3
+      WHERE id = $4
+    `;
+
+    await pool.query(query, [visibility, id_group, id_share, documentId]);
+
+    res.status(200).json({ message: 'Document mis à jour avec succès.' });
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour du document :', error);
+    res.status(500).json({ error: 'Erreur lors de la mise à jour.' });
+  }
+});
+
+
+router.post('/:id/share', auth, async (req, res) => {
+  const documentId = req.params.id;
+  const { visibility, id_group, id_share } = req.body;
+
+  try {
+    const query = `
+      UPDATE documents 
+      SET visibility = $1, id_group = $2, id_share = $3
+      WHERE id = $4
+    `;
+    await pool.query(query, [visibility, id_group || null, id_share || null, documentId]);
+
+    res.status(200).json({ message: 'Partage mis à jour avec succès.' });
+  } catch (error) {
+    console.error('Erreur lors du partage du document :', error);
+    res.status(500).json({ error: 'Erreur lors du partage du document.' });
     console.error('Erreur:', err.stack);
     if (req.file) fs.unlink(req.file.path, () => { });
     res.status(500).json({ error: 'Erreur lors de l\'ajout', details: err.message });
   }
 });
 
-// Route pour 'mes-documents'
-router.get('/mes-documents', auth, async (req, res) => {
+router.get('/stats', async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM documents WHERE owner_id = $1 ORDER BY date DESC',
-      [req.user.id]
-    );
-    res.status(200).json(result.rows);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-//
-// 📈 Ajout des statistiques dans le backend
-router.get('/stats', auth, async (req, res) => {
-  const userId = req.user.id;
-  const isAdmin = req.user.role === 'admin';
+    const usersResult = await pool.query('SELECT COUNT(*) FROM users');
+    const documentsResult = await pool.query('SELECT COUNT(*) FROM documents');
+    const tasksResult = await pool.query('SELECT COUNT(*) FROM tasks');
+    const workflowsResult = await pool.query('SELECT COUNT(*) FROM workflow');
+    const notificationsResult = await pool.query('SELECT COUNT(*) FROM notifications');
 
-  try {
-    if (isAdmin) {
-      // Statistiques complètes pour l'admin
-      const [documents, workflows, tasks, users] = await Promise.all([
-        pool.query('SELECT COUNT(*) FROM documents'),
-        pool.query('SELECT COUNT(*) FROM workflow'),
-        pool.query('SELECT COUNT(*) FROM tasks'),
-        pool.query('SELECT COUNT(*) FROM users')
-      ]);
-
-      res.status(200).json({
-        totalDocuments: parseInt(documents.rows[0].count, 10),
-        totalWorkflows: parseInt(workflows.rows[0].count, 10),
-        totalTasks: parseInt(tasks.rows[0].count, 10),
-        totalUsers: parseInt(users.rows[0].count, 10)
-      });
-    } else {
-      // Statistiques spécifiques à l'utilisateur normal
-      const [userDocuments, userWorkflows, userTasks] = await Promise.all([
-        pool.query('SELECT COUNT(*) FROM documents WHERE owner_id = $1', [userId]),
-        pool.query('SELECT COUNT(*) FROM workflow WHERE created_by = $1', [userId]),
-        pool.query('SELECT COUNT(*) FROM tasks WHERE $1 = ANY(assigned_to)', [userId])
-      ]);
-
-      res.status(200).json({
-        userDocuments: parseInt(userDocuments.rows[0].count, 10),
-        userWorkflows: parseInt(userWorkflows.rows[0].count, 10),
-        userTasks: parseInt(userTasks.rows[0].count, 10)
-      });
-    }
+    res.json({
+      totalUsers: parseInt(usersResult.rows[0].count, 10),
+      totalDocuments: parseInt(documentsResult.rows[0].count, 10),
+      totalTasks: parseInt(tasksResult.rows[0].count, 10),
+      totalWorkflows: parseInt(workflowsResult.rows[0].count, 10),
+      totalNotifications: parseInt(notificationsResult.rows[0].count, 10),
+    });
   } catch (error) {
-    console.error('Erreur récupération statistiques :', error);
-    res.status(500).json({ error: 'Erreur serveur lors de la récupération des statistiques' });
+    console.error('Erreur lors de la récupération des statistiques :', error);
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
-
-router.post('/:id/share', auth, async (req, res) => {
-  const { allowedUsers, access, newOwnerId } = req.body; // 🆕 on accepte un "newOwnerId" optionnel
-  const { id } = req.params;
-
-  try {
-    if (!['public', 'custom', 'private'].includes(access)) {
-      return res.status(400).json({ error: 'Type d\'accès invalide' });
-    }
-
-    // 1️⃣ Mettre à jour visibility (+ owner_id si fourni)
-    if (newOwnerId) {
-      await pool.query(
-        `UPDATE documents SET visibility = $1, owner_id = $2 WHERE id = $3`,
-        [access, newOwnerId, id]
-      );
-    } else {
-      await pool.query(
-        `UPDATE documents SET visibility = $1 WHERE id = $2`,
-        [access, id]
-      );
-    }
-
-    // 2️⃣ Reset des permissions
-    await pool.query(`DELETE FROM document_permissions WHERE document_id = $1`, [id]);
-
-    // 3️⃣ Recréer les permissions
-    if (access === 'public') {
-      const allUsers = await pool.query('SELECT id FROM users');
-      const insertPromises = allUsers.rows.map(user =>
-        pool.query(
-          `INSERT INTO document_permissions (user_id, document_id, access_type)
-           VALUES ($1, $2, $3)`,
-          [user.id, id, 'public']
-        )
-      );
-      await Promise.all(insertPromises);
-    } else if (access === 'custom') {
-      if (!Array.isArray(allowedUsers) || allowedUsers.length === 0) {
-        return res.status(400).json({ error: 'Aucun utilisateur spécifié pour un accès personnalisé' });
-      }
-      const insertPromises = allowedUsers.map(userId =>
-        pool.query(
-          `INSERT INTO document_permissions (user_id, document_id, access_type)
-           VALUES ($1, $2, $3)`,
-          [userId, id, 'custom']
-        )
-      );
-      await Promise.all(insertPromises);
-    } else {
-      await pool.query(
-        `INSERT INTO document_permissions (user_id, document_id, access_type)
-         VALUES ($1, $2, $3)`,
-        [req.user.id, id, 'read']
-      );
-    }
-
-    res.status(200).json({ message: 'Partage mis à jour avec succès' });
-
-  } catch (err) {
-    console.error('Erreur lors du partage:', err.stack);
-    res.status(500).json({ error: 'Erreur serveur', details: err.message });
-  }
-});
 
 
 // GET : récupérer un document spécifique par ID
-router.get('/:id', auth, async (req, res) => {
-  const { id } = req.params;  // Récupérer l'ID du document depuis l'URL
-  const userId = req.user.id; // Récupérer l'ID de l'utilisateur connecté depuis le token
+router.get('/', auth, async (req, res) => {
+  const userId = req.user.id;
 
   try {
-    // Requête pour récupérer le document, vérification de l'accès selon l'utilisateur
     const result = await pool.query(`
-      SELECT d.*, dp.access_type
+      SELECT d.*, dp.can_read, dp.can_modify, dp.can_delete, dp.can_share,
+             dp.access_type,
+             dc.is_saved, dc.collection_name
       FROM documents d
-      JOIN document_permissions dp ON dp.document_id = d.id
-      WHERE d.id = $1 AND (dp.access_type = 'public' OR dp.user_id = $2 OR dp.access_type = 'custom') AND d.is_archived = false
-    `, [id, userId]);
+      JOIN LATERAL (
+        SELECT * FROM document_permissions
+        WHERE document_id = d.id AND user_id = $1
+        ORDER BY 
+          CASE access_type
+            WHEN 'owner' THEN 1
+            WHEN 'custom' THEN 2
+            WHEN 'public' THEN 3
+            WHEN 'read' THEN 4
+            ELSE 5
+          END
+        LIMIT 1
+      ) AS dp ON true
+      LEFT JOIN document_collections dc ON dc.document_id = d.id
+      WHERE d.is_archived = false
+      ORDER BY d.date DESC;
+    `, [userId]);
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Document non trouvé ou accès refusé' });
-    }
-
-    // Le document a été trouvé et l'utilisateur a l'accès approprié
-    res.status(200).json(result.rows[0]);
+    res.status(200).json(result.rows);
   } catch (err) {
-    console.error('Erreur:', err.stack);
+    console.error('Erreur chargement documents:', err.stack);
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
+
+
 
 
 // DELETE : supprimer un document de la base de données et du disque
@@ -552,6 +652,7 @@ router.patch('/:id/visibility', auth, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
+
 
 router.post('/', async (req, res) => {
   const { text } = req.body;
@@ -662,9 +763,6 @@ router.post('/check-duplicate', async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
-
-
-
 
 
 
