@@ -85,20 +85,32 @@ const [filterDueDate, setFilterDueDate] = useState('');
     fetchGroups();
   }, []); // Il est OK d'avoir useEffect sans dépendances ici
 
-  const fetchTasks = async () => {
-    try {
-      const token = localStorage.getItem("token");
-      const res = await axios.get(`http://localhost:5000/api/workflows/${id}/tasks`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      
-      setTasks(res.data); // Pas besoin de filtrer, le backend le fait déjà
-    } catch (err) {
-      console.error("Erreur chargement des tâches", err?.response?.data || err.message);
-    }
-  };
+  
+useEffect(() => {
+  if (id) {
+    fetchTasks();
+  }
+}, [id]); // Rafraîchit les tâches quand l'ID change
+ const fetchTasks = async () => {
+  try {
+    const token = localStorage.getItem("token");
+    const res = await axios.get(`http://localhost:5000/api/workflows/${id}/tasks`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    
+    console.log("Tâches reçues:", res.data); // Ajout pour débogage
+    setTasks(res.data);
+  } catch (err) {
+    console.error("Erreur chargement des tâches", {
+      error: err,
+      response: err.response?.data,
+      status: err.response?.status
+    });
+    setTasks([]); // Réinitialiser en cas d'erreur
+  }
+};
   
   
 
@@ -332,10 +344,7 @@ const [filterDueDate, setFilterDueDate] = useState('');
   
   const user = JSON.parse(localStorage.getItem('user'));
 
-  const userTasks = tasks.filter(task =>
-    task.created_by === user.id || (task.assigned_to || []).includes(user.id)
-  );
-
+const userTasks = tasks;
 
 
   const filteredTasks = userTasks.filter(task => {
@@ -540,23 +549,28 @@ const [filterDueDate, setFilterDueDate] = useState('');
               </tr>
             </thead>
             <tbody>
-              {currentTasks.map(task => (
-                <tr key={task.id}>
-                  <td>{task.title}</td>
-                  <td>{task.description}</td>
-                  <td>
-  {task.file_path && (
-    <a href={`http://localhost:5000${task.file_path}`} target="_blank" rel="noreferrer">
-      <i className="bi bi-file-earmark-text" style={{ fontSize: '1.5rem' }}></i>
-    </a>
-  )}
-</td>
-                  <td>
-                    {users
-                      .filter(u => task.assigned_to?.includes(u.value))
-                      .map(u => u.label)
-                      .join(', ')}
-                  </td>
+              {currentTasks.map(task => {
+    // Vérification des données
+    const assignedTo = Array.isArray(task.assigned_to) ? task.assigned_to : [];
+    const dueDate = task.due_date ? new Date(task.due_date).toLocaleDateString() : 'Non définie';
+    
+    return (
+      <tr key={task.id}>
+        <td>{task.title || 'Sans titre'}</td>
+        <td>{task.description || 'Aucune description'}</td>
+        <td>
+          {task.file_path ? (
+            <a href={`http://localhost:5000${task.file_path}`} target="_blank" rel="noreferrer">
+              <i className="bi bi-file-earmark-text" style={{ fontSize: '1.5rem' }}></i>
+            </a>
+          ) : 'Aucun fichier'}
+        </td>
+        <td>
+          {users
+            .filter(u => assignedTo.includes(u.value))
+            .map(u => u.label)
+            .join(', ') || 'Non assignée'}
+        </td>
                   <td>{new Date(task.due_date).toLocaleDateString()}</td>
                   <td>{task.priority}</td>
                   
@@ -573,7 +587,8 @@ const [filterDueDate, setFilterDueDate] = useState('');
 
                   </td>
                 </tr>
-              ))}
+              );
+  })}
             </tbody>
           </Table>
       </div>

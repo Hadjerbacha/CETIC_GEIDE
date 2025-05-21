@@ -544,20 +544,39 @@ router.post("/:id/generate-tasks", authMiddleware, async (req, res) => {
     const response = await result.response;
     const text = response.text();
 
-    // Nettoyage du texte Gemini (enlève ```json et ```)
+    // Nettoyage du texte Gemini
     const cleanedText = text.replace(/```json|```/g, "").trim();
 
-    // Parsing JSON
     let tasks = [];
     try {
       tasks = JSON.parse(cleanedText);
       
-      // Marquer certaines tâches comme validation
+      // Corriger les dates passées
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
       tasks.forEach(task => {
+        // Marquer le type de tâche
         if (task.title.toLowerCase().includes('validation') || task.title.toLowerCase().includes('approval')) {
           task.type = 'validation';
         } else {
           task.type = 'operation';
+        }
+        
+        // Corriger la date si elle est dans le passé
+        if (task.due_date) {
+          const dueDate = new Date(task.due_date);
+          if (dueDate < today) {
+            // Ajouter 7 jours à la date actuelle comme date par défaut
+            const newDate = new Date();
+            newDate.setDate(newDate.getDate() + 7);
+            task.due_date = newDate.toISOString().split('T')[0];
+          }
+        } else {
+          // Si pas de date, en ajouter une par défaut (7 jours dans le futur)
+          const newDate = new Date();
+          newDate.setDate(newDate.getDate() + 7);
+          task.due_date = newDate.toISOString().split('T')[0];
         }
       });
     } catch (err) {
@@ -726,20 +745,28 @@ router.get('/document/:documentId', authMiddleware, async (req, res) => {
 });
 
 // GET /api/workflows/:id/tasks - Récupère toutes les tâches d'un workflow spécifique
-router.get('/:id/tasks', authMiddleware, async (req, res) => {
+// Récupérer toutes les tâches d'un workflow spécifique
+    router.get('/:id/tasks', authMiddleware, async (req, res) => {
   const { id } = req.params;
   
+  // Validation de l'ID
+  if (!id || isNaN(parseInt(id))) {
+    return res.status(400).json({ 
+      error: 'ID de workflow invalide',
+      received: id
+    });
+  }
+
   try {
-    // 1. Vérifier que le workflow existe
+    // Le reste de votre code existant...
     const workflowRes = await pool.query(
       'SELECT id FROM workflow WHERE id = $1', 
-      [id]
+      [parseInt(id)] // Conversion explicite en nombre
     );
     
-    if (workflowRes.rowCount === 0) {
+  if (workflowRes.rowCount === 0) {
       return res.status(404).json({ error: 'Workflow non trouvé' });
     }
-
     // 2. Récupérer les tâches avec les informations des utilisateurs assignés
     const tasksRes = await pool.query(
       `SELECT 
