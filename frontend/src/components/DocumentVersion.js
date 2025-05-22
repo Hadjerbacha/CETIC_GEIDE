@@ -152,90 +152,7 @@ const DocumentVersion = () => {
     setAllowedUsers(allowedUsers.filter(u => u !== user));
   };
 
-  //Upload
-  const handleUpload = async () => {
-    if (!pendingFile || !pendingName || !category) {
-      setErrorMessage('Veuillez remplir tous les champs requis.');
-      return;
-    }
 
-    const existingDoc = documents.find(d => d.name === pendingName);
-
-    if (existingDoc && !forceUpload) {
-      // Affiche une modale ou demande confirmation personnalisée
-      setConflictingDocName(pendingName);
-      setShowConflictPrompt(true); // Cette modale doit avoir un bouton "Oui" → uploadNewVersion
-      return;
-    }
-
-    // Cas standard : upload d’un nouveau document
-    await uploadNewDocument();
-  };
-
-  // 🔽 Nouvelle fonction pour l’upload d’un nouveau document
-  const uploadNewDocument = async () => {
-    const formData = new FormData();
-    formData.append('name', pendingName);
-    formData.append('file', pendingFile);
-    formData.append('category', category);
-    formData.append('access', accessType);
-    formData.append('collectionName', collectionName);
-    formData.append('description', description);
-    formData.append('priority', priority);
-    formData.append('tags', JSON.stringify(tags));
-    if (accessType === 'custom') {
-      formData.append('allowedUsers', JSON.stringify(allowedUsers));
-    }
-
-    try {
-      const res = await fetch('http://localhost:5000/api/documents/', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData
-      });
-
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || "Erreur inconnue");
-
-      alert(result.message);
-      setDocuments([result, ...documents]);
-      resetForm();
-    } catch (err) {
-      console.error('Erreur lors de l\'upload du document:', err);
-      setErrorMessage(err.message || 'Erreur lors de l\'envoi du document.');
-    }
-  };
-
-  // 🔽 Fonction appelée quand l'utilisateur clique sur "Oui" dans la modale
-  const uploadNewVersion = async (documentId) => {
-    const formData = new FormData();
-    formData.append('file', pendingFile);
-    formData.append('documentId', documentId);
-    formData.append('category', category);
-    formData.append('collectionName', collectionName);
-    formData.append('description', description);
-    formData.append('priority', priority);
-    formData.append('tags', JSON.stringify(tags));
-
-    try {
-      const res = await fetch(`http://localhost:5000/api/documents/${documentId}/versions`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-        body: formData,
-      });
-
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || "Erreur inconnue");
-
-      alert("Nouvelle version ajoutée !");
-      // Optionnel : recharge la liste des documents
-      setForceUpload(false);
-      setShowConflictPrompt(false);
-      resetForm();
-    } catch (err) {
-      setErrorMessage(err.message || 'Erreur lors de l\'ajout de la version.');
-    }
-  };
 
   // 🔽 Réinitialisation des champs (à appeler après succès)
   const resetForm = () => {
@@ -385,8 +302,8 @@ const DocumentVersion = () => {
                 ⬅️ Retour
               </Button>
               <h3 className="text-center mb-4">
-  📂 Liste des documents : {filteredDocuments[0]?.name || 'Nom inconnu'}
-</h3>
+                📂 Liste des documents : {filteredDocuments[0]?.name || 'Nom inconnu'}
+              </h3>
 
               <Table striped bordered hover responsive>
                 <thead>

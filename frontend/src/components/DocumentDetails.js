@@ -120,29 +120,37 @@ const DocumentDetails = () => {
   };
 
 
+const renderDocumentViewer = () => {
+  if (!document || !document.file_path) return null;
 
-  const renderDocumentViewer = () => {
-    if (!document || !document.file_path) return null;
+  const fileExtension = document.file_path.split('.').pop().toLowerCase();
+  const fullUrl = `http://localhost:5000${document.file_path}`;
 
-    const fileExtension = document.file_path.split('.').pop().toLowerCase();
-    const fullUrl = `http://localhost:5000${document.file_path}`;
+  if (['jpg', 'jpeg', 'png'].includes(fileExtension)) {
+    return <img src={fullUrl} alt="document" style={{ width: '100%' }} />;
+  } else if (fileExtension === 'pdf') {
+    return (
+      <iframe
+        title="PDF Viewer"
+        src={fullUrl}
+        width="100%"
+        height="100%"
+        style={{ border: 'none', minHeight: '600px' }}
+      ></iframe>
+    );
+  } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) {
+    return (
+      <video controls autoPlay={false} style={{ width: '100%', height:'50%' }}>
+  <source src={fullUrl} type={`video/${fileExtension}`} />
+  Votre navigateur ne supporte pas la lecture de cette vidéo.
+</video>
 
-    if (['jpg', 'jpeg', 'png'].includes(fileExtension)) {
-      return <img src={fullUrl} alt="document" style={{ width: '100%' }} />;
-    } else if (fileExtension === 'pdf') {
-      return (
-        <iframe
-          title="PDF Viewer"
-          src={fullUrl}
-          width="100%"
-          height="100%"
-          style={{ border: 'none', minHeight: '600px' }}
-        ></iframe>
-      );
-    } else {
-      return <Alert variant="warning">Format non supporté.</Alert>;
-    }
-  };
+    );
+  } else {
+    return <Alert variant="warning">Format non supporté.</Alert>;
+  }
+};
+
 
   const handleRequestAccess = async () => {
     try {
@@ -265,6 +273,8 @@ const DocumentDetails = () => {
         }
       }, [currentUser]);
 
+      
+
   return (
     <>
       <Navbar />
@@ -301,7 +311,7 @@ const DocumentDetails = () => {
                   {document.version !== undefined && document.version !== null && (
                     <p className="mt-4">
                       <strong>ℹ️ Version actuelle :</strong> {document.version}
-                      {document.version > 1 && currentUser?.role !== 'admin' && (
+                      {document.version > 1 && currentUser?.role !== 'admin' && document.access !== 'true' && (
                         <Button
                           variant="warning"
                           className="mt-2"
@@ -312,7 +322,7 @@ const DocumentDetails = () => {
                         </Button>
                       )}
                       {document.version > 1 && (
-                        (currentUser?.role === 'admin' || document.access === true )
+                        (currentUser?.role === 'admin' || document.access === 'true' )
                         && <Button
                           variant="outline-secondary"
                           className="mt-2 rounded-pill fw-semibold px-4 py-2"
