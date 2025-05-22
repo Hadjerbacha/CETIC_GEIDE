@@ -491,9 +491,13 @@ export default function WorkflowPage() {
   
 const generateTasks = async () => {
   try {
+    // Calculer une date de référence future (par exemple, 2 jours à partir d'aujourd'hui)
+    const referenceDate = new Date();
+    referenceDate.setDate(referenceDate.getDate() + 2);
+    
     const prompt = `Voici le nom d'un workflow : ${workflow.name} et sa description : ${workflow.description}.\n
     Génère une liste de tâches au format JSON, chaque tâche doit avoir les champs suivants : 
-    title, description, due_date (au format YYYY-MM-DD) et type (validation/operation). 
+    title, description, due_date (au format YYYY-MM-DD, doit être postérieure à ${referenceDate.toISOString().split('T')[0]}) et type (validation/operation). 
     Inclure au moins une tâche de type 'validation' pour le directeur.`;
     
     const response = await axios.post(
