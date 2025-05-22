@@ -43,51 +43,54 @@ const upload = multer({
 // Fonction de classification des documents (par exemple, CV ou Facture)
 
 
-async function classifyText(text) {
-  // Catégories possibles (doivent correspondre à celles du service Python)
-  const defaultCategories = [
-    "contrat", "rapport", "mémoire",
-    "présentation", "note interne",
-    "facture", "cv", "photo"
-  ];
+// Modifiez la fonction classifyText
+const classifyText = async (text) => {
+  const defaultCategories = ["contrat", "facture", "rapport", "cv"];
+
+  const truncatedText = text.substring(0, 5000);
 
   try {
     const response = await axios.post(
-      NLP_SERVICE_URL,
+      'http://127.0.0.1:5001/classify',
       {
-        text: text,
+        text: truncatedText,
         categories: defaultCategories
       },
       {
-        timeout: NLP_TIMEOUT,
-        headers: { 'Content-Type': 'application/json' }
+        timeout: 10000, // max 10 secondes
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
       }
     );
 
-    return response.data.category;
+    return response.data?.category || null;
 
   } catch (error) {
-    console.error('Erreur NLP:', error.message);
-
-    // Fallback manuel si le service est indisponible
+    console.error('Erreur NLP (ou timeout dépassé) :', error.message);
+    
+    // 🔁 Fallback simple basé sur des mots-clés
     const lowerText = text.toLowerCase();
 
-    const keywordMap = {
-      'facture': ['facture', 'bon', 'montant', '€', 'euro', 'total à payer', 'tva'],
-      'contrat': ['contrat', 'accord', 'article', 'clause', 'signature'],
-      'rapport': ['rapport', 'analyse', 'conclusion', 'recommandation'],
-      'cv': ['curriculum vitae', 'cv', 'expérience', 'compétence', 'formation']
-    };
-
-    for (const [category, keywords] of Object.entries(keywordMap)) {
-      if (keywords.some(kw => lowerText.includes(kw))) {
-        return category;
-      }
+    if (lowerText.includes('contrat') || lowerText.includes('agreement') || lowerText.includes('signature')) {
+      return 'contrat';
+    }
+    if (lowerText.includes('facture') || lowerText.includes('invoice') || lowerText.includes('paiement')) {
+      return 'facture';
+    }
+    if (lowerText.includes('rapport') || lowerText.includes('report') || lowerText.includes('analyse')) {
+      return 'rapport';
+    }
+    if (lowerText.includes('cv') || lowerText.includes('curriculum') || lowerText.includes('expérience') || lowerText.includes('compétence')) {
+      return 'cv';
     }
 
-    return 'autre';
+    return 'autre'; // Fallback final si rien ne correspond
   }
-}
+};
+
+
 router.get('/:id/my-permissions', auth, async (req, res) => {
   const documentId = req.params.id;
   const userId = req.user.id;
