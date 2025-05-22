@@ -37,7 +37,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 50 * 1024 * 1024 } // Limite à 50 Mo
+  limits: { fileSize: 100 * 1024 * 1024 } // 100 Mo
 });
 
 // Fonction de classification des documents (par exemple, CV ou Facture)
@@ -289,16 +289,30 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
 
   try {
     let extractedText = '';
-    if (mimeType === 'application/pdf') {
-      const dataBuffer = fs.readFileSync(fullPath);
-      const data = await pdfParse(dataBuffer);
-      extractedText = data.text;
-    } else if (mimeType?.startsWith('image/')) {
-      const result = await Tesseract.recognize(fullPath, 'eng');
-      extractedText = result.data.text;
-    } else {
-      return res.status(400).json({ error: 'Type de fichier non pris en charge pour l\'OCR' });
+
+if (mimeType === 'application/pdf') {
+  const dataBuffer = fs.readFileSync(fullPath);
+  const data = await pdfParse(dataBuffer);
+  extractedText = data.text;
+} else if (mimeType?.startsWith('image/')) {
+  const result = await Tesseract.recognize(fullPath, 'eng');
+  extractedText = result.data.text;
+} else if (mimeType?.startsWith('video/')) {
+  try {
+    extractedText = await extractFrameAndOcr(fullPath);
+    if (!extractedText.trim()) {
+      extractedText = '[Vidéo sans texte détecté]';
     }
+  } catch (err) {
+    console.warn('⚠️ OCR sur vidéo échoué:', err);
+    extractedText = '[Vidéo non analysée]';
+  }
+
+
+} else {
+  extractedText = '[Fichier non analysable]';
+}
+
 
     const finalCategory = await classifyText(extractedText);
     console.log(`📂 Document classé comme: ${finalCategory}`);
@@ -486,9 +500,69 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
   }
 });
 
+router.get('/latest', auth, async (req, res) => {
+  const userId = req.user.id;
+  const isAdmin = req.user.role === 'admin';
 
+  try {
+    let result;
 
+    if (isAdmin) {
+      result = await pool.query(`
+        SELECT DISTINCT ON (name) d.*
+        FROM documents d
+        ORDER BY name, version DESC
+      `);
+    } else {
+      result = await pool.query(`
+        SELECT DISTINCT ON (d.name) d.*
+        FROM documents d
+        JOIN document_permissions dp ON dp.document_id = d.id
+        WHERE
+          dp.user_id = $1
+          AND dp.can_read = true
+        ORDER BY d.name, d.version DESC
+      `, [userId]);
+    }
 
+    res.status(200).json(result.rows);
+  } catch (err) {
+    console.error('Erreur récupération dernières versions :', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+router.get('/latest', auth, async (req, res) => {
+  const userId = req.user.id;
+  const isAdmin = req.user.role === 'admin';
+
+  try {
+    let result;
+
+    if (isAdmin) {
+      result = await pool.query(`
+        SELECT DISTINCT ON (name) d.*
+        FROM documents d
+        ORDER BY name, version DESC
+      `);
+    } else {
+      result = await pool.query(`
+        SELECT DISTINCT ON (d.name) d.*
+        FROM documents d
+        JOIN document_permissions dp ON dp.document_id = d.id
+        WHERE
+          dp.user_id = $1
+          AND dp.can_read = true
+        ORDER BY d.name, d.version DESC
+      `, [userId]);
+    }
+
+    res.status(200).json(result.rows);
+  } catch (err) {
+    console.error('Erreur récupération dernières versions :', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
 
 router.put('/:id', auth, async (req, res) => {
   const documentId = req.params.id;
@@ -562,6 +636,25 @@ router.get('/stats', async (req, res) => {
 });
 
 
+router.get('/:id/versions', auth, async (req, res) => {
+  const id = parseInt(req.params.id, 10);
+
+  try {
+    const versions = await pool.query(`
+      SELECT dv.*, d.name AS original_name
+      FROM document_versions dv
+      JOIN documents d ON d.id = dv.document_id
+      WHERE dv.document_id = $1
+      ORDER BY dv.version DESC
+    `, [id]);
+
+    res.status(200).json(versions.rows);
+
+  } catch (err) {
+    console.error('Erreur récupération des versions :', err.stack);
+    res.status(500).json({ error: 'Erreur serveur', details: err.message });
+  }
+});
 
 // GET : récupérer un document spécifique par ID
 router.get('/', auth, async (req, res) => {
@@ -597,6 +690,29 @@ router.get('/', auth, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
+
+
+router.get('/:id', auth, async (req, res) => {
+  const documentId = req.params.id;
+
+  try {
+    const result = await pool.query(
+      `SELECT * FROM documents WHERE id = $1`,
+      [documentId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Document non trouvé' });
+    }
+
+    res.status(200).json(result.rows[0]);
+  } catch (err) {
+    console.error('Erreur chargement document par ID :', err.stack);
+    res.status(500).json({ error: 'Erreur serveur', details: err.message });
+  }
+});
+
+
 
 
 

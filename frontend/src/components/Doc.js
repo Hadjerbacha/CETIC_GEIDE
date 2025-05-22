@@ -136,9 +136,10 @@ const Doc = () => {
 
   const fetchDocuments = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/documents/', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+     const res = await fetch('http://localhost:5000/api/documents/latest', {
+  headers: { Authorization: `Bearer ${token}` }
+});
+
       if (res.status === 401) throw new Error('Non autorisé');
       const data = await res.json();
       if (Array.isArray(data)) {
@@ -208,10 +209,11 @@ const Doc = () => {
       return;
     }
 
-    if (pendingFile.size > 10 * 1024 * 1024) {
-      setErrorMessage('Le fichier dépasse la limite de 10 Mo.');
+    if (pendingFile.size > 100 * 1024 * 1024) {
+      setErrorMessage('La vidéo dépasse la limite de 100 Mo.');
       return;
     }
+
 
     const existingDoc = documents.find(doc => doc.name === pendingName);
 
@@ -292,9 +294,10 @@ const Doc = () => {
       setErrorMessage("Erreur lors de l'envoi du document.");
     }
   };
-const latestDocs = Object.values(
+ const latestDocs = Object.values(
   documents.reduce((acc, doc) => {
-    const key = doc.name.toLowerCase().trim();
+    // Utilise original_id s'il existe, sinon fallback sur name
+    const key = doc.original_id || doc.name.toLowerCase().trim();
     if (!acc[key] || doc.version > acc[key].version) {
       acc[key] = doc;
     }
@@ -302,42 +305,44 @@ const latestDocs = Object.values(
   }, {})
 );
 
-const filteredDocuments = latestDocs.filter((doc) => {
-  const docName = doc.name || '';
-  const docFilePath = doc.file_path || '';
-  const docDate = doc.date ? new Date(doc.date) : null;
-  const docContent = doc.text_content || '';
-  const docCategory = doc.category || '';
-  const docSummary = doc.summary || '';
-  const docDescription = doc.description || '';
-  const docTags = Array.isArray(doc.tags) ? doc.tags : [];
-  const docFolder = doc.folder || '';
-  const docAuthor = doc.author || '';
 
-  const fileExtension = docFilePath.split('.').pop().toLowerCase();
 
-  const matchesType = filterType === 'Tous les documents' ||
-    fileExtension === filterType.toLowerCase();
+  const filteredDocuments = latestDocs.filter((doc) => {
+    const docName = doc.name || '';
+    const docFilePath = doc.file_path || '';
+    const docDate = doc.date ? new Date(doc.date) : null;
+    const docContent = doc.text_content || '';
+    const docCategory = doc.category || '';
+    const docSummary = doc.summary || '';
+    const docDescription = doc.description || '';
+    const docTags = Array.isArray(doc.tags) ? doc.tags : [];
+    const docFolder = doc.folder || '';
+    const docAuthor = doc.author || '';
 
-  const matchesDate = (!startDate || docDate >= new Date(startDate)) &&
-    (!endDate || docDate <= new Date(endDate));
+    const fileExtension = docFilePath.split('.').pop().toLowerCase();
 
-  const matchesSearch = useAdvancedFilter
-    ? (
-      docContent.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      docSummary.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      docDescription.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      docFolder.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      docAuthor.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      docTags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-    )
-    : docName.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesType = filterType === 'Tous les documents' ||
+      fileExtension === filterType.toLowerCase();
 
-  const matchesCategory = selectedCategory === '' ||
-    (docCategory && docCategory.toLowerCase() === selectedCategory.toLowerCase());
+    const matchesDate = (!startDate || docDate >= new Date(startDate)) &&
+      (!endDate || docDate <= new Date(endDate));
 
-  return matchesType && matchesDate && matchesSearch && matchesCategory;
-});
+    const matchesSearch = useAdvancedFilter
+      ? (
+        docContent.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        docSummary.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        docDescription.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        docFolder.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        docAuthor.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        docTags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
+      )
+      : docName.toLowerCase().includes(searchQuery.toLowerCase());
+
+    const matchesCategory = selectedCategory === '' ||
+      (docCategory && docCategory.toLowerCase() === selectedCategory.toLowerCase());
+
+    return matchesType && matchesDate && matchesSearch && matchesCategory;
+  });
 
 
   const handleOpenConfirm = async (doc) => {
@@ -478,8 +483,11 @@ const filteredDocuments = latestDocs.filter((doc) => {
   const fetchPermissions = async (documentId) => {
     try {
       const res = await fetch(`http://localhost:5000/api/documents/${documentId}/my-permissions`, {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
       });
+
 
       if (!res.ok) throw new Error("Accès refusé");
 
@@ -518,7 +526,10 @@ const filteredDocuments = latestDocs.filter((doc) => {
               <option value="pdf">PDF</option>
               <option value="docx">Word</option>
               <option value="jpg">Images</option>
+              <option value="mp4">Vidéo (MP4)</option>
+              <option value="webm">Vidéo (WebM)</option>
             </Form.Select>
+
           </Col>
 
           <Col md={2}><Form.Control type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /></Col>
@@ -569,7 +580,7 @@ const filteredDocuments = latestDocs.filter((doc) => {
                                 type="file"
                                 id="file-upload"
                                 style={{ display: 'none' }}
-                                accept=".pdf,.docx,.jpg,.jpeg,.png"
+                                accept=".pdf,.docx,.jpg,.jpeg,.png,.mp4,.webm" // ✅ Ajout des formats vidéo
                                 onChange={(e) => setPendingFile(e.target.files[0])}
                               />
                               <Button
@@ -588,6 +599,7 @@ const filteredDocuments = latestDocs.filter((doc) => {
                                 {pendingFile ? pendingFile.name : 'Choisir un fichier'}
                               </Button>
                             </Col>
+
                           </Row>
 
                           <Col md={12} className="mb-3">
