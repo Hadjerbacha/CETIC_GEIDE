@@ -63,6 +63,9 @@ const Doc = () => {
   const [myPermissions, setMyPermissions] = useState(null);
   const [conflictingDoc, setConflictingDoc] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [step, setStep] = useState(1); // pour gérer les étapes (1 = fichier, 2 = détails)
+const [documentId, setDocumentId] = useState(null); // ID du document renvoyé par le backend
+
 
 
 
@@ -294,6 +297,57 @@ const Doc = () => {
       setErrorMessage("Erreur lors de l'envoi du document.");
     }
   };
+
+const handleNextStep = async () => {
+  if (!pendingFile) {
+    setErrorMessage('Veuillez sélectionner un fichier.');
+    return;
+  }
+
+  if (pendingFile.size > 100 * 1024 * 1024) {
+    setErrorMessage('La vidéo dépasse la limite de 100 Mo.');
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('file', pendingFile);
+  formData.append('visibility', accessType);
+  formData.append('access', accessType);
+  formData.append('can_modify', permissions.modify);
+  formData.append('can_delete', permissions.delete);
+  formData.append('can_share', permissions.share);
+
+  const allowedIds = allowedUsers.map(u => u?.id || u).filter(Boolean);
+  formData.append('id_share', JSON.stringify(allowedIds));
+
+  const groupIds = selectedGroup ? [selectedGroup] : [];
+  formData.append('id_group', JSON.stringify(groupIds));
+
+  try {
+    const res = await fetch('http://localhost:5000/api/documents', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`
+      },
+      body: formData
+    });
+
+    if (!res.ok) throw new Error(`Erreur upload fichier : ${res.status}`);
+    const data = await res.json();
+
+    setDocumentId(data.id); // ou data.document_id selon ce que tu retournes
+    setStep(2); // Facultatif maintenant
+    setShowUploadForm(false); // ferme le modal
+
+    // Rediriger vers la page de complétion
+    navigate(`/document/${data.id}/complete`);
+  } catch (err) {
+    console.error("Erreur lors de l'envoi du fichier :", err);
+    setErrorMessage("Erreur lors de l'envoi du fichier.");
+  }
+};
+
+
  const latestDocs = Object.values(
   documents.reduce((acc, doc) => {
     // Utilise original_id s'il existe, sinon fallback sur name
@@ -553,281 +607,66 @@ const Doc = () => {
               >
                 {showUploadForm ? 'Annuler' : 'Télécharger un document'}
               </Button>
+<Modal
+  show={showUploadForm}
+  onHide={() => setShowUploadForm(false)}
+  centered
+  backdrop="static"
+  style={{ zIndex: 1050 }}
+>
+  <Modal.Header closeButton>
+    <Modal.Title>Importer un fichier</Modal.Title>
+  </Modal.Header>
 
-              <Card.Body>
-                {errorMessage && <Alert variant="danger">{errorMessage}</Alert>}
+  <Modal.Body>
+    {errorMessage && <Alert variant="danger">{errorMessage}</Alert>}
 
-                {showUploadForm && (
-                  <Card className="mb-4 p-4 border-transparent">
-                    <Row className="mb-3">
-                      {/* Col de gauche : tous les champs classiques */}
-                      <Col md={8}>
-                        <Row>
-                          <Row>
-                            <Col md={6} className="mb-3">
-                              <Form.Control
-                                type="text"
-                                placeholder="Nom du document"
-                                value={pendingName}
-                                onChange={(e) => setPendingName(e.target.value)}
-                                className="rounded-3"
-                                style={{ height: '40px' }}
-                              />
-                            </Col>
+    <div className="text-center">
+      <input
+        type="file"
+        id="file-upload"
+        style={{ display: 'none' }}
+        accept=".pdf,.docx,.jpg,.jpeg,.png,.mp4,.webm"
+        onChange={(e) => setPendingFile(e.target.files[0])}
+      />
 
-                            <Col md={6} className="mb-3 d-flex align-items-center">
-                              <input
-                                type="file"
-                                id="file-upload"
-                                style={{ display: 'none' }}
-                                accept=".pdf,.docx,.jpg,.jpeg,.png,.mp4,.webm" // ✅ Ajout des formats vidéo
-                                onChange={(e) => setPendingFile(e.target.files[0])}
-                              />
-                              <Button
-                                variant="outline-primary"
-                                onClick={() => document.getElementById('file-upload').click()}
-                                className="d-flex align-items-center rounded-3 px-3"
-                                style={{
-                                  height: '40px',
-                                  width: '100%',
-                                  whiteSpace: 'nowrap',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                }}
-                              >
-                                <FaCloudUploadAlt size={20} className="me-2" />
-                                {pendingFile ? pendingFile.name : 'Choisir un fichier'}
-                              </Button>
-                            </Col>
+      <Button
+        variant="outline-primary"
+        onClick={() => document.getElementById('file-upload').click()}
+        className="d-flex align-items-center justify-content-center mx-auto"
+        style={{
+          height: '45px',
+          width: '100%',
+          maxWidth: '350px',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          borderRadius: '8px'
+        }}
+      >
+        <FaCloudUploadAlt size={20} className="me-2" />
+        {pendingFile ? pendingFile.name : 'Choisir un fichier'}
+      </Button>
+    </div>
+  </Modal.Body>
 
-                          </Row>
+  <Modal.Footer>
+    <Button
+      variant="secondary"
+      onClick={() => setShowUploadForm(false)}
+    >
+      Annuler
+    </Button>
+    <Button
+      variant="primary"
+      disabled={!pendingFile}
+      onClick={handleNextStep}
+    >
+      Suivant
+    </Button>
+  </Modal.Footer>
+</Modal>
 
-                          <Col md={12} className="mb-3">
-                            <Form.Select
-                              value={accessType}
-                              onChange={(e) => setAccessType(e.target.value)}
-                              className="rounded-3"
-                            >
-                              <option value="private">Privé</option>
-                              <option value="public">Tous les utilisateurs</option>
-                              <option value="custom">Utilisateurs ou groupe spécifique</option>
-                            </Form.Select>
-                          </Col>
-
-                          {accessType === 'custom' && (
-                            <>
-                              <Col md={6} className="mb-3">
-                                <Select
-                                  isMulti
-                                  options={allUsers}
-                                  value={allUsers.filter(option => allowedUsers.includes(option.value))}
-                                  onChange={(selectedOptions) => {
-                                    const selectedUserIds = selectedOptions.map(opt => opt.value);
-                                    setSelectedUsers(selectedUserIds);
-                                    setAllowedUsers(selectedUserIds);
-                                  }}
-                                  placeholder="Select users..."
-                                  className="basic-multi-select"
-                                  classNamePrefix="select"
-                                />
-                              </Col>
-
-                              <Col md={6} className="mb-3">
-                                <Select
-                                  value={
-                                    selectedGroup
-                                      ? {
-                                        value: selectedGroup,
-                                        label: allGroups.find(group => group.id === selectedGroup)?.nom,
-                                      }
-                                      : null
-                                  }
-                                  options={allGroups.map(group => ({
-                                    value: group.id,
-                                    label: group.nom,
-                                  }))}
-                                  onChange={(selectedOption) => {
-                                    setSelectedGroup(selectedOption ? selectedOption.value : null);
-                                  }}
-                                  placeholder="Sélectionner un groupe..."
-                                  className="basic-multi-select"
-                                  classNamePrefix="select"
-                                />
-                              </Col>
-                            </>
-                          )}
-
-                          <Col md={12} className="mb-3">
-                            <Form.Control
-                              type="text"
-                              placeholder="Description"
-                              value={description}
-                              onChange={(e) => setDescription(e.target.value)}
-                              className="rounded-3"
-                            />
-                          </Col>
-
-                          <Col md={4} className="mb-3">
-                            <Form.Select
-                              value={priority}
-                              onChange={(e) => setPriority(e.target.value)}
-                              className="rounded-3"
-                            >
-                              <option value="">Priorité</option>
-                              <option value="basse">Basse</option>
-                              <option value="moyenne">Moyenne</option>
-                              <option value="élevée">Élevée</option>
-                            </Form.Select>
-                          </Col>
-
-                          <Col md={8} className="mb-3">
-                            <Form.Control
-                              type="text"
-                              placeholder="Mots clés (séparés par des virgules)"
-                              value={tags.join(', ')}
-                              onChange={(e) =>
-                                setTags(e.target.value.split(',').map(tag => tag.trim()))
-                              }
-                              className="rounded-3"
-                            />
-                          </Col>
-                        </Row>
-                      </Col>
-
-                      <Col md={4} className="d-flex flex-column justify-content-start">
-                        <label>
-                          <strong>Droits d'accès :</strong>
-                        </label>
-                        <Form.Check type="checkbox" id="read-access" label="Consulter" checked disabled />
-
-                        <Form.Check
-                          type="checkbox"
-                          id="modify-access"
-                          label="Modifier"
-                          checked={permissions.modify}
-                          disabled={accessType === 'private'}
-                          onChange={(e) =>
-                            setPermissions((prev) => ({ ...prev, modify: e.target.checked }))
-                          }
-                        />
-
-                        <Form.Check
-                          type="checkbox"
-                          id="delete-access"
-                          label="Supprimer"
-                          checked={permissions.delete}
-                          disabled={accessType === 'private'}
-                          onChange={(e) =>
-                            setPermissions((prev) => ({ ...prev, delete: e.target.checked }))
-                          }
-                        />
-
-                        <Form.Check
-                          type="checkbox"
-                          id="share-access"
-                          label="Partager"
-                          checked={permissions.share}
-                          disabled={accessType === 'private'}
-                          onChange={(e) =>
-                            setPermissions((prev) => ({ ...prev, share: e.target.checked }))
-                          }
-                        />
-                      </Col>
-                    </Row>
-
-                    <Row>
-                      <Col className="d-flex justify-content-end">
-                        {/* Modal séparé */}
-                        <Modal
-                          show={showConflictPrompt}
-                          onHide={() => setShowConflictPrompt(false)}
-                          centered
-                          autoFocus
-                          style={{ pointerEvents: 'auto', zIndex: 1050 }}
-                        >
-                          <Modal.Header closeButton>
-                            <Modal.Title>Conflit de document</Modal.Title>
-                          </Modal.Header>
-                          <Modal.Body>
-                            <p>
-                              ⚠️ Un document nommé <strong>{conflictingDocName}</strong> existe
-                              déjà.
-                            </p>
-
-                            {(userRole === 'admin' ||
-                              conflictingDoc?.owner_id === userId ||
-                              conflictingDoc?.permissions?.can_modify) ? (
-                              <p>Souhaitez-vous l’ajouter comme une <strong>nouvelle version</strong> ?</p>
-                            ) : (
-                              <p>Vous n'avez pas les droits pour le modifier.</p>
-                            )}
-                          </Modal.Body>
-                          <Modal.Footer>
-                            {(userRole === 'admin' ||
-                              conflictingDoc?.owner_id === userId ||
-                              conflictingDoc?.permissions?.can_modify) ? (
-                              <>
-                                <Button
-                                  variant="secondary"
-                                  onClick={() => {
-                                    setShowConflictPrompt(false);
-                                  }}
-                                >
-                                  Non
-                                </Button>
-                                <Button
-                                  variant="primary"
-                                  disabled={uploading}
-                                  onClick={() => {
-                                    setUploading(true); // bloque le bouton
-                                    setForceUpload(true);
-                                    setShowConflictPrompt(false);
-                                    handleUpload().finally(() => setUploading(false)); // relâche le bouton
-                                  }}
-                                >
-                                  Oui, ajouter comme version
-                                </Button>
-
-                              </>
-                            ) : (
-                              <Button
-                                variant="primary"
-                                onClick={() => setShowConflictPrompt(false)}
-                              >
-                                OK
-                              </Button>
-                            )}
-                          </Modal.Footer>
-                        </Modal>
-
-                        {/* OverlayTrigger uniquement autour du bouton */}
-                        <OverlayTrigger
-                          placement="top"
-                          overlay={
-                            accessType === 'custom' && allowedUsers.length === 0 && !selectedGroup ? (
-                              <Tooltip id="tooltip-upload">
-                                Sélectionnez au moins un utilisateur ou un groupe.
-                              </Tooltip>
-                            ) : (
-                              <></>
-                            )
-                          }
-                        >
-                          <div style={{ display: 'inline-block' }}>
-                            <Button
-                              onClick={handleUpload}
-                              disabled={accessType === 'custom' && allowedUsers.length === 0 && !selectedGroup}
-                              className="rounded-3"
-                            >
-                              Uploader
-                            </Button>
-                          </div>
-                        </OverlayTrigger>
-                      </Col>
-                    </Row>
-                  </Card>
-                )}
-              </Card.Body>
 
 
               <div className="container-fluid d-flex flex-column gap-4 mb-4">
