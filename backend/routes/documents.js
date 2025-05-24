@@ -69,7 +69,7 @@ const classifyText = async (text) => {
 
   } catch (error) {
     console.error('Erreur NLP (ou timeout dépassé) :', error.message);
-    
+
     // 🔁 Fallback simple basé sur des mots-clés
     const lowerText = text.toLowerCase();
 
@@ -224,6 +224,39 @@ async function initializeDatabase() {
         access_type VARCHAR(20) DEFAULT 'read'
       );
     `);
+
+    // Table des factures
+    await pool.query(`
+  CREATE TABLE IF NOT EXISTS factures (
+    id SERIAL PRIMARY KEY,
+    document_id INTEGER UNIQUE REFERENCES documents(id) ON DELETE CASCADE,
+    numero_facture TEXT,
+    montant NUMERIC,
+    date_facture DATE
+  );
+`);
+
+    // Table des CV
+    await pool.query(`
+  CREATE TABLE IF NOT EXISTS cv (
+    id SERIAL PRIMARY KEY,
+    document_id INTEGER UNIQUE REFERENCES documents(id) ON DELETE CASCADE,
+    nom_candidat TEXT,
+    experience TEXT,
+    domaine TEXT
+  );
+`);
+
+    // Table des demandes de congés
+    await pool.query(`
+  CREATE TABLE IF NOT EXISTS demande_conges (
+    id SERIAL PRIMARY KEY,
+    document_id INTEGER UNIQUE REFERENCES documents(id) ON DELETE CASCADE,
+    numDemande TEXT,
+    dateConge DATE
+  );
+`);
+
 
     console.log('✅ Tables documents, versions, collections, document_collections et document_permissions prêtes');
   } catch (err) {
@@ -451,7 +484,7 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
 
   } catch (err) {
     console.error('❌ Erreur upload étape 1 :', err.stack);
-    if (req.file) fs.unlink(req.file.path, () => {});
+    if (req.file) fs.unlink(req.file.path, () => { });
     res.status(500).json({ error: 'Erreur upload étape 1', details: err.message });
   }
 });
@@ -520,6 +553,46 @@ router.get('/latest', auth, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
+
+router.get('/documents/search', async (req, res) => {
+  const { query, category, startDate, endDate } = req.query;
+  try {
+    const values = [];
+    let baseQuery = `
+      SELECT * FROM documents 
+      WHERE 1=1
+    `;
+
+    if (query) {
+      baseQuery += ` AND (LOWER(name) LIKE $${values.length + 1} OR LOWER(text_content) LIKE $${values.length + 1})`;
+      values.push(`%${query.toLowerCase()}%`);
+    }
+
+    if (category) {
+      baseQuery += ` AND LOWER(category) = $${values.length + 1}`;
+      values.push(category.toLowerCase());
+    }
+
+    if (startDate) {
+      baseQuery += ` AND date >= $${values.length + 1}`;
+      values.push(startDate);
+    }
+
+    if (endDate) {
+      baseQuery += ` AND date <= $${values.length + 1}`;
+      values.push(endDate);
+    }
+
+    baseQuery += ` ORDER BY date DESC`;
+
+    const { rows } = await pool.query(baseQuery, values);
+    res.status(200).json(rows);
+  } catch (err) {
+    console.error('Erreur recherche documents:', err);
+    res.status(500).json({ error: 'Erreur lors de la recherche' });
+  }
+});
+
 router.put('/:id', auth, async (req, res) => {
   const documentId = parseInt(req.params.id, 10);
   const {
@@ -528,16 +601,16 @@ router.put('/:id', auth, async (req, res) => {
     tags = [],
     prio = 'moyenne',
     collection_name = '',
-    metadata = {}
+    metadata = {},
+    ...extraFields // contient les champs dynamiques spécifiques
   } = req.body;
 
   try {
-    // Validation basique
     if (!name) {
       return res.status(400).json({ error: 'Le nom du document est requis.' });
     }
 
-    // Update du document
+    // 1. Mise à jour de la table documents
     await pool.query(`
       UPDATE documents 
       SET 
@@ -549,17 +622,80 @@ router.put('/:id', auth, async (req, res) => {
       WHERE id = $6
     `, [name, summary, tags, prio, metadata, documentId]);
 
-    // Optionnel : mise à jour de la collection si tu le souhaites
+    // 2. Ajout/MAJ dans la table spécialisée
+    const catRes = await pool.query(`SELECT category FROM documents WHERE id = $1`, [documentId]);
+    const category = catRes.rows[0]?.category;
+
+    switch (category) {
+  case 'facture':
+  await pool.query(`
+    INSERT INTO factures (document_id, numero_facture, nom_entreprise, produit, montant, date_facture)
+    VALUES ($1, $2, $3, $4, $5, $6)
+    ON CONFLICT (document_id) DO UPDATE 
+    SET numero_facture = $2,
+        nom_entreprise = $3,
+        produit = $4,
+        montant = $5,
+        date_facture = $6;
+  `, [
+    documentId,
+    req.body.num_facture || '',
+    req.body.nom_entreprise || '',
+    req.body.produit || '',
+    req.body.montant || 0,
+    req.body.date_facture || null
+  ]);
+  break;
+
+      case 'cv':
+        await pool.query(`
+  INSERT INTO cv (document_id, num_cv, nom_candidat, metier, lieu, experience, domaine)
+  VALUES ($1, $2, $3, $4, $5, $6, $7)
+  ON CONFLICT (document_id) DO UPDATE SET
+    num_cv = $2,
+    nom_candidat = $3,
+    metier = $4,
+    lieu = $5,
+    experience = $6,
+    domaine = $7
+`, [
+          documentId,
+          req.body.num_cv || '',
+          req.body.nom_candidat || '',
+          req.body.metier || '',
+          req.body.lieu || '',
+          req.body.experience || '',
+          req.body.domaine || ''
+        ]);
+
+
+
+      case 'demande_conge':
+        await pool.query(`
+          INSERT INTO demande_conges (document_id, numDemande, dateConge)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (document_id) DO UPDATE 
+          SET numDemande = $2, dateConge = $3;
+        `, [
+          documentId,
+          extraFields.numDemande || '',
+          extraFields.dateConge || null
+        ]);
+        break;
+
+      default:
+        break;
+    }
+
+    // 3. Gestion des collections (optionnelle)
     if (collection_name) {
-      const collectionRes = await pool.query(
+      const resCollection = await pool.query(
         `SELECT id FROM collections WHERE name = $1 AND user_id = $2`,
         [collection_name, req.user.id]
       );
 
-      let collectionId;
-      if (collectionRes.rowCount > 0) {
-        collectionId = collectionRes.rows[0].id;
-      } else {
+      let collectionId = resCollection.rows[0]?.id;
+      if (!collectionId) {
         const insert = await pool.query(
           `INSERT INTO collections (name, user_id) VALUES ($1, $2) RETURNING id`,
           [collection_name, req.user.id]
@@ -570,18 +706,62 @@ router.put('/:id', auth, async (req, res) => {
       await pool.query(`
         INSERT INTO document_collections (document_id, collection_id, is_saved, collection_name)
         VALUES ($1, $2, true, $3)
-        ON CONFLICT (document_id, collection_id) DO UPDATE
+        ON CONFLICT (document_id, collection_id) DO UPDATE 
         SET is_saved = true, collection_name = $3
       `, [documentId, collectionId, collection_name]);
     }
 
-    // Récupération finale du document mis à jour
+    // 4. Renvoi du document mis à jour
     const updated = await pool.query('SELECT * FROM documents WHERE id = $1', [documentId]);
     res.status(200).json(updated.rows[0]);
 
-  } catch (error) {
-    console.error('Erreur lors de la mise à jour du document:', error);
-    res.status(500).json({ error: 'Erreur lors de la mise à jour.', details: error.message });
+  } catch (err) {
+    console.error('❌ Erreur update document :', err);
+    res.status(500).json({ error: 'Erreur serveur', details: err.message });
+  }
+});
+
+router.get('/:id/details', auth, async (req, res) => {
+  const documentId = req.params.id;
+
+  try {
+    const docRes = await pool.query('SELECT * FROM documents WHERE id = $1', [documentId]);
+
+    if (docRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Document non trouvé' });
+    }
+
+    const doc = docRes.rows[0];
+    let meta = {};
+
+    switch (doc.category) {
+      case 'cv':
+        const cv = await pool.query('SELECT * FROM cv WHERE document_id = $1', [documentId]);
+        meta = cv.rows[0] || {};
+        break;
+
+      case 'facture':
+        const facture = await pool.query('SELECT * FROM factures WHERE document_id = $1', [documentId]);
+        meta = facture.rows[0] || {};
+        break;
+
+      case 'demande_conge':
+        const conge = await pool.query('SELECT * FROM demande_conges WHERE document_id = $1', [documentId]);
+        meta = conge.rows[0] || {};
+        break;
+
+      default:
+        meta = {};
+    }
+
+    res.json({
+      document: doc,
+      details: meta
+    });
+
+  } catch (err) {
+    console.error('Erreur récupération détails document :', err.stack);
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 

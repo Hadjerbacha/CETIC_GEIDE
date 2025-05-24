@@ -23,7 +23,24 @@ const DocumentDetails = () => {
   const [requestSent, setRequestSent] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
-    
+  const [details, setDetails] = useState({});
+
+
+useEffect(() => {
+  const fetchData = async () => {
+    try {
+      const res = await axios.get(`http://localhost:5000/api/documents/${id}/details`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setDocument(res.data.document);
+      setDetails(res.data.details || {});
+    } catch (error) {
+      console.error('Erreur chargement des détails du document :', error);
+    }
+  };
+
+  if (id && token) fetchData();
+}, [id, token]);
 
   useEffect(() => {
     const fetchDocument = async () => {
@@ -40,6 +57,8 @@ const DocumentDetails = () => {
         setErrorMessage("Impossible de charger le document.");
       }
     };
+
+    
 
 
     const fetchVersions = async () => {
@@ -88,13 +107,13 @@ const DocumentDetails = () => {
       setSummary("⚠️ Le document ne contient pas de texte analysable.");
       return;
     }
-  
+
     setIsSummarizing(true);
     setSummary(null);
-  
+
     try {
       // Limite à 10 000 caractères pour éviter les dépassements de tokens
-      const textToSummarize = document.text_content.slice(0, 10000); 
+      const textToSummarize = document.text_content.slice(0, 10000);
       const summaryText = await generateSummary(textToSummarize);
       setSummary(summaryText);
     } catch (error) {
@@ -111,7 +130,7 @@ const DocumentDetails = () => {
         { text },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      
+
       return response.data.summary || "Aucun résumé généré.";
     } catch (error) {
       console.error("Erreur résumé:", error.response?.data || error.message);
@@ -120,36 +139,36 @@ const DocumentDetails = () => {
   };
 
 
-const renderDocumentViewer = () => {
-  if (!document || !document.file_path) return null;
+  const renderDocumentViewer = () => {
+    if (!document || !document.file_path) return null;
 
-  const fileExtension = document.file_path.split('.').pop().toLowerCase();
-  const fullUrl = `http://localhost:5000${document.file_path}`;
+    const fileExtension = document.file_path.split('.').pop().toLowerCase();
+    const fullUrl = `http://localhost:5000${document.file_path}`;
 
-  if (['jpg', 'jpeg', 'png'].includes(fileExtension)) {
-    return <img src={fullUrl} alt="document" style={{ width: '100%' }} />;
-  } else if (fileExtension === 'pdf') {
-    return (
-      <iframe
-        title="PDF Viewer"
-        src={fullUrl}
-        width="100%"
-        height="100%"
-        style={{ border: 'none', minHeight: '600px' }}
-      ></iframe>
-    );
-  } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) {
-    return (
-      <video controls autoPlay={false} style={{ width: '100%', height:'50%' }}>
-  <source src={fullUrl} type={`video/${fileExtension}`} />
-  Votre navigateur ne supporte pas la lecture de cette vidéo.
-</video>
+    if (['jpg', 'jpeg', 'png'].includes(fileExtension)) {
+      return <img src={fullUrl} alt="document" style={{ width: '100%' }} />;
+    } else if (fileExtension === 'pdf') {
+      return (
+        <iframe
+          title="PDF Viewer"
+          src={fullUrl}
+          width="100%"
+          height="100%"
+          style={{ border: 'none', minHeight: '600px' }}
+        ></iframe>
+      );
+    } else if (['mp4', 'webm', 'ogg'].includes(fileExtension)) {
+      return (
+        <video controls autoPlay={false} style={{ width: '100%', height: '50%' }}>
+          <source src={fullUrl} type={`video/${fileExtension}`} />
+          Votre navigateur ne supporte pas la lecture de cette vidéo.
+        </video>
 
-    );
-  } else {
-    return <Alert variant="warning">Format non supporté.</Alert>;
-  }
-};
+      );
+    } else {
+      return <Alert variant="warning">Format non supporté.</Alert>;
+    }
+  };
 
 
   const handleRequestAccess = async () => {
@@ -250,30 +269,30 @@ const renderDocumentViewer = () => {
   console.log("currentUser:", currentUser);
   console.log("Versions:", versions.length);
 
-   const fetchNotifications = async () => {
-      try {
-        const token = localStorage.getItem('token');
-        const res = await axios.get(`http://localhost:5000/api/notifications/${userId}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setNotifications(res.data);
-      } catch (error) {
-        console.error('Erreur lors de la récupération des notifications:', error);
-      }
-    };
+  const fetchNotifications = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await axios.get(`http://localhost:5000/api/notifications/${userId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setNotifications(res.data);
+    } catch (error) {
+      console.error('Erreur lors de la récupération des notifications:', error);
+    }
+  };
 
-     useEffect(() => {
-        if (currentUser) {
-          axios.get(`http://localhost:5000/api/notifications/${currentUser.id}`)
-            .then(res => {
-              const unreadCount = res.data.filter(notification => !notification.is_read).length;
-              setUnreadNotificationsCount(unreadCount);
-            })
-            .catch(err => console.error("Erreur notifications :", err));
-        }
-      }, [currentUser]);
+  useEffect(() => {
+    if (currentUser) {
+      axios.get(`http://localhost:5000/api/notifications/${currentUser.id}`)
+        .then(res => {
+          const unreadCount = res.data.filter(notification => !notification.is_read).length;
+          setUnreadNotificationsCount(unreadCount);
+        })
+        .catch(err => console.error("Erreur notifications :", err));
+    }
+  }, [currentUser]);
 
-      
+
 
   return (
     <>
@@ -302,11 +321,43 @@ const renderDocumentViewer = () => {
                   </div>
 
                   <h4 className="mt-3">📌 Détails</h4>
-                  <p><strong>Nom :</strong> {document.name}</p>
-                  <p><strong>Catégorie :</strong> {document.category}</p>
-                  <p><strong>Collection :</strong> {document.collectionName || 'Aucune'}</p>
-                  <p><strong>Date d’upload :</strong> {new Date(document.createdAt).toLocaleString()}</p>
-                  <p><strong>Visibilité :</strong> {document.visibility}</p>
+                  {document && (
+                    <>
+                      <p><strong>Nom :</strong> {document.name}</p>
+                      <p><strong>Catégorie :</strong> {document.category}</p>
+                      <p><strong>Date d’upload :</strong> {new Date(document.date).toLocaleString()}</p>
+                      <p><strong>Visibilité :</strong> {document.visibility}</p>
+
+                      {document.category === 'cv' && (
+                        <>
+                          <p><strong>Numéro CV :</strong> {details.num_cv}</p>
+                          <p><strong>Nom candidat :</strong> {details.nom_candidat}</p>
+                          <p><strong>Métier :</strong> {details.metier}</p>
+                          <p><strong>Lieu :</strong> {details.lieu}</p>
+                          <p><strong>Expérience :</strong> {details.experience}</p>
+                          <p><strong>Domaine :</strong> {details.domaine}</p>
+                        </>
+                      )}
+
+                      {document.category === 'facture' && (
+                        <>
+                          <p><strong>Numéro Facture :</strong> {details.numero_facture}</p>
+                          <p><strong>Nom entreprise :</strong> {details.nom_entreprise}</p>
+                          <p><strong>Produit :</strong> {details.produit}</p>
+                          <p><strong>Montant :</strong> {details.montant}</p>
+                          <p><strong>Date Facture :</strong> {details.date_facture}</p>
+                        </>
+                      )}
+
+                      {document.category === 'demande_conge' && (
+                        <>
+                          <p><strong>Numéro demande :</strong> {details.numdemande}</p>
+                          <p><strong>Date congé :</strong> {details.dateconge}</p>
+                        </>
+                      )}
+                    </>
+                  )}
+
 
                   {document.version !== undefined && document.version !== null && (
                     <p className="mt-4">
@@ -322,7 +373,7 @@ const renderDocumentViewer = () => {
                         </Button>
                       )}
                       {document.version > 1 && (
-                        (currentUser?.role === 'admin' || document.access === 'true' )
+                        (currentUser?.role === 'admin' || document.access === 'true')
                         && <Button
                           variant="outline-secondary"
                           className="mt-2 rounded-pill fw-semibold px-4 py-2"

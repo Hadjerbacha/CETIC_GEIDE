@@ -51,8 +51,9 @@ const Doc = () => {
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [existingWorkflow, setExistingWorkflow] = useState(null);
-  const categories = ['Contrat', 'Mémoire', 'Article', 'Rapport'];
+  const categories = ['Contrat', 'Mémoire', 'Article', 'Rapport', 'facture', 'cv', 'demande_conge'];
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [categoryClickCount, setCategoryClickCount] = useState(0);
   const [summary, setSummary] = useState('');
   const [access, setAccess] = useState('private');
   const [selectedUsers, setSelectedUsers] = useState([]);
@@ -64,9 +65,9 @@ const Doc = () => {
   const [conflictingDoc, setConflictingDoc] = useState(null);
   const [uploading, setUploading] = useState(false);
   const [step, setStep] = useState(1); // pour gérer les étapes (1 = fichier, 2 = détails)
-const [documentId, setDocumentId] = useState(null); // ID du document renvoyé par le backend
-
-
+  const [documentId, setDocumentId] = useState(null); // ID du document renvoyé par le backend
+  const [searchFilters, setSearchFilters] = useState({});
+  const [showFilterCard, setShowFilterCard] = useState(false);
 
 
   const [permissions, setPermissions] = useState({
@@ -139,9 +140,9 @@ const [documentId, setDocumentId] = useState(null); // ID du document renvoyé p
 
   const fetchDocuments = async () => {
     try {
-     const res = await fetch('http://localhost:5000/api/documents/latest', {
-  headers: { Authorization: `Bearer ${token}` }
-});
+      const res = await fetch('http://localhost:5000/api/documents/latest', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
 
       if (res.status === 401) throw new Error('Non autorisé');
       const data = await res.json();
@@ -298,66 +299,66 @@ const [documentId, setDocumentId] = useState(null); // ID du document renvoyé p
     }
   };
 
-const handleNextStep = async () => {
-  if (!pendingFile) {
-    setErrorMessage('Veuillez sélectionner un fichier.');
-    return;
-  }
-
-  if (pendingFile.size > 100 * 1024 * 1024) {
-    setErrorMessage('La vidéo dépasse la limite de 100 Mo.');
-    return;
-  }
-
-  const formData = new FormData();
-  formData.append('file', pendingFile);
-  formData.append('visibility', accessType);
-  formData.append('access', accessType);
-  formData.append('can_modify', permissions.modify);
-  formData.append('can_delete', permissions.delete);
-  formData.append('can_share', permissions.share);
-
-  const allowedIds = allowedUsers.map(u => u?.id || u).filter(Boolean);
-  formData.append('id_share', JSON.stringify(allowedIds));
-
-  const groupIds = selectedGroup ? [selectedGroup] : [];
-  formData.append('id_group', JSON.stringify(groupIds));
-
-  try {
-    const res = await fetch('http://localhost:5000/api/documents', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`
-      },
-      body: formData
-    });
-
-    if (!res.ok) throw new Error(`Erreur upload fichier : ${res.status}`);
-    const data = await res.json();
-
-    setDocumentId(data.id); // ou data.document_id selon ce que tu retournes
-    setStep(2); // Facultatif maintenant
-    setShowUploadForm(false); // ferme le modal
-
-    // Rediriger vers la page de complétion
-    navigate(`/document/${data.id}/complete`);
-  } catch (err) {
-    console.error("Erreur lors de l'envoi du fichier :", err);
-    setErrorMessage("Erreur lors de l'envoi du fichier.");
-  }
-};
-
-
- const latestDocs = Object.values(
-  documents.reduce((acc, doc) => {
-    // Utilise original_id s'il existe, sinon fallback sur name
-    const key = doc.original_id || doc.name.toLowerCase().trim();
-    if (!acc[key] || doc.version > acc[key].version) {
-      acc[key] = doc;
+  const handleNextStep = async () => {
+    if (!pendingFile) {
+      setErrorMessage('Veuillez sélectionner un fichier.');
+      return;
     }
-    return acc;
-  }, {})
-);
+
+    if (pendingFile.size > 100 * 1024 * 1024) {
+      setErrorMessage('La vidéo dépasse la limite de 100 Mo.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', pendingFile);
+    formData.append('visibility', accessType);
+    formData.append('access', accessType);
+    formData.append('can_modify', permissions.modify);
+    formData.append('can_delete', permissions.delete);
+    formData.append('can_share', permissions.share);
+
+    const allowedIds = allowedUsers.map(u => u?.id || u).filter(Boolean);
+    formData.append('id_share', JSON.stringify(allowedIds));
+
+    const groupIds = selectedGroup ? [selectedGroup] : [];
+    formData.append('id_group', JSON.stringify(groupIds));
+
+    try {
+      const res = await fetch('http://localhost:5000/api/documents', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (!res.ok) throw new Error(`Erreur upload fichier : ${res.status}`);
+      const data = await res.json();
+
+      setDocumentId(data.id); // ou data.document_id selon ce que tu retournes
+      setStep(2); // Facultatif maintenant
+      setShowUploadForm(false); // ferme le modal
+
+      // Rediriger vers la page de complétion
+      navigate(`/document/${data.id}/complete`);
+    } catch (err) {
+      console.error("Erreur lors de l'envoi du fichier :", err);
+      setErrorMessage("Erreur lors de l'envoi du fichier.");
+    }
+  };
+
+
+  const latestDocs = Object.values(
+    documents.reduce((acc, doc) => {
+      // Utilise original_id s'il existe, sinon fallback sur name
+      const key = doc.original_id || doc.name.toLowerCase().trim();
+      if (!acc[key] || doc.version > acc[key].version) {
+        acc[key] = doc;
+      }
+      return acc;
+    }, {})
+  );
 
 
 
@@ -567,6 +568,35 @@ const handleNextStep = async () => {
     });
   }, [documents]);
 
+  const handleAdvancedSearch = async () => {
+    try {
+      const res = await axios.get(`http://localhost:5000/api/documents/search`, {
+        params: {
+          category: selectedCategory,
+          ...searchFilters
+        },
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      // ➕ setDocuments(res.data); // ou setFilteredDocuments
+      console.log('Résultats :', res.data);
+    } catch (err) {
+      console.error('Erreur recherche avancée :', err);
+    }
+  };
+
+  const handleCategoryButtonClick = (cat) => {
+    if (selectedCategory === cat) {
+      setShowFilterCard(prev => !prev); // toggle
+    } else {
+      setSelectedCategory(cat);
+      setShowFilterCard(false); // reset
+    }
+  };
+
+
 
   return (
     <>
@@ -607,65 +637,65 @@ const handleNextStep = async () => {
               >
                 {showUploadForm ? 'Annuler' : 'Télécharger un document'}
               </Button>
-<Modal
-  show={showUploadForm}
-  onHide={() => setShowUploadForm(false)}
-  centered
-  backdrop="static"
-  style={{ zIndex: 1050 }}
->
-  <Modal.Header closeButton>
-    <Modal.Title>Importer un fichier</Modal.Title>
-  </Modal.Header>
+              <Modal
+                show={showUploadForm}
+                onHide={() => setShowUploadForm(false)}
+                centered
+                backdrop="static"
+                style={{ zIndex: 1050 }}
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Importer un fichier</Modal.Title>
+                </Modal.Header>
 
-  <Modal.Body>
-    {errorMessage && <Alert variant="danger">{errorMessage}</Alert>}
+                <Modal.Body>
+                  {errorMessage && <Alert variant="danger">{errorMessage}</Alert>}
 
-    <div className="text-center">
-      <input
-        type="file"
-        id="file-upload"
-        style={{ display: 'none' }}
-        accept=".pdf,.docx,.jpg,.jpeg,.png,.mp4,.webm"
-        onChange={(e) => setPendingFile(e.target.files[0])}
-      />
+                  <div className="text-center">
+                    <input
+                      type="file"
+                      id="file-upload"
+                      style={{ display: 'none' }}
+                      accept=".pdf,.docx,.jpg,.jpeg,.png,.mp4,.webm"
+                      onChange={(e) => setPendingFile(e.target.files[0])}
+                    />
 
-      <Button
-        variant="outline-primary"
-        onClick={() => document.getElementById('file-upload').click()}
-        className="d-flex align-items-center justify-content-center mx-auto"
-        style={{
-          height: '45px',
-          width: '100%',
-          maxWidth: '350px',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          borderRadius: '8px'
-        }}
-      >
-        <FaCloudUploadAlt size={20} className="me-2" />
-        {pendingFile ? pendingFile.name : 'Choisir un fichier'}
-      </Button>
-    </div>
-  </Modal.Body>
+                    <Button
+                      variant="outline-primary"
+                      onClick={() => document.getElementById('file-upload').click()}
+                      className="d-flex align-items-center justify-content-center mx-auto"
+                      style={{
+                        height: '45px',
+                        width: '100%',
+                        maxWidth: '350px',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        borderRadius: '8px'
+                      }}
+                    >
+                      <FaCloudUploadAlt size={20} className="me-2" />
+                      {pendingFile ? pendingFile.name : 'Choisir un fichier'}
+                    </Button>
+                  </div>
+                </Modal.Body>
 
-  <Modal.Footer>
-    <Button
-      variant="secondary"
-      onClick={() => setShowUploadForm(false)}
-    >
-      Annuler
-    </Button>
-    <Button
-      variant="primary"
-      disabled={!pendingFile}
-      onClick={handleNextStep}
-    >
-      Suivant
-    </Button>
-  </Modal.Footer>
-</Modal>
+                <Modal.Footer>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowUploadForm(false)}
+                  >
+                    Annuler
+                  </Button>
+                  <Button
+                    variant="primary"
+                    disabled={!pendingFile}
+                    onClick={handleNextStep}
+                  >
+                    Suivant
+                  </Button>
+                </Modal.Footer>
+              </Modal>
 
 
 
@@ -689,14 +719,105 @@ const handleNextStep = async () => {
                       variant={selectedCategory === cat ? 'secondary' : 'outline-secondary'}
                       className="rounded-pill fw-semibold px-4 py-2"
                       style={{ transition: 'all 0.2s ease-in-out' }}
-                      onClick={() => setSelectedCategory(cat)}
+                      onClick={() => handleCategoryButtonClick(cat)}
                       onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.97)')}
                       onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
                     >
                       {cat}
                     </Button>
                   ))}
+
                 </div>
+
+                {selectedCategory === 'facture' && (
+                  <Card className="p-3">
+                    <h5 className="mb-3">🔎 Recherche avancée - Facture</h5>
+                    <Form>
+                      <Form.Group className="mb-2">
+                        <Form.Label>Montant minimum</Form.Label>
+                        <Form.Control
+                          type="number"
+                          value={searchFilters.montant || ''}
+                          onChange={(e) => setSearchFilters({ ...searchFilters, montant: e.target.value })}
+                        />
+                      </Form.Group>
+                      <Form.Group className="mb-2">
+                        <Form.Label>Nom entreprise</Form.Label>
+                        <Form.Control
+                          type="text"
+                          value={searchFilters.nom_entreprise || ''}
+                          onChange={(e) => setSearchFilters({ ...searchFilters, nom_entreprise: e.target.value })}
+                        />
+                      </Form.Group>
+                      <Form.Group className="mb-2">
+                        <Form.Label>Produit</Form.Label>
+                        <Form.Control
+                          type="text"
+                          value={searchFilters.produit || ''}
+                          onChange={(e) => setSearchFilters({ ...searchFilters, produit: e.target.value })}
+                        />
+                      </Form.Group>
+                      <Button variant="primary" onClick={() => handleAdvancedSearch()}>
+                        Rechercher
+                      </Button>
+                    </Form>
+                  </Card>
+                )}
+
+                {selectedCategory === 'cv' && (
+                  <Card className="p-3">
+                    <h5 className="mb-3">🔎 Recherche avancée - CV</h5>
+                    <Form>
+                      <Form.Group className="mb-2">
+                        <Form.Label>Nom candidat</Form.Label>
+                        <Form.Control
+                          type="text"
+                          value={searchFilters.nom_candidat || ''}
+                          onChange={(e) => setSearchFilters({ ...searchFilters, nom_candidat: e.target.value })}
+                        />
+                      </Form.Group>
+                      <Form.Group className="mb-2">
+                        <Form.Label>Métier</Form.Label>
+                        <Form.Control
+                          type="text"
+                          value={searchFilters.metier || ''}
+                          onChange={(e) => setSearchFilters({ ...searchFilters, metier: e.target.value })}
+                        />
+                      </Form.Group>
+                      <Button variant="primary" onClick={() => handleAdvancedSearch()}>
+                        Rechercher
+                      </Button>
+                    </Form>
+                  </Card>
+                )}
+
+                {selectedCategory === 'demande_conge' && (
+                  <Card className="p-3">
+                    <h5 className="mb-3">🔎 Recherche avancée - Demande de congé</h5>
+                    <Form>
+                      <Form.Group className="mb-2">
+                        <Form.Label>Numéro demande</Form.Label>
+                        <Form.Control
+                          type="text"
+                          value={searchFilters.numdemande || ''}
+                          onChange={(e) => setSearchFilters({ ...searchFilters, numdemande: e.target.value })}
+                        />
+                      </Form.Group>
+                      <Form.Group className="mb-2">
+                        <Form.Label>Date congé</Form.Label>
+                        <Form.Control
+                          type="date"
+                          value={searchFilters.dateconge || ''}
+                          onChange={(e) => setSearchFilters({ ...searchFilters, dateconge: e.target.value })}
+                        />
+                      </Form.Group>
+                      <Button variant="primary" onClick={() => handleAdvancedSearch()}>
+                        Rechercher
+                      </Button>
+                    </Form>
+                  </Card>
+                )}
+
 
                 <Table striped bordered hover responsive>
                   <thead>
@@ -710,7 +831,7 @@ const handleNextStep = async () => {
                   <tbody>
                     {filteredDocuments.length > 0 ? (
                       filteredDocuments
-                        .sort((a, b) => (b.version || 0) - (a.version || 0)) // tri version décroissante
+                        .sort((a, b) => new Date(b.date) - new Date(a.date)) // tri du plus récent au plus ancien
                         .map(doc => {
                           const perms = permissionsByDoc[doc.id] || {};
                           return (
