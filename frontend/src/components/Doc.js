@@ -13,6 +13,9 @@ import { FaCloudUploadAlt } from 'react-icons/fa';
 import Tesseract from 'tesseract.js';
 import { getDocument } from 'pdfjs-dist/webpack'; // Importer getDocument depuis pdfjs-dist
 import { pdfjs } from 'pdfjs-dist/webpack';
+import importDoc from './img/importDoc.jpg';
+import importFolder from './img/importFolder.jpg';
+
 
 const Doc = () => {
   const [errorMessage, setErrorMessage] = useState('');
@@ -68,6 +71,13 @@ const Doc = () => {
   const [documentId, setDocumentId] = useState(null); // ID du document renvoyé par le backend
   const [searchFilters, setSearchFilters] = useState({});
   const [showFilterCard, setShowFilterCard] = useState(false);
+  const [showUploadFolderForm, setShowUploadFolderForm] = useState(false);
+  const [uploadType, setUploadType] = useState(null);
+  const [folderFiles, setFolderFiles] = useState([]);
+  const [folderName, setFolderName] = useState('');
+  const [folderDescription, setFolderDescription] = useState('');
+
+
 
 
   const [permissions, setPermissions] = useState({
@@ -596,7 +606,25 @@ const Doc = () => {
     }
   };
 
+  const handleFolderUpload = async () => {
+    const formData = new FormData();
+    folderFiles.forEach((file, index) => {
+      formData.append('files', file);
+    });
 
+    // Ajouter les infos du dossier
+    formData.append('folder_name', folderName);
+    formData.append('folder_description', folderDescription);
+    formData.append('created_by', userId); // ID utilisateur connecté
+
+    try {
+      const res = await axios.post('http://localhost:5000/folders/upload', formData);
+      const { folderId } = res.data;
+      navigate(`/folder/${folderId}/complete`);
+    } catch (error) {
+      console.error('Erreur upload dossier :', error);
+    }
+  };
 
   return (
     <>
@@ -628,15 +656,105 @@ const Doc = () => {
           <Card className="w-100 border border-transparent">
             <Card.Body>
               <br />
+              <div className="d-flex gap-3 mb-4">
+                <img
+                  src={importDoc}
+                  alt="Télécharger un document"
+                  title="Télécharger un document"
+                  onClick={() => setShowUploadForm(!showUploadForm)}
+                  style={{
+                    cursor: 'pointer',
+                    width: '40px',
+                    height: 'auto',
+                    borderRadius: '12px',
+                    border: 'none',
+                    boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+                    transition: 'all 0.3s ease-in-out'
+                  }}
+                />
 
-              <Button
-                variant={showUploadForm ? "danger" : "primary"}
-                onClick={() => setShowUploadForm(!showUploadForm)}
-                className="mb-4"
-                style={{ marginBottom: "1rem" }}
-              >
-                {showUploadForm ? 'Annuler' : 'Télécharger un document'}
-              </Button>
+                <img
+                  src={importFolder}
+                  alt="Télécharger un dossier"
+                  title="Télécharger un dossier complet"
+                  onClick={() => setShowUploadFolderForm(true)}
+                  style={{
+                    cursor: 'pointer',
+                    width: '40px',
+                    height: 'auto',
+                    borderRadius: '12px',
+                    border: 'none',
+                    boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+                    transition: 'all 0.3s ease-in-out'
+                  }}
+                />
+              </div>
+
+<Modal
+  show={showUploadFolderForm}
+  onHide={() => setShowUploadFolderForm(false)}
+  centered
+  backdrop="static"
+  style={{ zIndex: 1050 }}
+>
+  <Modal.Header closeButton>
+    <Modal.Title>Importer un dossier</Modal.Title>
+  </Modal.Header>
+
+  <Modal.Body>
+    <Form>
+      <Form.Group className="mb-3">
+        <Form.Label>Nom du dossier</Form.Label>
+        <Form.Control
+          type="text"
+          placeholder="Nom du dossier"
+          value={folderName}
+          onChange={(e) => setFolderName(e.target.value)}
+        />
+      </Form.Group>
+
+      <Form.Group className="mb-3">
+        <Form.Label>Description du dossier</Form.Label>
+        <Form.Control
+          as="textarea"
+          rows={2}
+          placeholder="Description"
+          value={folderDescription}
+          onChange={(e) => setFolderDescription(e.target.value)}
+        />
+      </Form.Group>
+
+      <Form.Group className="mb-3">
+        <Form.Label>Fichiers</Form.Label>
+        <Form.Control
+          type="file"
+          webkitdirectory="true"
+          directory=""
+          multiple
+          onChange={(e) => {
+            const files = Array.from(e.target.files);
+            setFolderFiles(files);
+            console.log('📁 Fichiers du dossier sélectionné :', files);
+          }}
+        />
+      </Form.Group>
+    </Form>
+  </Modal.Body>
+
+  <Modal.Footer>
+    <Button variant="secondary" onClick={() => setShowUploadFolderForm(false)}>
+      Annuler
+    </Button>
+    <Button
+      variant="primary"
+      disabled={!folderFiles.length || !folderName}
+      onClick={handleFolderUpload}
+    >
+      Suivant
+    </Button>
+  </Modal.Footer>
+</Modal>
+
               <Modal
                 show={showUploadForm}
                 onHide={() => setShowUploadForm(false)}
@@ -689,11 +807,32 @@ const Doc = () => {
                   </Button>
                   <Button
                     variant="primary"
-                    disabled={!pendingFile}
-                    onClick={handleNextStep}
+                    onClick={async () => {
+                      if (folderFiles.length === 0) {
+                        alert('Veuillez sélectionner un dossier à importer.');
+                        return;
+                      }
+
+                      const formData = new FormData();
+                      folderFiles.forEach(file => formData.append('files', file));
+
+                      try {
+                        const res = await axios.post('http://localhost:5000/api/upload-folder', formData, {
+                          headers: { 'Content-Type': 'multipart/form-data' }
+                        });
+
+                        const folderId = res.data.folder_id;
+                        setShowUploadFolderForm(false);
+                        navigate(`/folder/${folderId}/complete`);
+                      } catch (err) {
+                        console.error("Erreur lors de l'importation du dossier :", err);
+                        alert("Erreur lors de l'importation du dossier.");
+                      }
+                    }}
                   >
                     Suivant
                   </Button>
+
                 </Modal.Footer>
               </Modal>
 

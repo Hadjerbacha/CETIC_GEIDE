@@ -1,123 +1,136 @@
-import React, { useState, useEffect } from 'react';
-import './FolderManagementPage.css';
+import React, { useEffect, useState } from 'react';
+import { Container, Card, Button, Alert, Spinner, Row, Col, Dropdown, DropdownButton, Form } from 'react-bootstrap';
+import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import { jwtDecode } from 'jwt-decode';
-import { Link, useNavigate } from 'react-router-dom';
-import Dropdown from 'react-bootstrap/Dropdown';
-import * as FaIcons from 'react-icons/fa';
-import * as AiIcons from 'react-icons/ai';
- 
+import Navbar from './Navbar';
+import { FaFolderOpen, FaPlus } from 'react-icons/fa';
 
-const FolderManagementPage = () => {
+const FolderListPage = () => {
   const [folders, setFolders] = useState([]);
-  const [folderName, setFolderName] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [errorMessage, setErrorMessage] = useState('');
-  const [isSaving, setIsSaving] = useState(false);
-
-  
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [sortOption, setSortOption] = useState('date');
+  const [searchTerm, setSearchTerm] = useState('');
   const navigate = useNavigate();
+  const token = localStorage.getItem('token');
+
   useEffect(() => {
-    // Charger les dossiers existants lors du chargement de la page
-    axios.get('/api/folders')
-      .then(response => {
-        setFolders(response.data);
-      })
-      .catch(error => {
-        setErrorMessage('Erreur lors du chargement des dossiers');
-      });
-  }, []);
+    const fetchFolders = async () => {
+      try {
+        const res = await axios.get('http://localhost:5000/api/folders', {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setFolders(res.data);
+      } catch (err) {
+        console.error('Erreur chargement des dossiers :', err);
+        setError("Erreur lors du chargement des dossiers.");
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const handleFolderSubmit = async (e) => {
-    e.preventDefault();
+    fetchFolders();
+  }, [token]);
 
-    if (!folderName) {
-      setErrorMessage('Le nom du dossier ne peut pas être vide.');
-      return;
-    }
+  const handleViewFolder = (folderId) => {
+    navigate(`/folder/${folderId}`);
+  };
 
-    setIsSaving(true);
-    try {
-      const response = await axios.post('/api/folders', { name: folderName });
-      setFolders([...folders, response.data]);
-      setFolderName('');
-      setErrorMessage('');
-    } catch (error) {
-      setErrorMessage('Erreur lors de la création du dossier');
-    } finally {
-      setIsSaving(false);
+  const handleAddSubfolder = (parentId) => {
+    navigate(`/folders/upload?parent=${parentId}`);
+  };
+
+  const sortFolders = (folders) => {
+    switch (sortOption) {
+      case 'alpha':
+        return [...folders].sort((a, b) => a.name.localeCompare(b.name));
+      case 'size':
+        return [...folders].sort((a, b) => (b.size || 0) - (a.size || 0));
+      case 'count':
+        return [...folders].sort((a, b) => (b.file_count || 0) - (a.file_count || 0));
+      case 'date':
+      default:
+        return [...folders].sort((a, b) => new Date(b.date) - new Date(a.date));
     }
   };
 
-  const handleDeleteFolder = async (folderId) => {
-    try {
-      await axios.delete(`/api/folders/${folderId}`);
-      setFolders(folders.filter(folder => folder.id !== folderId));
-    } catch (error) {
-      setErrorMessage('Erreur lors de la suppression du dossier');
-    }
-  };
-
-  const handleSearch = (query) => {
-    setSearchQuery(query);
-  };
-
-  const filteredFolders = folders.filter(folder => 
-    folder.name.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredFolders = folders.filter(folder =>
+    folder.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (folder.description || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const sortedFolders = sortFolders(filteredFolders);
+
   return (
-    <div className="folder-management-page">
-      <div className="header">
-        <h1>Folders</h1>
-        <button 
-      className="bg-green-600 text-black px-4 py-2 rounded hover:bg-green-700 transition"
-      onClick={() => navigate('/Document')}
-    >
-      Voir les fichiers
-    </button>
+    <>
+      <Navbar />
+      <Container className="py-4">
+        <div className="mb-4">
+          <h3 className="mb-3">📁 Gestion des dossiers</h3>
+          <Form className="mb-3">
+            <Form.Control
+              type="text"
+              placeholder="🔍 Rechercher un dossier..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+          </Form>
+          <div className="d-flex justify-content-end">
+            <DropdownButton id="dropdown-sort" title={`Trier par`} variant="outline-secondary" onSelect={setSortOption}>
+              <Dropdown.Item eventKey="date">Date</Dropdown.Item>
+              <Dropdown.Item eventKey="alpha">Nom (A-Z)</Dropdown.Item>
+              <Dropdown.Item eventKey="size">Taille</Dropdown.Item>
+              <Dropdown.Item eventKey="count">Nombre de fichiers</Dropdown.Item>
+            </DropdownButton>
+          </div>
+        </div>
 
-      </div>
+        {loading && <Spinner animation="border" />} 
+        {error && <Alert variant="danger">{error}</Alert>}
 
-      <div className="controls">
-        <input
-          type="text"
-          placeholder="Rechercher un dossier..."
-          value={searchQuery}
-          onChange={(e) => handleSearch(e.target.value)}
-        />
-        <form onSubmit={handleFolderSubmit}>
-          <input
-            type="text"
-            placeholder="Nom du dossier"
-            value={folderName}
-            onChange={(e) => setFolderName(e.target.value)}
-          />
-          <button type="submit" disabled={isSaving}>
-            {isSaving ? 'Création en cours...' : 'Créer un Dossier'}
-          </button>
-        </form>
-        {errorMessage && <p className="error">{errorMessage}</p>}
-      </div>
-
-      <div className="folder-list">
-        {filteredFolders.length > 0 ? (
-          <ul>
-            {filteredFolders.map(folder => (
-              <li key={folder.id}>
-                <span>{folder.name}</span>
-                <button onClick={() => handleDeleteFolder(folder.id)} className="delete-btn">
-                  Supprimer
-                </button>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p>Aucun dossier trouvé.</p>
+        {!loading && !error && sortedFolders.length === 0 && (
+          <Alert variant="info">Aucun dossier trouvé.</Alert>
         )}
-      </div>
-    </div>
+
+        <Row xs={1} md={2} lg={3} className="g-4">
+          {sortedFolders.map(folder => (
+            <Col key={folder.id}>
+              <Card className="h-100 shadow-sm border-0">
+                <Card.Body>
+                  <Card.Title className="d-flex justify-content-between align-items-center">
+                    <span><FaFolderOpen className="me-2 text-primary" /> {folder.name}</span>
+                    <Button 
+                      variant="light" 
+                      size="sm" 
+                      title="Ajouter un sous-dossier"
+                      onClick={() => handleAddSubfolder(folder.id)}
+                    >
+                      <FaPlus />
+                    </Button>
+                  </Card.Title>
+                  <Card.Text>{folder.description || 'Aucune description'}</Card.Text>
+                </Card.Body>
+                <Card.Footer className="text-end bg-white border-top-0">
+                  <div className="d-flex justify-content-between">
+                    <small className="text-muted">
+                      📅 {new Date(folder.date).toLocaleDateString()}
+                    </small>
+                    <Button 
+                      variant="outline-primary" 
+                      size="sm" 
+                      onClick={() => handleViewFolder(folder.id)}
+                    >
+                      Ouvrir
+                    </Button>
+                  </div>
+                </Card.Footer>
+              </Card>
+            </Col>
+          ))}
+        </Row>
+      </Container>
+    </>
   );
 };
 
-export default FolderManagementPage;
+export default FolderListPage;

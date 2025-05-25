@@ -264,6 +264,41 @@ async function initializeDatabase() {
   }
 }
 
+router.post('/upload-folder', auth, upload.array('files'), async (req, res) => {
+  const files = req.files;
+  const userId = req.user.id;
+
+  // 🔍 Extraire le nom du dossier racine depuis webkitRelativePath
+  const folderName = files[0]?.originalname?.split('/')[0] || 'Nouveau dossier';
+
+  try {
+    // 🗂 Créer une entrée dans la table folders
+    const folderResult = await pool.query(
+      'INSERT INTO folders (name, user_id, date) VALUES ($1, $2, NOW()) RETURNING id',
+      [folderName, userId]
+    );
+    const folderId = folderResult.rows[0].id;
+
+    // 📄 Ensuite, insérer chaque fichier comme document lié à ce dossier
+    for (const file of files) {
+      const filePath = path.join(uploadDir, file.filename);
+      const category = 'autre'; // ou classifierText(text) si tu veux faire de l’analyse OCR ici
+
+      await pool.query(
+        `INSERT INTO documents (name, file_path, category, owner_id, visibility, original_id, date)
+         VALUES ($1, $2, $3, $4, 'private', NULL, NOW())`,
+        [file.originalname, filePath, category, userId]
+      );
+    }
+
+    res.status(200).json({ message: 'Dossier importé avec succès', folderId });
+
+  } catch (error) {
+    console.error('Erreur lors de l\'import du dossier:', error);
+    res.status(500).json({ error: 'Erreur serveur', details: error.message });
+  }
+});
+
 router.get('/', auth, async (req, res) => {
   const userId = req.user.id;
   const isAdmin = req.user.role === 'admin'; // Adapte si nécessaire
@@ -720,6 +755,58 @@ router.put('/:id', auth, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
+
+router.post('/documents/upload-folder', upload.array('files'), async (req, res) => {
+  const files = req.files;
+
+  // 1. Créer le dossier racine
+  const { folderName } = req.body;
+  const folderRes = await pool.query('INSERT INTO folders (name) VALUES ($1) RETURNING id', [folderName]);
+  const folderId = folderRes.rows[0].id;
+
+  // 2. Boucler sur les fichiers
+  for (const file of files) {
+    await pool.query(
+      `INSERT INTO documents (name, file_path, folder_id) VALUES ($1, $2, $3)`,
+      [file.originalname, file.path, folderId]
+    );
+  }
+
+  res.json({ success: true });
+});
+
+router.post('/folders/upload', upload.array('files'), async (req, res) => {
+  const { folder_name, folder_description, created_by } = req.body;
+  const files = req.files;
+
+  try {
+    // 1. Enregistrer le dossier
+    const folderResult = await pool.query(
+      'INSERT INTO folders (name, description, created_by, created_at) VALUES ($1, $2, $3, NOW()) RETURNING id',
+      [folder_name, folder_description, created_by]
+    );
+    const folderId = folderResult.rows[0].id;
+
+    // 2. Pour chaque fichier → traitement + insertion
+    for (const file of files) {
+      const ocrText = await runOCR(file.path); // ta fonction Tesseract
+      const category = await classifyDocument(ocrText); // auto-catégorisation
+
+      await pool.query(
+        `INSERT INTO documents 
+        (name, file_path, ocr_text, category, uploaded_by, created_at, folder_id)
+        VALUES ($1, $2, $3, $4, $5, NOW(), $6)`,
+        [file.originalname, file.path, ocrText, category, created_by, folderId]
+      );
+    }
+
+    res.status(200).json({ message: 'Dossier importé avec succès', folderId });
+  } catch (error) {
+    console.error('Erreur import dossier :', error);
+    res.status(500).json({ error: 'Erreur lors de l’importation du dossier' });
+  }
+});
+
 
 router.get('/:id/details', auth, async (req, res) => {
   const documentId = req.params.id;

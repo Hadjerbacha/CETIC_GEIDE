@@ -92,6 +92,11 @@ const handleLogout = async () => {
       path: '/documents',
       icon: <FaIcons.FaPlus />,
     },
+     {
+      title: 'Folders',
+      path: '/folder',
+      icon: <FaIcons.FaFolderOpen />,
+    },
     {
       title: 'Workflows',
       path: '/workflow',
