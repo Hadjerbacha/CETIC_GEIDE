@@ -76,6 +76,7 @@ const Doc = () => {
   const [folderFiles, setFolderFiles] = useState([]);
   const [folderName, setFolderName] = useState('');
   const [folderDescription, setFolderDescription] = useState('');
+  
 
 
 
@@ -690,152 +691,130 @@ const Doc = () => {
                 />
               </div>
 
-<Modal
-  show={showUploadFolderForm}
-  onHide={() => setShowUploadFolderForm(false)}
-  centered
-  backdrop="static"
-  style={{ zIndex: 1050 }}
->
-  <Modal.Header closeButton>
-    <Modal.Title>Importer un dossier</Modal.Title>
-  </Modal.Header>
-
-  <Modal.Body>
-    <Form>
-      <Form.Group className="mb-3">
-        <Form.Label>Nom du dossier</Form.Label>
-        <Form.Control
-          type="text"
-          placeholder="Nom du dossier"
-          value={folderName}
-          onChange={(e) => setFolderName(e.target.value)}
-        />
-      </Form.Group>
-
-      <Form.Group className="mb-3">
-        <Form.Label>Description du dossier</Form.Label>
-        <Form.Control
-          as="textarea"
-          rows={2}
-          placeholder="Description"
-          value={folderDescription}
-          onChange={(e) => setFolderDescription(e.target.value)}
-        />
-      </Form.Group>
-
-      <Form.Group className="mb-3">
-        <Form.Label>Fichiers</Form.Label>
-        <Form.Control
-          type="file"
-          webkitdirectory="true"
-          directory=""
-          multiple
-          onChange={(e) => {
-            const files = Array.from(e.target.files);
-            setFolderFiles(files);
-            console.log('📁 Fichiers du dossier sélectionné :', files);
-          }}
-        />
-      </Form.Group>
-    </Form>
-  </Modal.Body>
-
-  <Modal.Footer>
-    <Button variant="secondary" onClick={() => setShowUploadFolderForm(false)}>
-      Annuler
-    </Button>
-    <Button
-      variant="primary"
-      disabled={!folderFiles.length || !folderName}
-      onClick={handleFolderUpload}
-    >
-      Suivant
-    </Button>
-  </Modal.Footer>
-</Modal>
-
               <Modal
-                show={showUploadForm}
-                onHide={() => setShowUploadForm(false)}
+                show={showUploadFolderForm}
+                onHide={() => setShowUploadFolderForm(false)}
                 centered
                 backdrop="static"
                 style={{ zIndex: 1050 }}
               >
                 <Modal.Header closeButton>
-                  <Modal.Title>Importer un fichier</Modal.Title>
+                  <Modal.Title>Importer un dossier</Modal.Title>
                 </Modal.Header>
 
                 <Modal.Body>
-                  {errorMessage && <Alert variant="danger">{errorMessage}</Alert>}
+                  <Form>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Nom du dossier</Form.Label>
+                      <Form.Control
+                        type="text"
+                        placeholder="Nom du dossier"
+                        value={folderName}
+                        onChange={(e) => setFolderName(e.target.value)}
+                      />
+                    </Form.Group>
 
-                  <div className="text-center">
-                    <input
-                      type="file"
-                      id="file-upload"
-                      style={{ display: 'none' }}
-                      accept=".pdf,.docx,.jpg,.jpeg,.png,.mp4,.webm"
-                      onChange={(e) => setPendingFile(e.target.files[0])}
-                    />
+                    <Form.Group className="mb-3">
+                      <Form.Label>Description du dossier</Form.Label>
+                      <Form.Control
+                        as="textarea"
+                        rows={2}
+                        placeholder="Description"
+                        value={folderDescription}
+                        onChange={(e) => setFolderDescription(e.target.value)}
+                      />
+                    </Form.Group>
 
-                    <Button
-                      variant="outline-primary"
-                      onClick={() => document.getElementById('file-upload').click()}
-                      className="d-flex align-items-center justify-content-center mx-auto"
-                      style={{
-                        height: '45px',
-                        width: '100%',
-                        maxWidth: '350px',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        borderRadius: '8px'
-                      }}
-                    >
-                      <FaCloudUploadAlt size={20} className="me-2" />
-                      {pendingFile ? pendingFile.name : 'Choisir un fichier'}
-                    </Button>
-                  </div>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Fichiers</Form.Label>
+                      <Form.Control
+                        type="file"
+                        webkitdirectory="true"
+                        directory=""
+                        multiple
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files);
+                          setFolderFiles(files);
+                          console.log('📁 Fichiers du dossier sélectionné :', files);
+                        }}
+                      />
+                    </Form.Group>
+                  </Form>
                 </Modal.Body>
 
                 <Modal.Footer>
-                  <Button
-                    variant="secondary"
-                    onClick={() => setShowUploadForm(false)}
-                  >
+                  <Button variant="secondary" onClick={() => setShowUploadFolderForm(false)}>
                     Annuler
                   </Button>
                   <Button
                     variant="primary"
-                    onClick={async () => {
-                      if (folderFiles.length === 0) {
-                        alert('Veuillez sélectionner un dossier à importer.');
-                        return;
-                      }
-
-                      const formData = new FormData();
-                      folderFiles.forEach(file => formData.append('files', file));
-
-                      try {
-                        const res = await axios.post('http://localhost:5000/api/upload-folder', formData, {
-                          headers: { 'Content-Type': 'multipart/form-data' }
-                        });
-
-                        const folderId = res.data.folder_id;
-                        setShowUploadFolderForm(false);
-                        navigate(`/folder/${folderId}/complete`);
-                      } catch (err) {
-                        console.error("Erreur lors de l'importation du dossier :", err);
-                        alert("Erreur lors de l'importation du dossier.");
-                      }
-                    }}
+                    disabled={!folderFiles.length || !folderName}
+                    onClick={handleFolderUpload}
                   >
                     Suivant
                   </Button>
-
                 </Modal.Footer>
               </Modal>
 
+          <Modal
+  show={showUploadForm}
+  onHide={() => setShowUploadForm(false)}
+  centered
+  backdrop="static"
+  style={{ zIndex: 1050 }}
+>
+  <Modal.Header closeButton>
+    <Modal.Title>Importer un fichier</Modal.Title>
+  </Modal.Header>
+
+  <Modal.Body>
+    {errorMessage && <Alert variant="danger">{errorMessage}</Alert>}
+
+    <div className="text-center">
+      <input
+        type="file"
+        id="file-upload"
+        style={{ display: 'none' }}
+        accept=".pdf,.docx,.jpg,.jpeg,.png,.mp4,.webm"
+        onChange={(e) => setPendingFile(e.target.files[0])}
+      />
+
+      <Button
+        variant="outline-primary"
+        onClick={() => document.getElementById('file-upload').click()}
+        className="d-flex align-items-center justify-content-center mx-auto"
+        style={{
+          height: '45px',
+          width: '100%',
+          maxWidth: '350px',
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          borderRadius: '8px'
+        }}
+      >
+        <FaCloudUploadAlt size={20} className="me-2" />
+        {pendingFile ? pendingFile.name : 'Choisir un fichier'}
+      </Button>
+    </div>
+  </Modal.Body>
+
+  <Modal.Footer>
+    <Button
+      variant="secondary"
+      onClick={() => setShowUploadForm(false)}
+    >
+      Annuler
+    </Button>
+    <Button
+      variant="primary"
+      disabled={!pendingFile}
+      onClick={handleNextStep}
+    >
+      Suivant
+    </Button>
+  </Modal.Footer>
+</Modal>
 
 
               <div className="container-fluid d-flex flex-column gap-4 mb-4">
