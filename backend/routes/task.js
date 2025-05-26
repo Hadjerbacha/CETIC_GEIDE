@@ -1071,5 +1071,200 @@ router.post("/:id/assign-tasks", authMiddleware, async (req, res) => {
 });
 
 
+// Dans task.js, ajoutez cette nouvelle route avant module.exports
 
+// Route pour générer des tâches prédéfinies selon le type de document
+router.post('/:id/generate-from-template', authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  const { documentType } = req.body;
+
+  // Templates de tâches par type de document
+  const templates = {
+    contrat: [
+      { 
+        title: "Vérification légale du contrat",
+        description: "Vérifier les clauses légales avec le service juridique",
+        type: "validation",
+        priority: "high",
+        role: "juriste",
+        order: 1
+      },
+      { 
+        title: "Signature des parties",
+        description: "Obtenir les signatures des deux parties",
+        type: "operation",
+        priority: "high",
+        role: "responsable commercial",
+        order: 2,
+        depends_on: 1 // Dépend de la tâche 1
+      },
+      { 
+        title: "Archivage du contrat",
+        description: "Archiver le contrat signé dans le système",
+        type: "operation",
+        priority: "medium",
+        role: "admin",
+        order: 3,
+        depends_on: 2 // Dépend de la tâche 2
+      }
+    ],
+    facture: [
+      { 
+        title: "Vérification de la facture",
+        description: "Vérifier les montants et les références",
+        type: "validation",
+        priority: "medium",
+        role: "comptable",
+        order: 1
+      },
+      { 
+        title: "Approbation de paiement",
+        description: "Approbation par le responsable financier",
+        type: "validation",
+        priority: "high",
+        role: "directeur financier",
+        order: 2,
+        depends_on: 1
+      },
+      { 
+        title: "Enregistrement comptable",
+        description: "Enregistrer la facture dans le système comptable",
+        type: "operation",
+        priority: "medium",
+        role: "comptable",
+        order: 3,
+        depends_on: 2
+      }
+    ],
+    demande_conge: [
+      { 
+        title: "Vérification des droits",
+        description: "Vérifier les droits à congé disponibles",
+        type: "operation",
+        priority: "low",
+        role: "gestionnaire RH",
+        order: 1
+      },
+      { 
+        title: "Validation hiérarchique",
+        description: "Validation par le manager direct",
+        type: "validation",
+        priority: "medium",
+        role: "manager",
+        order: 2,
+        depends_on: 1
+      },
+      { 
+        title: "Notification au service RH",
+        description: "Notification finale au service RH",
+        type: "operation",
+        priority: "low",
+        role: "gestionnaire RH",
+        order: 3,
+        depends_on: 2
+      }
+    ]
+  };
+
+  try {
+    // 1. Vérifier que le workflow existe
+    const workflowRes = await pool.query(
+      'SELECT * FROM workflow WHERE id = $1',
+      [id]
+    );
+    
+    if (workflowRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Workflow non trouvé' });
+    }
+
+    // 2. Récupérer les utilisateurs par rôle
+    const usersByRole = {};
+    const roles = [...new Set(templates[documentType].map(t => t.role))];
+    
+    for (const role of roles) {
+      const usersRes = await pool.query(
+        'SELECT id FROM users WHERE role = $1',
+        [role]
+      );
+      usersByRole[role] = usersRes.rows;
+    }
+
+    // 3. Créer les tâches avec dépendances
+    const insertedTasks = [];
+    const today = new Date();
+    const taskMap = {}; // Pour stocker les IDs des tâches créées
+    
+    // Trier les tâches par ordre
+    const sortedTemplates = templates[documentType].sort((a, b) => a.order - b.order);
+    
+    for (const taskTemplate of sortedTemplates) {
+      // Calculer la date d'échéance
+      const dueDate = new Date(today);
+      dueDate.setDate(today.getDate() + 
+        (taskTemplate.priority === 'high' ? 2 : 
+         taskTemplate.priority === 'medium' ? 5 : 10));
+      
+      // Sélectionner un utilisateur pour ce rôle
+      const availableUsers = usersByRole[taskTemplate.role];
+      const assignedTo = availableUsers.length > 0 
+        ? [availableUsers[Math.floor(Math.random() * availableUsers.length)].id] 
+        : null;
+
+      // Déterminer le statut initial
+      let initialStatus = 'pending';
+      if (taskTemplate.depends_on) {
+        initialStatus = 'blocked'; // La tâche est bloquée jusqu'à ce que la précédente soit terminée
+      }
+
+      const result = await pool.query(
+        `INSERT INTO tasks (
+          title, 
+          description, 
+          due_date, 
+          workflow_id, 
+          type, 
+          priority,
+          assigned_to,
+          status,
+          depends_on,
+          task_order
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+        [
+          taskTemplate.title,
+          taskTemplate.description,
+          dueDate.toISOString().split('T')[0],
+          id,
+          taskTemplate.type,
+          taskTemplate.priority,
+          assignedTo,
+          initialStatus,
+          taskTemplate.depends_on ? taskMap[taskTemplate.depends_on] : null,
+          taskTemplate.order
+        ]
+      );
+
+      // Stocker l'ID de la tâche créée pour les dépendances
+      taskMap[taskTemplate.order] = result.rows[0].id;
+      insertedTasks.push(result.rows[0]);
+    }
+
+    // 4. Mettre à jour le statut du workflow
+    await pool.query(
+      'UPDATE workflow SET status = $1 WHERE id = $2',
+      ['in_progress', id]
+    );
+
+    res.status(201).json({
+      message: `Tâches générées pour un document de type ${documentType}`,
+      tasks: insertedTasks
+    });
+
+  } catch (err) {
+    console.error('Erreur génération tâches:', err);
+    res.status(500).json({ 
+      error: 'Erreur lors de la génération des tâches',
+      details: err.message
+    });
+  }
+});
 module.exports = router;

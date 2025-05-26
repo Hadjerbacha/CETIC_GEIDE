@@ -115,14 +115,20 @@ const AdminUsers = () => {
       
 	
 	  const getRoleBadge = (role) => {
-        const variants = {
-            admin: "danger",
-            directeur: "primary",
-            chef: "warning",
-            employe: "success"
-        };
-        return <Badge bg={variants[role]} className="text-capitalize">{role}</Badge>;
+    const variants = {
+        admin: "danger",
+        directeur: "primary",
+        "directeur financier": "info",
+        manager: "secondary",
+        "responsable commercial": "dark",
+        chef: "warning",
+        juriste: "primary",
+        comptable: "info",
+        "gestionnaire RH": "dark",
+        employe: "success"
     };
+    return <Badge bg={variants[role]} className="text-capitalize">{role}</Badge>;
+};
 
     return (
         <div className="admin-users-page">
@@ -277,7 +283,13 @@ const AdminUsers = () => {
 							<Form.Select name="role" value={formData.role} onChange={handleChange}>
 								<option value="admin">Administrateur</option>
 								<option value="directeur">Directeur</option>
+								<option value="directeur financier">Directeur financier</option>
+								<option value="manager">Manager</option>
+								<option value="responsable commercial">Responsable commercial</option>
 								<option value="chef">Chef de département</option>
+								<option value="juriste">Juriste</option>
+								<option value="comptable">Comptable</option>
+								<option value="gestionnaire RH">Gestionnaire RH</option>
 								<option value="employe">Employé</option>
 							</Form.Select>
 						</Form.Group>
@@ -339,7 +351,22 @@ const AdminUsers = () => {
 							<Form.Select name="role" value={formData.role} onChange={handleChange}>
 								<option value="admin">Administrateur</option>
 								<option value="directeur">Directeur</option>
+								<option value="directeur financier">Directeur financier</option>
+								<option value="manager">Manager</option>
+								<option value="responsable commercial">Responsable commercial</option>
 								<option value="chef">Chef de département</option>
+								<option value="juriste">Juriste</option>
+								<option value="comptable">Comptable</option>
+								<option value="gestionnaire RH">Gestionnaire RH</option>
+								<option value="employe">Employé</option><option value="admin">Administrateur</option>
+								<option value="directeur">Directeur</option>
+								<option value="directeur financier">Directeur financier</option>
+								<option value="manager">Manager</option>
+								<option value="responsable commercial">Responsable commercial</option>
+								<option value="chef">Chef de département</option>
+								<option value="juriste">Juriste</option>
+								<option value="comptable">Comptable</option>
+								<option value="gestionnaire RH">Gestionnaire RH</option>
 								<option value="employe">Employé</option>
 							</Form.Select>
 						</Form.Group>

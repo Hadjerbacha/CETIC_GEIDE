@@ -454,31 +454,40 @@ const Doc = () => {
     console.log('Form data:', formData);
   };
 
-  const handleConfirmCreate = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      const todayISO = new Date().toISOString().slice(0, 10);
+const handleConfirmCreate = async () => {
+  try {
+    const token = localStorage.getItem('token');
+    const todayISO = new Date().toISOString().slice(0, 10);
 
-      const res = await axios.post(
-        'http://localhost:5000/api/workflows',
-        {
-          documentId: modalDoc.id,
-          name: autoWfName,
-          status: 'pending',
-          template: modalDoc.category,
-          created_by: userId,
-          echeance: todayISO
-        },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success('Workflow créé !');
-      setShowConfirmModal(false);
-      navigate(`/workflowz/${res.data.id}`, { state: { document: modalDoc } });
-    } catch (err) {
-      console.error(err);
-      toast.error('Erreur lors de la création du workflow');
-    }
-  };
+    // 1. Créer le workflow
+    const res = await axios.post(
+      'http://localhost:5000/api/workflows',
+      {
+        documentId: modalDoc.id,
+        name: autoWfName,
+        status: 'pending',
+        template: modalDoc.category,
+        created_by: userId,
+        echeance: todayISO
+      },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    // 2. Générer les tâches selon le type de document
+    await axios.post(
+      `http://localhost:5000/api/workflows/${res.data.id}/generate-from-template`,
+      { documentType: modalDoc.category },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    toast.success('Workflow créé avec les tâches appropriées !');
+    setShowConfirmModal(false);
+    navigate(`/workflowz/${res.data.id}`, { state: { document: modalDoc } });
+  } catch (err) {
+    console.error(err);
+    toast.error('Erreur lors de la création du workflow');
+  }
+};
 
   const checkWorkflowExists = async () => {
     const token = localStorage.getItem('token');
