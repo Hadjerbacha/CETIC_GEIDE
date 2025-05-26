@@ -13,6 +13,9 @@ import { FaCloudUploadAlt } from 'react-icons/fa';
 import Tesseract from 'tesseract.js';
 import { getDocument } from 'pdfjs-dist/webpack'; // Importer getDocument depuis pdfjs-dist
 import { pdfjs } from 'pdfjs-dist/webpack';
+import importDoc from './img/importDoc.jpg';
+import importFolder from './img/importFolder.jpg';
+
 
 const Doc = () => {
   const [errorMessage, setErrorMessage] = useState('');
@@ -51,8 +54,9 @@ const Doc = () => {
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [existingWorkflow, setExistingWorkflow] = useState(null);
-  const categories = ['Contrat', 'Mémoire', 'Article', 'Rapport'];
+  const categories = ['Contrat', 'Mémoire', 'Article', 'Rapport', 'facture', 'cv', 'demande_conge'];
   const [selectedCategory, setSelectedCategory] = useState('');
+  const [categoryClickCount, setCategoryClickCount] = useState(0);
   const [summary, setSummary] = useState('');
   const [access, setAccess] = useState('private');
   const [selectedUsers, setSelectedUsers] = useState([]);
@@ -63,6 +67,16 @@ const Doc = () => {
   const [myPermissions, setMyPermissions] = useState(null);
   const [conflictingDoc, setConflictingDoc] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [step, setStep] = useState(1); // pour gérer les étapes (1 = fichier, 2 = détails)
+  const [documentId, setDocumentId] = useState(null); // ID du document renvoyé par le backend
+  const [searchFilters, setSearchFilters] = useState({});
+  const [showFilterCard, setShowFilterCard] = useState(false);
+  const [showUploadFolderForm, setShowUploadFolderForm] = useState(false);
+  const [uploadType, setUploadType] = useState(null);
+  const [folderFiles, setFolderFiles] = useState([]);
+  const [folderName, setFolderName] = useState('');
+  const [folderDescription, setFolderDescription] = useState('');
+
 
 
 
@@ -136,9 +150,9 @@ const Doc = () => {
 
   const fetchDocuments = async () => {
     try {
-     const res = await fetch('http://localhost:5000/api/documents/latest', {
-  headers: { Authorization: `Bearer ${token}` }
-});
+      const res = await fetch('http://localhost:5000/api/documents/latest', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
 
       if (res.status === 401) throw new Error('Non autorisé');
       const data = await res.json();
@@ -294,16 +308,67 @@ const Doc = () => {
       setErrorMessage("Erreur lors de l'envoi du document.");
     }
   };
- const latestDocs = Object.values(
-  documents.reduce((acc, doc) => {
-    // Utilise original_id s'il existe, sinon fallback sur name
-    const key = doc.original_id || doc.name.toLowerCase().trim();
-    if (!acc[key] || doc.version > acc[key].version) {
-      acc[key] = doc;
+
+  const handleNextStep = async () => {
+    if (!pendingFile) {
+      setErrorMessage('Veuillez sélectionner un fichier.');
+      return;
     }
-    return acc;
-  }, {})
-);
+
+    if (pendingFile.size > 100 * 1024 * 1024) {
+      setErrorMessage('La vidéo dépasse la limite de 100 Mo.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', pendingFile);
+    formData.append('visibility', accessType);
+    formData.append('access', accessType);
+    formData.append('can_modify', permissions.modify);
+    formData.append('can_delete', permissions.delete);
+    formData.append('can_share', permissions.share);
+
+    const allowedIds = allowedUsers.map(u => u?.id || u).filter(Boolean);
+    formData.append('id_share', JSON.stringify(allowedIds));
+
+    const groupIds = selectedGroup ? [selectedGroup] : [];
+    formData.append('id_group', JSON.stringify(groupIds));
+
+    try {
+      const res = await fetch('http://localhost:5000/api/documents', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (!res.ok) throw new Error(`Erreur upload fichier : ${res.status}`);
+      const data = await res.json();
+
+      setDocumentId(data.id); // ou data.document_id selon ce que tu retournes
+      setStep(2); // Facultatif maintenant
+      setShowUploadForm(false); // ferme le modal
+
+      // Rediriger vers la page de complétion
+      navigate(`/document/${data.id}/complete`);
+    } catch (err) {
+      console.error("Erreur lors de l'envoi du fichier :", err);
+      setErrorMessage("Erreur lors de l'envoi du fichier.");
+    }
+  };
+
+
+  const latestDocs = Object.values(
+    documents.reduce((acc, doc) => {
+      // Utilise original_id s'il existe, sinon fallback sur name
+      const key = doc.original_id || doc.name.toLowerCase().trim();
+      if (!acc[key] || doc.version > acc[key].version) {
+        acc[key] = doc;
+      }
+      return acc;
+    }, {})
+  );
 
 
 
@@ -513,6 +578,53 @@ const Doc = () => {
     });
   }, [documents]);
 
+  const handleAdvancedSearch = async () => {
+    try {
+      const res = await axios.get(`http://localhost:5000/api/documents/search`, {
+        params: {
+          category: selectedCategory,
+          ...searchFilters
+        },
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      // ➕ setDocuments(res.data); // ou setFilteredDocuments
+      console.log('Résultats :', res.data);
+    } catch (err) {
+      console.error('Erreur recherche avancée :', err);
+    }
+  };
+
+  const handleCategoryButtonClick = (cat) => {
+    if (selectedCategory === cat) {
+      setShowFilterCard(prev => !prev); // toggle
+    } else {
+      setSelectedCategory(cat);
+      setShowFilterCard(false); // reset
+    }
+  };
+
+  const handleFolderUpload = async () => {
+    const formData = new FormData();
+    folderFiles.forEach((file, index) => {
+      formData.append('files', file);
+    });
+
+    // Ajouter les infos du dossier
+    formData.append('folder_name', folderName);
+    formData.append('folder_description', folderDescription);
+    formData.append('created_by', userId); // ID utilisateur connecté
+
+    try {
+      const res = await axios.post('http://localhost:5000/folders/upload', formData);
+      const { folderId } = res.data;
+      navigate(`/folder/${folderId}/complete`);
+    } catch (error) {
+      console.error('Erreur upload dossier :', error);
+    }
+  };
 
   return (
     <>
@@ -544,290 +656,186 @@ const Doc = () => {
           <Card className="w-100 border border-transparent">
             <Card.Body>
               <br />
+              <div className="d-flex gap-3 mb-4">
+                <img
+                  src={importDoc}
+                  alt="Télécharger un document"
+                  title="Télécharger un document"
+                  onClick={() => setShowUploadForm(!showUploadForm)}
+                  style={{
+                    cursor: 'pointer',
+                    width: '40px',
+                    height: 'auto',
+                    borderRadius: '12px',
+                    border: 'none',
+                    boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+                    transition: 'all 0.3s ease-in-out'
+                  }}
+                />
 
-              <Button
-                variant={showUploadForm ? "danger" : "primary"}
-                onClick={() => setShowUploadForm(!showUploadForm)}
-                className="mb-4"
-                style={{ marginBottom: "1rem" }}
+                <img
+                  src={importFolder}
+                  alt="Télécharger un dossier"
+                  title="Télécharger un dossier complet"
+                  onClick={() => setShowUploadFolderForm(true)}
+                  style={{
+                    cursor: 'pointer',
+                    width: '40px',
+                    height: 'auto',
+                    borderRadius: '12px',
+                    border: 'none',
+                    boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
+                    transition: 'all 0.3s ease-in-out'
+                  }}
+                />
+              </div>
+
+<Modal
+  show={showUploadFolderForm}
+  onHide={() => setShowUploadFolderForm(false)}
+  centered
+  backdrop="static"
+  style={{ zIndex: 1050 }}
+>
+  <Modal.Header closeButton>
+    <Modal.Title>Importer un dossier</Modal.Title>
+  </Modal.Header>
+
+  <Modal.Body>
+    <Form>
+      <Form.Group className="mb-3">
+        <Form.Label>Nom du dossier</Form.Label>
+        <Form.Control
+          type="text"
+          placeholder="Nom du dossier"
+          value={folderName}
+          onChange={(e) => setFolderName(e.target.value)}
+        />
+      </Form.Group>
+
+      <Form.Group className="mb-3">
+        <Form.Label>Description du dossier</Form.Label>
+        <Form.Control
+          as="textarea"
+          rows={2}
+          placeholder="Description"
+          value={folderDescription}
+          onChange={(e) => setFolderDescription(e.target.value)}
+        />
+      </Form.Group>
+
+      <Form.Group className="mb-3">
+        <Form.Label>Fichiers</Form.Label>
+        <Form.Control
+          type="file"
+          webkitdirectory="true"
+          directory=""
+          multiple
+          onChange={(e) => {
+            const files = Array.from(e.target.files);
+            setFolderFiles(files);
+            console.log('📁 Fichiers du dossier sélectionné :', files);
+          }}
+        />
+      </Form.Group>
+    </Form>
+  </Modal.Body>
+
+  <Modal.Footer>
+    <Button variant="secondary" onClick={() => setShowUploadFolderForm(false)}>
+      Annuler
+    </Button>
+    <Button
+      variant="primary"
+      disabled={!folderFiles.length || !folderName}
+      onClick={handleFolderUpload}
+    >
+      Suivant
+    </Button>
+  </Modal.Footer>
+</Modal>
+
+              <Modal
+                show={showUploadForm}
+                onHide={() => setShowUploadForm(false)}
+                centered
+                backdrop="static"
+                style={{ zIndex: 1050 }}
               >
-                {showUploadForm ? 'Annuler' : 'Télécharger un document'}
-              </Button>
+                <Modal.Header closeButton>
+                  <Modal.Title>Importer un fichier</Modal.Title>
+                </Modal.Header>
 
-              <Card.Body>
-                {errorMessage && <Alert variant="danger">{errorMessage}</Alert>}
+                <Modal.Body>
+                  {errorMessage && <Alert variant="danger">{errorMessage}</Alert>}
 
-                {showUploadForm && (
-                  <Card className="mb-4 p-4 border-transparent">
-                    <Row className="mb-3">
-                      {/* Col de gauche : tous les champs classiques */}
-                      <Col md={8}>
-                        <Row>
-                          <Row>
-                            <Col md={6} className="mb-3">
-                              <Form.Control
-                                type="text"
-                                placeholder="Nom du document"
-                                value={pendingName}
-                                onChange={(e) => setPendingName(e.target.value)}
-                                className="rounded-3"
-                                style={{ height: '40px' }}
-                              />
-                            </Col>
+                  <div className="text-center">
+                    <input
+                      type="file"
+                      id="file-upload"
+                      style={{ display: 'none' }}
+                      accept=".pdf,.docx,.jpg,.jpeg,.png,.mp4,.webm"
+                      onChange={(e) => setPendingFile(e.target.files[0])}
+                    />
 
-                            <Col md={6} className="mb-3 d-flex align-items-center">
-                              <input
-                                type="file"
-                                id="file-upload"
-                                style={{ display: 'none' }}
-                                accept=".pdf,.docx,.jpg,.jpeg,.png,.mp4,.webm" // ✅ Ajout des formats vidéo
-                                onChange={(e) => setPendingFile(e.target.files[0])}
-                              />
-                              <Button
-                                variant="outline-primary"
-                                onClick={() => document.getElementById('file-upload').click()}
-                                className="d-flex align-items-center rounded-3 px-3"
-                                style={{
-                                  height: '40px',
-                                  width: '100%',
-                                  whiteSpace: 'nowrap',
-                                  overflow: 'hidden',
-                                  textOverflow: 'ellipsis',
-                                }}
-                              >
-                                <FaCloudUploadAlt size={20} className="me-2" />
-                                {pendingFile ? pendingFile.name : 'Choisir un fichier'}
-                              </Button>
-                            </Col>
+                    <Button
+                      variant="outline-primary"
+                      onClick={() => document.getElementById('file-upload').click()}
+                      className="d-flex align-items-center justify-content-center mx-auto"
+                      style={{
+                        height: '45px',
+                        width: '100%',
+                        maxWidth: '350px',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        borderRadius: '8px'
+                      }}
+                    >
+                      <FaCloudUploadAlt size={20} className="me-2" />
+                      {pendingFile ? pendingFile.name : 'Choisir un fichier'}
+                    </Button>
+                  </div>
+                </Modal.Body>
 
-                          </Row>
+                <Modal.Footer>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowUploadForm(false)}
+                  >
+                    Annuler
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={async () => {
+                      if (folderFiles.length === 0) {
+                        alert('Veuillez sélectionner un dossier à importer.');
+                        return;
+                      }
 
-                          <Col md={12} className="mb-3">
-                            <Form.Select
-                              value={accessType}
-                              onChange={(e) => setAccessType(e.target.value)}
-                              className="rounded-3"
-                            >
-                              <option value="private">Privé</option>
-                              <option value="public">Tous les utilisateurs</option>
-                              <option value="custom">Utilisateurs ou groupe spécifique</option>
-                            </Form.Select>
-                          </Col>
+                      const formData = new FormData();
+                      folderFiles.forEach(file => formData.append('files', file));
 
-                          {accessType === 'custom' && (
-                            <>
-                              <Col md={6} className="mb-3">
-                                <Select
-                                  isMulti
-                                  options={allUsers}
-                                  value={allUsers.filter(option => allowedUsers.includes(option.value))}
-                                  onChange={(selectedOptions) => {
-                                    const selectedUserIds = selectedOptions.map(opt => opt.value);
-                                    setSelectedUsers(selectedUserIds);
-                                    setAllowedUsers(selectedUserIds);
-                                  }}
-                                  placeholder="Select users..."
-                                  className="basic-multi-select"
-                                  classNamePrefix="select"
-                                />
-                              </Col>
+                      try {
+                        const res = await axios.post('http://localhost:5000/api/upload-folder', formData, {
+                          headers: { 'Content-Type': 'multipart/form-data' }
+                        });
 
-                              <Col md={6} className="mb-3">
-                                <Select
-                                  value={
-                                    selectedGroup
-                                      ? {
-                                        value: selectedGroup,
-                                        label: allGroups.find(group => group.id === selectedGroup)?.nom,
-                                      }
-                                      : null
-                                  }
-                                  options={allGroups.map(group => ({
-                                    value: group.id,
-                                    label: group.nom,
-                                  }))}
-                                  onChange={(selectedOption) => {
-                                    setSelectedGroup(selectedOption ? selectedOption.value : null);
-                                  }}
-                                  placeholder="Sélectionner un groupe..."
-                                  className="basic-multi-select"
-                                  classNamePrefix="select"
-                                />
-                              </Col>
-                            </>
-                          )}
+                        const folderId = res.data.folder_id;
+                        setShowUploadFolderForm(false);
+                        navigate(`/folder/${folderId}/complete`);
+                      } catch (err) {
+                        console.error("Erreur lors de l'importation du dossier :", err);
+                        alert("Erreur lors de l'importation du dossier.");
+                      }
+                    }}
+                  >
+                    Suivant
+                  </Button>
 
-                          <Col md={12} className="mb-3">
-                            <Form.Control
-                              type="text"
-                              placeholder="Description"
-                              value={description}
-                              onChange={(e) => setDescription(e.target.value)}
-                              className="rounded-3"
-                            />
-                          </Col>
+                </Modal.Footer>
+              </Modal>
 
-                          <Col md={4} className="mb-3">
-                            <Form.Select
-                              value={priority}
-                              onChange={(e) => setPriority(e.target.value)}
-                              className="rounded-3"
-                            >
-                              <option value="">Priorité</option>
-                              <option value="basse">Basse</option>
-                              <option value="moyenne">Moyenne</option>
-                              <option value="élevée">Élevée</option>
-                            </Form.Select>
-                          </Col>
-
-                          <Col md={8} className="mb-3">
-                            <Form.Control
-                              type="text"
-                              placeholder="Mots clés (séparés par des virgules)"
-                              value={tags.join(', ')}
-                              onChange={(e) =>
-                                setTags(e.target.value.split(',').map(tag => tag.trim()))
-                              }
-                              className="rounded-3"
-                            />
-                          </Col>
-                        </Row>
-                      </Col>
-
-                      <Col md={4} className="d-flex flex-column justify-content-start">
-                        <label>
-                          <strong>Droits d'accès :</strong>
-                        </label>
-                        <Form.Check type="checkbox" id="read-access" label="Consulter" checked disabled />
-
-                        <Form.Check
-                          type="checkbox"
-                          id="modify-access"
-                          label="Modifier"
-                          checked={permissions.modify}
-                          disabled={accessType === 'private'}
-                          onChange={(e) =>
-                            setPermissions((prev) => ({ ...prev, modify: e.target.checked }))
-                          }
-                        />
-
-                        <Form.Check
-                          type="checkbox"
-                          id="delete-access"
-                          label="Supprimer"
-                          checked={permissions.delete}
-                          disabled={accessType === 'private'}
-                          onChange={(e) =>
-                            setPermissions((prev) => ({ ...prev, delete: e.target.checked }))
-                          }
-                        />
-
-                        <Form.Check
-                          type="checkbox"
-                          id="share-access"
-                          label="Partager"
-                          checked={permissions.share}
-                          disabled={accessType === 'private'}
-                          onChange={(e) =>
-                            setPermissions((prev) => ({ ...prev, share: e.target.checked }))
-                          }
-                        />
-                      </Col>
-                    </Row>
-
-                    <Row>
-                      <Col className="d-flex justify-content-end">
-                        {/* Modal séparé */}
-                        <Modal
-                          show={showConflictPrompt}
-                          onHide={() => setShowConflictPrompt(false)}
-                          centered
-                          autoFocus
-                          style={{ pointerEvents: 'auto', zIndex: 1050 }}
-                        >
-                          <Modal.Header closeButton>
-                            <Modal.Title>Conflit de document</Modal.Title>
-                          </Modal.Header>
-                          <Modal.Body>
-                            <p>
-                              ⚠️ Un document nommé <strong>{conflictingDocName}</strong> existe
-                              déjà.
-                            </p>
-
-                            {(userRole === 'admin' ||
-                              conflictingDoc?.owner_id === userId ||
-                              conflictingDoc?.permissions?.can_modify) ? (
-                              <p>Souhaitez-vous l’ajouter comme une <strong>nouvelle version</strong> ?</p>
-                            ) : (
-                              <p>Vous n'avez pas les droits pour le modifier.</p>
-                            )}
-                          </Modal.Body>
-                          <Modal.Footer>
-                            {(userRole === 'admin' ||
-                              conflictingDoc?.owner_id === userId ||
-                              conflictingDoc?.permissions?.can_modify) ? (
-                              <>
-                                <Button
-                                  variant="secondary"
-                                  onClick={() => {
-                                    setShowConflictPrompt(false);
-                                  }}
-                                >
-                                  Non
-                                </Button>
-                                <Button
-                                  variant="primary"
-                                  disabled={uploading}
-                                  onClick={() => {
-                                    setUploading(true); // bloque le bouton
-                                    setForceUpload(true);
-                                    setShowConflictPrompt(false);
-                                    handleUpload().finally(() => setUploading(false)); // relâche le bouton
-                                  }}
-                                >
-                                  Oui, ajouter comme version
-                                </Button>
-
-                              </>
-                            ) : (
-                              <Button
-                                variant="primary"
-                                onClick={() => setShowConflictPrompt(false)}
-                              >
-                                OK
-                              </Button>
-                            )}
-                          </Modal.Footer>
-                        </Modal>
-
-                        {/* OverlayTrigger uniquement autour du bouton */}
-                        <OverlayTrigger
-                          placement="top"
-                          overlay={
-                            accessType === 'custom' && allowedUsers.length === 0 && !selectedGroup ? (
-                              <Tooltip id="tooltip-upload">
-                                Sélectionnez au moins un utilisateur ou un groupe.
-                              </Tooltip>
-                            ) : (
-                              <></>
-                            )
-                          }
-                        >
-                          <div style={{ display: 'inline-block' }}>
-                            <Button
-                              onClick={handleUpload}
-                              disabled={accessType === 'custom' && allowedUsers.length === 0 && !selectedGroup}
-                              className="rounded-3"
-                            >
-                              Uploader
-                            </Button>
-                          </div>
-                        </OverlayTrigger>
-                      </Col>
-                    </Row>
-                  </Card>
-                )}
-              </Card.Body>
 
 
               <div className="container-fluid d-flex flex-column gap-4 mb-4">
@@ -850,14 +858,105 @@ const Doc = () => {
                       variant={selectedCategory === cat ? 'secondary' : 'outline-secondary'}
                       className="rounded-pill fw-semibold px-4 py-2"
                       style={{ transition: 'all 0.2s ease-in-out' }}
-                      onClick={() => setSelectedCategory(cat)}
+                      onClick={() => handleCategoryButtonClick(cat)}
                       onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.97)')}
                       onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
                     >
                       {cat}
                     </Button>
                   ))}
+
                 </div>
+
+                {selectedCategory === 'facture' && (
+                  <Card className="p-3">
+                    <h5 className="mb-3">🔎 Recherche avancée - Facture</h5>
+                    <Form>
+                      <Form.Group className="mb-2">
+                        <Form.Label>Montant minimum</Form.Label>
+                        <Form.Control
+                          type="number"
+                          value={searchFilters.montant || ''}
+                          onChange={(e) => setSearchFilters({ ...searchFilters, montant: e.target.value })}
+                        />
+                      </Form.Group>
+                      <Form.Group className="mb-2">
+                        <Form.Label>Nom entreprise</Form.Label>
+                        <Form.Control
+                          type="text"
+                          value={searchFilters.nom_entreprise || ''}
+                          onChange={(e) => setSearchFilters({ ...searchFilters, nom_entreprise: e.target.value })}
+                        />
+                      </Form.Group>
+                      <Form.Group className="mb-2">
+                        <Form.Label>Produit</Form.Label>
+                        <Form.Control
+                          type="text"
+                          value={searchFilters.produit || ''}
+                          onChange={(e) => setSearchFilters({ ...searchFilters, produit: e.target.value })}
+                        />
+                      </Form.Group>
+                      <Button variant="primary" onClick={() => handleAdvancedSearch()}>
+                        Rechercher
+                      </Button>
+                    </Form>
+                  </Card>
+                )}
+
+                {selectedCategory === 'cv' && (
+                  <Card className="p-3">
+                    <h5 className="mb-3">🔎 Recherche avancée - CV</h5>
+                    <Form>
+                      <Form.Group className="mb-2">
+                        <Form.Label>Nom candidat</Form.Label>
+                        <Form.Control
+                          type="text"
+                          value={searchFilters.nom_candidat || ''}
+                          onChange={(e) => setSearchFilters({ ...searchFilters, nom_candidat: e.target.value })}
+                        />
+                      </Form.Group>
+                      <Form.Group className="mb-2">
+                        <Form.Label>Métier</Form.Label>
+                        <Form.Control
+                          type="text"
+                          value={searchFilters.metier || ''}
+                          onChange={(e) => setSearchFilters({ ...searchFilters, metier: e.target.value })}
+                        />
+                      </Form.Group>
+                      <Button variant="primary" onClick={() => handleAdvancedSearch()}>
+                        Rechercher
+                      </Button>
+                    </Form>
+                  </Card>
+                )}
+
+                {selectedCategory === 'demande_conge' && (
+                  <Card className="p-3">
+                    <h5 className="mb-3">🔎 Recherche avancée - Demande de congé</h5>
+                    <Form>
+                      <Form.Group className="mb-2">
+                        <Form.Label>Numéro demande</Form.Label>
+                        <Form.Control
+                          type="text"
+                          value={searchFilters.numdemande || ''}
+                          onChange={(e) => setSearchFilters({ ...searchFilters, numdemande: e.target.value })}
+                        />
+                      </Form.Group>
+                      <Form.Group className="mb-2">
+                        <Form.Label>Date congé</Form.Label>
+                        <Form.Control
+                          type="date"
+                          value={searchFilters.dateconge || ''}
+                          onChange={(e) => setSearchFilters({ ...searchFilters, dateconge: e.target.value })}
+                        />
+                      </Form.Group>
+                      <Button variant="primary" onClick={() => handleAdvancedSearch()}>
+                        Rechercher
+                      </Button>
+                    </Form>
+                  </Card>
+                )}
+
 
                 <Table striped bordered hover responsive>
                   <thead>
@@ -871,7 +970,7 @@ const Doc = () => {
                   <tbody>
                     {filteredDocuments.length > 0 ? (
                       filteredDocuments
-                        .sort((a, b) => (b.version || 0) - (a.version || 0)) // tri version décroissante
+                        .sort((a, b) => new Date(b.date) - new Date(a.date)) // tri du plus récent au plus ancien
                         .map(doc => {
                           const perms = permissionsByDoc[doc.id] || {};
                           return (

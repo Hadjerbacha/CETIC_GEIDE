@@ -32,6 +32,8 @@ import DocumentVersion from './components/DocumentVersion';
 import Archive from './components/Archive';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import Activite from './components/historique';
+import DocumentCompletion from './components/DocumentCompletion';
+
 
 function App() {
   return (
@@ -70,6 +72,7 @@ function App() {
          <Route path="/document/:id/versions" element={<ProtectedRoute element={<DocumentVersion />} />} />
           <Route path="/archive" element={<ProtectedRoute element={<Archive />} />} />
           <Route path="/activites" element={<ProtectedRoute element={<Activite />} />} />
+          <Route path="/document/:id/complete" element={<ProtectedRoute element={<DocumentCompletion />} />} />
         </Routes>
       </Container>
     </Router>

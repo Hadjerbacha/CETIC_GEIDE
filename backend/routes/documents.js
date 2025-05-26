@@ -69,7 +69,7 @@ const classifyText = async (text) => {
 
   } catch (error) {
     console.error('Erreur NLP (ou timeout dépassé) :', error.message);
-    
+
     // 🔁 Fallback simple basé sur des mots-clés
     const lowerText = text.toLowerCase();
 
@@ -225,11 +225,79 @@ async function initializeDatabase() {
       );
     `);
 
+    // Table des factures
+    await pool.query(`
+  CREATE TABLE IF NOT EXISTS factures (
+    id SERIAL PRIMARY KEY,
+    document_id INTEGER UNIQUE REFERENCES documents(id) ON DELETE CASCADE,
+    numero_facture TEXT,
+    montant NUMERIC,
+    date_facture DATE
+  );
+`);
+
+    // Table des CV
+    await pool.query(`
+  CREATE TABLE IF NOT EXISTS cv (
+    id SERIAL PRIMARY KEY,
+    document_id INTEGER UNIQUE REFERENCES documents(id) ON DELETE CASCADE,
+    nom_candidat TEXT,
+    experience TEXT,
+    domaine TEXT
+  );
+`);
+
+    // Table des demandes de congés
+    await pool.query(`
+  CREATE TABLE IF NOT EXISTS demande_conges (
+    id SERIAL PRIMARY KEY,
+    document_id INTEGER UNIQUE REFERENCES documents(id) ON DELETE CASCADE,
+    numDemande TEXT,
+    dateConge DATE
+  );
+`);
+
+
     console.log('✅ Tables documents, versions, collections, document_collections et document_permissions prêtes');
   } catch (err) {
     console.error('❌ Erreur lors de l\'initialisation des tables :', err.stack);
   }
 }
+
+router.post('/upload-folder', auth, upload.array('files'), async (req, res) => {
+  const files = req.files;
+  const userId = req.user.id;
+
+  // 🔍 Extraire le nom du dossier racine depuis webkitRelativePath
+  const folderName = files[0]?.originalname?.split('/')[0] || 'Nouveau dossier';
+
+  try {
+    // 🗂 Créer une entrée dans la table folders
+    const folderResult = await pool.query(
+      'INSERT INTO folders (name, user_id, date) VALUES ($1, $2, NOW()) RETURNING id',
+      [folderName, userId]
+    );
+    const folderId = folderResult.rows[0].id;
+
+    // 📄 Ensuite, insérer chaque fichier comme document lié à ce dossier
+    for (const file of files) {
+      const filePath = path.join(uploadDir, file.filename);
+      const category = 'autre'; // ou classifierText(text) si tu veux faire de l’analyse OCR ici
+
+      await pool.query(
+        `INSERT INTO documents (name, file_path, category, owner_id, visibility, original_id, date)
+         VALUES ($1, $2, $3, $4, 'private', NULL, NOW())`,
+        [file.originalname, filePath, category, userId]
+      );
+    }
+
+    res.status(200).json({ message: 'Dossier importé avec succès', folderId });
+
+  } catch (error) {
+    console.error('Erreur lors de l\'import du dossier:', error);
+    res.status(500).json({ error: 'Erreur serveur', details: error.message });
+  }
+});
 
 router.get('/', auth, async (req, res) => {
   const userId = req.user.id;
@@ -272,14 +340,24 @@ router.get('/', auth, async (req, res) => {
 });
 router.post('/', auth, upload.single('file'), async (req, res) => {
   let {
-    name, access, allowedUsers, summary = '', tags = '',
-    prio, id_share, id_group,
+    name,
+    access,
+    summary = '',
+    tags = '',
+    prio,
+    id_share,
+    id_group,
     can_modify = false,
     can_delete = false
   } = req.body;
 
   if (!req.file) {
     return res.status(400).json({ error: 'Fichier non téléchargé' });
+  }
+
+  // Si `name` vide → nom de secours
+  if (!name || name.trim() === '') {
+    name = req.file.originalname || `document-${Date.now()}`;
   }
 
   const fullPath = req.file.path;
@@ -293,32 +371,28 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
   try {
     let extractedText = '';
 
-if (mimeType === 'application/pdf') {
-  const dataBuffer = fs.readFileSync(fullPath);
-  const data = await pdfParse(dataBuffer);
-  extractedText = data.text;
-} else if (mimeType?.startsWith('image/')) {
-  const result = await Tesseract.recognize(fullPath, 'eng');
-  extractedText = result.data.text;
-} else if (mimeType?.startsWith('video/')) {
-  try {
-    extractedText = await extractFrameAndOcr(fullPath);
-    if (!extractedText.trim()) {
-      extractedText = '[Vidéo sans texte détecté]';
+    if (mimeType === 'application/pdf') {
+      const dataBuffer = fs.readFileSync(fullPath);
+      const data = await pdfParse(dataBuffer);
+      extractedText = data.text;
+    } else if (mimeType?.startsWith('image/')) {
+      const result = await Tesseract.recognize(fullPath, 'eng');
+      extractedText = result.data.text;
+    } else if (mimeType?.startsWith('video/')) {
+      try {
+        extractedText = await extractFrameAndOcr(fullPath);
+        if (!extractedText.trim()) {
+          extractedText = '[Vidéo sans texte détecté]';
+        }
+      } catch (err) {
+        console.warn('⚠️ OCR sur vidéo échoué:', err);
+        extractedText = '[Vidéo non analysée]';
+      }
+    } else {
+      extractedText = '[Fichier non analysable]';
     }
-  } catch (err) {
-    console.warn('⚠️ OCR sur vidéo échoué:', err);
-    extractedText = '[Vidéo non analysée]';
-  }
-
-
-} else {
-  extractedText = '[Fichier non analysable]';
-}
-
 
     const finalCategory = await classifyText(extractedText);
-    console.log(`📂 Document classé comme: ${finalCategory}`);
 
     const existing = await pool.query(
       'SELECT * FROM documents WHERE name = $1 ORDER BY version DESC LIMIT 1',
@@ -348,18 +422,20 @@ if (mimeType === 'application/pdf') {
     };
     const visibility = sanitizeVisibility(access);
 
-    let parsedTags = [];
-    try {
-      if (typeof tags === 'string' && tags.trim().startsWith('[')) {
-        parsedTags = JSON.parse(tags).map(t => t.trim()).filter(Boolean);
-      } else if (typeof tags === 'string') {
-        parsedTags = tags.split(',').map(t => t.trim()).filter(Boolean);
-      } else if (Array.isArray(tags)) {
-        parsedTags = tags.map(t => String(t).trim()).filter(Boolean);
+    const parseTags = (tags) => {
+      try {
+        if (typeof tags === 'string' && tags.trim().startsWith('[')) {
+          return JSON.parse(tags).map(t => t.trim()).filter(Boolean);
+        } else if (typeof tags === 'string') {
+          return tags.split(',').map(t => t.trim()).filter(Boolean);
+        } else if (Array.isArray(tags)) {
+          return tags.map(t => String(t).trim()).filter(Boolean);
+        }
+      } catch {
+        return [];
       }
-    } catch {
-      parsedTags = [];
-    }
+    };
+    const parsedTags = parseTags(tags);
 
     const allowedPriorities = ['basse', 'moyenne', 'haute'];
     const priority = allowedPriorities.includes((prio || '').toLowerCase()) ? prio.toLowerCase() : 'moyenne';
@@ -372,21 +448,19 @@ if (mimeType === 'application/pdf') {
         return [];
       }
     };
-
     id_share = parseIntArray(id_share);
     id_group = parseIntArray(id_group);
 
-    // ✅ Insertion dans la table `documents`
-    const insertQuery = `
+    // ⚠️ Ajoute "metadata" JSON vide pour compatibilité future
+    const result = await pool.query(`
       INSERT INTO documents 
-      (name, file_path, category, text_content, summary, tags, owner_id,
-       visibility, version, original_id, ocr_text, priority, id_share, id_group)
-      VALUES ($1, $2, $3, $4, $5, $6::text[], $7,
-              $8, $9, $10, $11, $12, $13::int[], $14::int[])
+        (name, file_path, category, text_content, summary, tags, owner_id,
+         visibility, version, original_id, ocr_text, priority, id_share, id_group, metadata)
+      VALUES 
+        ($1, $2, $3, $4, $5, $6::text[], $7,
+         $8, $9, $10, $11, $12, $13::int[], $14::int[], $15)
       RETURNING *;
-    `;
-
-    const insertValues = [
+    `, [
       name,
       file_path,
       finalCategory,
@@ -400,67 +474,18 @@ if (mimeType === 'application/pdf') {
       extractedText,
       priority,
       id_share,
-      id_group
-    ];
-
-    const result = await pool.query(insertQuery, insertValues);
-
-    if (result.rowCount === 0) {
-      console.warn('⚠️ Aucun document inséré dans la BDD.');
-      return res.status(500).json({ error: "L'insertion du document a échoué." });
-    }
-
-    // ✅ Déclaration ici (avant toute utilisation)
-    const documentId = result.rows[0].id;
-
-    // ✅ Insertion dans la table `document_versions`
-    await pool.query(`
-      INSERT INTO document_versions (
-        document_id,
-        version_number,
-        file_path,
-        text_content,
-        ocr_text,
-        name,
-        contenu,
-        category,
-        visibility,
-        summary,
-        owner_id,
-        version_label,
-        version,
-        tags
-      ) VALUES (
-        $1, $2, $3, $4, $5,
-        $6, $7, $8, $9, $10,
-        $11, $12, $13, $14
-      )
-    `, [
-      documentId,
-      version,
-      file_path,
-      extractedText,
-      extractedText,
-      name,
-      extractedText,
-      finalCategory,
-      visibility,
-      summary,
-      req.user.id,
-      `v${version}`,
-      version,
-      parsedTags
+      id_group,
+      {} // metadata vide à l'étape 1
     ]);
 
-    // ✅ 1. Propriétaire avec tous les droits
-    await pool.query(
-      `INSERT INTO document_permissions 
-       (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
-       VALUES ($1, $2, 'owner', true, true, true, true)`,
-      [req.user.id, documentId]
-    );
+    const documentId = result.rows[0].id;
 
-    // ✅ 2. Visibilité : public
+    await pool.query(`
+      INSERT INTO document_permissions 
+      (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
+      VALUES ($1, $2, 'owner', true, true, true, true)
+    `, [req.user.id, documentId]);
+
     if (visibility === 'public') {
       const allUsers = await pool.query('SELECT id FROM users');
       await Promise.all(allUsers.rows.map(user =>
@@ -473,7 +498,6 @@ if (mimeType === 'application/pdf') {
       ));
     }
 
-    // ✅ 3. Visibilité : custom
     if (visibility === 'custom' && Array.isArray(id_share)) {
       await Promise.all(
         id_share.map(userId =>
@@ -488,20 +512,18 @@ if (mimeType === 'application/pdf') {
     }
 
     res.status(201).json({
-      ...result.rows[0],
-      preview: extractedText.slice(0, 300) + '...',
-      permissions: visibility,
-      message: version > 1
-        ? 'Nouvelle version enregistrée avec succès'
-        : 'Document ajouté avec succès'
+      id: documentId,
+      category: finalCategory,
+      message: 'Document créé (étape 1)',
     });
 
   } catch (err) {
-    console.error('❌ Erreur lors de l\'upload:', err.stack);
+    console.error('❌ Erreur upload étape 1 :', err.stack);
     if (req.file) fs.unlink(req.file.path, () => { });
-    res.status(500).json({ error: 'Erreur lors de l\'ajout du document', details: err.message });
+    res.status(500).json({ error: 'Erreur upload étape 1', details: err.message });
   }
 });
+
 
 router.get('/latest', auth, async (req, res) => {
   const userId = req.user.id;
@@ -564,35 +586,272 @@ router.get('/latest', auth, async (req, res) => {
   } catch (err) {
     console.error('Erreur récupération dernières versions :', err);
     res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+router.get('/documents/search', async (req, res) => {
+  const { query, category, startDate, endDate } = req.query;
+  try {
+    const values = [];
+    let baseQuery = `
+      SELECT * FROM documents 
+      WHERE 1=1
+    `;
+
+    if (query) {
+      baseQuery += ` AND (LOWER(name) LIKE $${values.length + 1} OR LOWER(text_content) LIKE $${values.length + 1})`;
+      values.push(`%${query.toLowerCase()}%`);
+    }
+
+    if (category) {
+      baseQuery += ` AND LOWER(category) = $${values.length + 1}`;
+      values.push(category.toLowerCase());
+    }
+
+    if (startDate) {
+      baseQuery += ` AND date >= $${values.length + 1}`;
+      values.push(startDate);
+    }
+
+    if (endDate) {
+      baseQuery += ` AND date <= $${values.length + 1}`;
+      values.push(endDate);
+    }
+
+    baseQuery += ` ORDER BY date DESC`;
+
+    const { rows } = await pool.query(baseQuery, values);
+    res.status(200).json(rows);
+  } catch (err) {
+    console.error('Erreur recherche documents:', err);
+    res.status(500).json({ error: 'Erreur lors de la recherche' });
   }
 });
 
 router.put('/:id', auth, async (req, res) => {
-  const documentId = req.params.id;
-  let { visibility, id_group, id_share } = req.body;
-
-  // 🛡️ Défaut : tableau vide si non fourni ou pas un tableau
-  id_group = Array.isArray(id_group) ? id_group : [];
-  id_share = Array.isArray(id_share) ? id_share : [];
-
-  console.log('Données reçues :', { visibility, id_group, id_share });
-
+  const documentId = parseInt(req.params.id, 10);
+  const {
+    name,
+    summary = '',
+    tags = [],
+    prio = 'moyenne',
+    collection_name = '',
+    metadata = {},
+    ...extraFields // contient les champs dynamiques spécifiques
+  } = req.body;
 
   try {
-    const query = `
+    if (!name) {
+      return res.status(400).json({ error: 'Le nom du document est requis.' });
+    }
+
+    // 1. Mise à jour de la table documents
+    await pool.query(`
       UPDATE documents 
-      SET visibility = $1, id_group = $2, id_share = $3
-      WHERE id = $4
-    `;
+      SET 
+        name = $1,
+        summary = $2,
+        tags = $3,
+        priority = $4,
+        metadata = $5
+      WHERE id = $6
+    `, [name, summary, tags, prio, metadata, documentId]);
 
-    await pool.query(query, [visibility, id_group, id_share, documentId]);
+    // 2. Ajout/MAJ dans la table spécialisée
+    const catRes = await pool.query(`SELECT category FROM documents WHERE id = $1`, [documentId]);
+    const category = catRes.rows[0]?.category;
 
-    res.status(200).json({ message: 'Document mis à jour avec succès.' });
-  } catch (error) {
-    console.error('Erreur lors de la mise à jour du document :', error);
-    res.status(500).json({ error: 'Erreur lors de la mise à jour.' });
+    switch (category) {
+  case 'facture':
+  await pool.query(`
+    INSERT INTO factures (document_id, numero_facture, nom_entreprise, produit, montant, date_facture)
+    VALUES ($1, $2, $3, $4, $5, $6)
+    ON CONFLICT (document_id) DO UPDATE 
+    SET numero_facture = $2,
+        nom_entreprise = $3,
+        produit = $4,
+        montant = $5,
+        date_facture = $6;
+  `, [
+    documentId,
+    req.body.num_facture || '',
+    req.body.nom_entreprise || '',
+    req.body.produit || '',
+    req.body.montant || 0,
+    req.body.date_facture || null
+  ]);
+  break;
+
+      case 'cv':
+        await pool.query(`
+  INSERT INTO cv (document_id, num_cv, nom_candidat, metier, lieu, experience, domaine)
+  VALUES ($1, $2, $3, $4, $5, $6, $7)
+  ON CONFLICT (document_id) DO UPDATE SET
+    num_cv = $2,
+    nom_candidat = $3,
+    metier = $4,
+    lieu = $5,
+    experience = $6,
+    domaine = $7
+`, [
+          documentId,
+          req.body.num_cv || '',
+          req.body.nom_candidat || '',
+          req.body.metier || '',
+          req.body.lieu || '',
+          req.body.experience || '',
+          req.body.domaine || ''
+        ]);
+
+
+
+      case 'demande_conge':
+        await pool.query(`
+          INSERT INTO demande_conges (document_id, numDemande, dateConge)
+          VALUES ($1, $2, $3)
+          ON CONFLICT (document_id) DO UPDATE 
+          SET numDemande = $2, dateConge = $3;
+        `, [
+          documentId,
+          extraFields.numDemande || '',
+          extraFields.dateConge || null
+        ]);
+        break;
+
+      default:
+        break;
+    }
+
+    // 3. Gestion des collections (optionnelle)
+    if (collection_name) {
+      const resCollection = await pool.query(
+        `SELECT id FROM collections WHERE name = $1 AND user_id = $2`,
+        [collection_name, req.user.id]
+      );
+
+      let collectionId = resCollection.rows[0]?.id;
+      if (!collectionId) {
+        const insert = await pool.query(
+          `INSERT INTO collections (name, user_id) VALUES ($1, $2) RETURNING id`,
+          [collection_name, req.user.id]
+        );
+        collectionId = insert.rows[0].id;
+      }
+
+      await pool.query(`
+        INSERT INTO document_collections (document_id, collection_id, is_saved, collection_name)
+        VALUES ($1, $2, true, $3)
+        ON CONFLICT (document_id, collection_id) DO UPDATE 
+        SET is_saved = true, collection_name = $3
+      `, [documentId, collectionId, collection_name]);
+    }
+
+    // 4. Renvoi du document mis à jour
+    const updated = await pool.query('SELECT * FROM documents WHERE id = $1', [documentId]);
+    res.status(200).json(updated.rows[0]);
+
+  } catch (err) {
+    console.error('❌ Erreur update document :', err);
+    res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
+
+router.post('/documents/upload-folder', upload.array('files'), async (req, res) => {
+  const files = req.files;
+
+  // 1. Créer le dossier racine
+  const { folderName } = req.body;
+  const folderRes = await pool.query('INSERT INTO folders (name) VALUES ($1) RETURNING id', [folderName]);
+  const folderId = folderRes.rows[0].id;
+
+  // 2. Boucler sur les fichiers
+  for (const file of files) {
+    await pool.query(
+      `INSERT INTO documents (name, file_path, folder_id) VALUES ($1, $2, $3)`,
+      [file.originalname, file.path, folderId]
+    );
+  }
+
+  res.json({ success: true });
+});
+
+router.post('/folders/upload', upload.array('files'), async (req, res) => {
+  const { folder_name, folder_description, created_by } = req.body;
+  const files = req.files;
+
+  try {
+    // 1. Enregistrer le dossier
+    const folderResult = await pool.query(
+      'INSERT INTO folders (name, description, created_by, created_at) VALUES ($1, $2, $3, NOW()) RETURNING id',
+      [folder_name, folder_description, created_by]
+    );
+    const folderId = folderResult.rows[0].id;
+
+    // 2. Pour chaque fichier → traitement + insertion
+    for (const file of files) {
+      const ocrText = await runOCR(file.path); // ta fonction Tesseract
+      const category = await classifyDocument(ocrText); // auto-catégorisation
+
+      await pool.query(
+        `INSERT INTO documents 
+        (name, file_path, ocr_text, category, uploaded_by, created_at, folder_id)
+        VALUES ($1, $2, $3, $4, $5, NOW(), $6)`,
+        [file.originalname, file.path, ocrText, category, created_by, folderId]
+      );
+    }
+
+    res.status(200).json({ message: 'Dossier importé avec succès', folderId });
+  } catch (error) {
+    console.error('Erreur import dossier :', error);
+    res.status(500).json({ error: 'Erreur lors de l’importation du dossier' });
+  }
+});
+
+
+router.get('/:id/details', auth, async (req, res) => {
+  const documentId = req.params.id;
+
+  try {
+    const docRes = await pool.query('SELECT * FROM documents WHERE id = $1', [documentId]);
+
+    if (docRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Document non trouvé' });
+    }
+
+    const doc = docRes.rows[0];
+    let meta = {};
+
+    switch (doc.category) {
+      case 'cv':
+        const cv = await pool.query('SELECT * FROM cv WHERE document_id = $1', [documentId]);
+        meta = cv.rows[0] || {};
+        break;
+
+      case 'facture':
+        const facture = await pool.query('SELECT * FROM factures WHERE document_id = $1', [documentId]);
+        meta = facture.rows[0] || {};
+        break;
+
+      case 'demande_conge':
+        const conge = await pool.query('SELECT * FROM demande_conges WHERE document_id = $1', [documentId]);
+        meta = conge.rows[0] || {};
+        break;
+
+      default:
+        meta = {};
+    }
+
+    res.json({
+      document: doc,
+      details: meta
+    });
+
+  } catch (err) {
+    console.error('Erreur récupération détails document :', err.stack);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 
 
 router.post('/:id/share', auth, async (req, res) => {
