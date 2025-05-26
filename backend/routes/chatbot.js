@@ -106,7 +106,7 @@ const ChatController = {
   // Démarrer une nouvelle conversation
   startConversation: async (req, res) => {
     try {
-      const { participants } = req.body;
+      const { participants } = req.body; 
       if (!participants || participants.length < 2) {
         return res.status(400).json({ error: 'Au moins 2 participants requis' });
       }
