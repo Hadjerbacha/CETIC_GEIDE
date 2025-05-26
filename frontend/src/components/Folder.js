@@ -64,7 +64,7 @@ const FolderListPage = () => {
   return (
     <>
       <Navbar />
-      <Container className="py-4">
+      <Container fluid className="py-4">
         <div className="mb-4">
           <h3 className="mb-3">📁 Gestion des dossiers</h3>
           <Form className="mb-3">
