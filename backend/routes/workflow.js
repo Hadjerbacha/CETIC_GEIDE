@@ -357,16 +357,95 @@ router.patch('/:id/status',authMiddleware, async (req, res) => {
 router.patch('/:id/comment', authMiddleware, async (req, res) => {
   const { assignment_note } = req.body;
   const { id } = req.params;
-
+  const userId = req.user.id;
   try {
+    // 1. Mettre à jour le commentaire
     const result = await pool.query(
       'UPDATE tasks SET assignment_note = $1 WHERE id = $2 RETURNING *',
       [assignment_note, id]
     );
-    res.json(result.rows[0]);
+
+    const task = result.rows[0];
+
+    // 2. Envoyer une notification seulement si la tâche a un créateur différent de l'utilisateur actuel
+    if (task.created_by !== userId) {
+      await pool.query(
+        `INSERT INTO notifications 
+         (user_id, sender_id, message, type, related_task_id, is_read) 
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [
+          task.created_by,
+          userId,
+          `Un nouveau commentaire a été ajouté à votre tâche "${task.title}"`,
+          'task',
+          id,
+          false
+        ]
+      );
+    }
+
+    res.json(task);
   } catch (err) {
-    console.error('Erreur lors de l’ajout du commentaire :', err);
+    console.error('Erreur lors de l\'ajout du commentaire :', err);
     res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+// Ajoutez cette route dans workflow.js
+router.post('/:taskId/upload-response', authMiddleware, upload.single('responseFile'), async (req, res) => {
+  const { taskId } = req.params;
+  const userId = req.user.id;
+  const { comment } = req.body;
+  const file_path = req.file ? `/uploads/${req.file.filename}` : null;
+
+  try {
+    // 1. Vérifier que la tâche existe et est assignée à l'utilisateur
+    const taskRes = await pool.query(
+      'SELECT * FROM tasks WHERE id = $1 AND $2 = ANY(assigned_to)',
+      [taskId, userId]
+    );
+
+    if (taskRes.rowCount === 0) {
+      if (req.file) fs.unlink(req.file.path, () => {});
+      return res.status(403).json({ error: 'Tâche non trouvée ou non assignée à vous' });
+    }
+
+    const task = taskRes.rows[0];
+
+    // 2. Enregistrer la réponse
+    const result = await pool.query(
+      `INSERT INTO task_responses 
+       (task_id, user_id, file_path, comment, submitted_at) 
+       VALUES ($1, $2, $3, $4, NOW()) RETURNING *`,
+      [taskId, userId, file_path, comment]
+    );
+
+    // 3. Mettre à jour le statut de la tâche
+    await pool.query(
+      'UPDATE tasks SET status = $1 WHERE id = $2',
+      ['completed', taskId]
+    );
+
+    // 4. Envoyer une notification au créateur de la tâche
+    await pool.query(
+      `INSERT INTO notifications 
+       (user_id, sender_id, message, type, related_task_id, is_read) 
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        task.created_by, // ID du créateur
+        userId,          // ID de l'utilisateur qui répond
+        `Une réponse a été ajoutée à votre tâche "${task.title}"`,
+        'task',
+        taskId,
+        false
+      ]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Erreur lors de l\'enregistrement de la réponse:', err);
+    if (req.file) fs.unlink(req.file.path, () => {});
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 

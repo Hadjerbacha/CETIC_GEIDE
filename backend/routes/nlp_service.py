@@ -35,7 +35,7 @@ async def classify_document(request: ClassificationRequest):
             return {"category": "autre", "confidence": 0.0}
             
         text = request.text[:1024]  # Limitez encore plus
-        categories = request.categories or ["contrat","facture", "rapport",  "cv", "autre"]
+        categories = request.categories or ["contrat","facture", "demande_conge",  "cv", "autre"]
         
         # Ajoutez un timeout pour la classification
         result = classifier(

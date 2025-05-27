@@ -186,128 +186,47 @@ const BpmnViewer = ({ workflowId }) => {
 };
 
 // Composant de résultats
-const ResultsPanel = ({ workflow, logs }) => {
-  const [activeKey, setActiveKey] = useState('0');
-
+const ResultsPanel = ({ workflow, logs, files }) => {
   return (
     <Card className="mb-4">
       <Card.Header>
         <h5 className="mb-0">Résultats et validation</h5>
       </Card.Header>
       <Card.Body>
-        <Accordion activeKey={activeKey} onSelect={(k) => setActiveKey(k)}>
-          <Accordion.Item eventKey="0">
-            <Accordion.Header>
-              <FiFileText className="me-2" />
-              Rapport final
-            </Accordion.Header>
-            <Accordion.Body>
-              {workflow.final_report ? (
-                <div>
-                  <h6>Validation:</h6>
-                  <Badge bg={workflow.is_approved ? 'success' : 'danger'} className="mb-3">
-                    {workflow.is_approved ? 'Approuvé' : 'Rejeté'}
-                  </Badge>
-                  
-                  <h6>Commentaires:</h6>
-                  <p>{workflow.final_report}</p>
-                  
-                  {workflow.completed_at && (
-                    <div className="text-muted small">
-                      <FiCalendar className="me-1" />
-                      Terminé le {format(parseISO(workflow.completed_at), 'PPp', { locale: fr })}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center py-3 text-muted">
-                  <FiAlertCircle size={24} className="me-2" />
-                  Aucun rapport final disponible
-                </div>
-              )}
-            </Accordion.Body>
-          </Accordion.Item>
-          
-          <Accordion.Item eventKey="1">
-            <Accordion.Header>
-              <FiTrendingUp className="me-2" />
-              Métriques
-            </Accordion.Header>
-            <Accordion.Body>
-              <Row>
-                <Col md={6}>
-                  <div className="mb-3">
-                    <h6>Date de création:</h6>
-                    <p>
-                      <FiCalendar className="me-1" />
-                      {format(parseISO(workflow.created_at), 'PPp', { locale: fr })}
-                    </p>
-                  </div>
-                  
-                  <div className="mb-3">
-                    <h6>Initiateur:</h6>
-                    <p>
-                      <FiUser className="me-1" />
-                      {workflow.created_by || 'Non spécifié'}
-                    </p>
-                  </div>
-                </Col>
-                <Col md={6}>
-                  <div className="mb-3">
-                    <h6>Dernière mise à jour:</h6>
-                    <p>
-                      <FiCalendar className="me-1" />
-                      {format(parseISO(workflow.updated_at), 'PPp', { locale: fr })}
-                    </p>
-                  </div>
-                  
-                  <div className="mb-3">
-                    <h6>Responsable:</h6>
-                    <p>
-                      <FiUser className="me-1" />
-                      {workflow.assigned_to || 'Non assigné'}
-                    </p>
-                  </div>
-                </Col>
-              </Row>
-            </Accordion.Body>
-          </Accordion.Item>
-          
-          <Accordion.Item eventKey="2">
-            <Accordion.Header>
-              <FiMessageSquare className="me-2" />
-              Historique des actions
-            </Accordion.Header>
-            <Accordion.Body>
-              {logs.length > 0 ? (
-                <div className="timeline">
-                  {logs.map((log, index) => (
-                    <div key={index} className="timeline-item mb-3">
-                      <div className="d-flex">
-                        <div className="timeline-badge bg-primary text-white rounded-circle p-2 me-3">
-                          <FiMessageSquare />
-                        </div>
+              {files.length > 0 ? (
+                <div className="list-group" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                  {files.map((file, index) => (
+                    <div key={index} className="list-group-item">
+                      <div className="d-flex justify-content-between align-items-center">
                         <div>
-                          <h6 className="mb-1">{log.action}</h6>
-                          <p className="text-muted small mb-1">{log.message}</p>
-                          <small className="text-muted">
-                            {format(parseISO(log.timestamp), 'PPp', { locale: fr })}
-                            {log.user && ` par ${log.user}`}
-                          </small>
+                          <FiFileText className="me-2" />
+                          <a
+                            href={`http://localhost:5000${file.file_path}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                          >
+                            {file.file_name || 'Fichier de réponse'}
+                          </a>
                         </div>
+                        <small className="text-muted">
+                          {format(parseISO(file.submitted_at), 'PPp', { locale: fr })}
+                        </small>
                       </div>
+                      {file.comment && (
+                        <div className="mt-2">
+                          <small className="text-muted">Commentaire:</small>
+                          <p className="mb-0 small">{file.comment}</p>
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
               ) : (
                 <div className="text-center py-3 text-muted">
                   <FiAlertCircle size={24} className="me-2" />
-                  Aucun historique disponible
+                  Aucun fichier de réponse soumis
                 </div>
               )}
-            </Accordion.Body>
-          </Accordion.Item>
-        </Accordion>
       </Card.Body>
     </Card>
   );
@@ -327,6 +246,19 @@ export default function WorkflowPage() {
   const [showDiagram, setShowDiagram] = useState(false);
   const [showValidationModal, setShowValidationModal] = useState(false);
   const [validationComment, setValidationComment] = useState('');
+  const [responseFiles, setResponseFiles] = useState([]);
+
+   const fetchResponseFiles = useCallback(async () => {
+  try {
+    const response = await axios.get(
+      `http://localhost:5000/api/workflows/${id}/responses`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    setResponseFiles(response.data);
+  } catch (err) {
+    console.error("Failed to load response files", err);
+  }
+}, [id, token]);
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -339,13 +271,14 @@ export default function WorkflowPage() {
       setWorkflow(wfRes.data.workflow);
       setSteps(wfRes.data.steps);
       setLogs(logRes.data);
+      await fetchResponseFiles(); 
     } catch (err) {
       toast.error('Erreur de chargement des données');
       navigate('/workflows');
     } finally {
       setLoading(false);
     }
-  }, [id, token, navigate]);
+  }, [id, token, navigate, fetchResponseFiles]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
@@ -505,7 +438,11 @@ export default function WorkflowPage() {
           </Card>
 
           {/* Résultats et validation */}
-          <ResultsPanel workflow={workflow} logs={logs} />
+          <ResultsPanel 
+            workflow={workflow} 
+            logs={logs} 
+            files={responseFiles} 
+          />
 
           {/* Bouton de validation finale (si workflow terminé) */}
           {workflow.status === 'completed' && !workflow.final_report && (
