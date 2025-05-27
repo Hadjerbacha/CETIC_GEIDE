@@ -15,6 +15,8 @@ import { getDocument } from 'pdfjs-dist/webpack'; // Importer getDocument depuis
 import { pdfjs } from 'pdfjs-dist/webpack';
 import importDoc from './img/importDoc.jpg';
 import importFolder from './img/importFolder.jpg';
+import { Dropdown, ButtonGroup } from 'react-bootstrap';
+import { FaUpload, FaFileUpload, FaFolderOpen } from 'react-icons/fa';
 
 
 const Doc = () => {
@@ -76,7 +78,7 @@ const Doc = () => {
   const [folderFiles, setFolderFiles] = useState([]);
   const [folderName, setFolderName] = useState('');
   const [folderDescription, setFolderDescription] = useState('');
-  
+
 
 
 
@@ -454,40 +456,40 @@ const Doc = () => {
     console.log('Form data:', formData);
   };
 
-const handleConfirmCreate = async () => {
-  try {
-    const token = localStorage.getItem('token');
-    const todayISO = new Date().toISOString().slice(0, 10);
+  const handleConfirmCreate = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const todayISO = new Date().toISOString().slice(0, 10);
 
-    // 1. Créer le workflow
-    const res = await axios.post(
-      'http://localhost:5000/api/workflows',
-      {
-        documentId: modalDoc.id,
-        name: autoWfName,
-        status: 'pending',
-        template: modalDoc.category,
-        created_by: userId,
-        echeance: todayISO
-      },
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
+      // 1. Créer le workflow
+      const res = await axios.post(
+        'http://localhost:5000/api/workflows',
+        {
+          documentId: modalDoc.id,
+          name: autoWfName,
+          status: 'pending',
+          template: modalDoc.category,
+          created_by: userId,
+          echeance: todayISO
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
-    // 2. Générer les tâches selon le type de document
-    await axios.post(
-      `http://localhost:5000/api/workflows/${res.data.id}/generate-from-template`,
-      { documentType: modalDoc.category },
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
+      // 2. Générer les tâches selon le type de document
+      await axios.post(
+        `http://localhost:5000/api/workflows/${res.data.id}/generate-from-template`,
+        { documentType: modalDoc.category },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
-    toast.success('Workflow créé avec les tâches appropriées !');
-    setShowConfirmModal(false);
-    navigate(`/workflowz/${res.data.id}`, { state: { document: modalDoc } });
-  } catch (err) {
-    console.error(err);
-    toast.error('Erreur lors de la création du workflow');
-  }
-};
+      toast.success('Workflow créé avec les tâches appropriées !');
+      setShowConfirmModal(false);
+      navigate(`/workflowz/${res.data.id}`, { state: { document: modalDoc } });
+    } catch (err) {
+      console.error(err);
+      toast.error('Erreur lors de la création du workflow');
+    }
+  };
 
   const checkWorkflowExists = async () => {
     const token = localStorage.getItem('token');
@@ -666,39 +668,22 @@ const handleConfirmCreate = async () => {
           <Card className="w-100 border border-transparent">
             <Card.Body>
               <br />
-              <div className="d-flex gap-3 mb-4">
-                <img
-                  src={importDoc}
-                  alt="Télécharger un document"
-                  title="Télécharger un document"
-                  onClick={() => setShowUploadForm(!showUploadForm)}
-                  style={{
-                    cursor: 'pointer',
-                    width: '40px',
-                    height: 'auto',
-                    borderRadius: '12px',
-                    border: 'none',
-                    boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
-                    transition: 'all 0.3s ease-in-out'
-                  }}
-                />
-
-                <img
-                  src={importFolder}
-                  alt="Télécharger un dossier"
-                  title="Télécharger un dossier complet"
-                  onClick={() => setShowUploadFolderForm(true)}
-                  style={{
-                    cursor: 'pointer',
-                    width: '40px',
-                    height: 'auto',
-                    borderRadius: '12px',
-                    border: 'none',
-                    boxShadow: '0 4px 8px rgba(0,0,0,0.1)',
-                    transition: 'all 0.3s ease-in-out'
-                  }}
-                />
-              </div>
+              <Dropdown as={ButtonGroup} className="mb-3 float-end">
+  <Dropdown.Toggle variant="light" size="sm" title="Importer">
+    <FaUpload className="me-1" />
+    Importer
+  </Dropdown.Toggle>
+  <Dropdown.Menu>
+    <Dropdown.Item onClick={() => setShowUploadForm(prev => !prev)}>
+      <FaFileUpload className="me-2" />
+      Télécharger un document
+    </Dropdown.Item>
+    <Dropdown.Item onClick={() => setShowUploadFolderForm(true)}>
+      <FaFolderOpen className="me-2" />
+      Télécharger un dossier
+    </Dropdown.Item>
+  </Dropdown.Menu>
+</Dropdown>
 
               <Modal
                 show={showUploadFolderForm}
@@ -765,65 +750,65 @@ const handleConfirmCreate = async () => {
                 </Modal.Footer>
               </Modal>
 
-          <Modal
-  show={showUploadForm}
-  onHide={() => setShowUploadForm(false)}
-  centered
-  backdrop="static"
-  style={{ zIndex: 1050 }}
->
-  <Modal.Header closeButton>
-    <Modal.Title>Importer un fichier</Modal.Title>
-  </Modal.Header>
+              <Modal
+                show={showUploadForm}
+                onHide={() => setShowUploadForm(false)}
+                centered
+                backdrop="static"
+                style={{ zIndex: 1050 }}
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Importer un fichier</Modal.Title>
+                </Modal.Header>
 
-  <Modal.Body>
-    {errorMessage && <Alert variant="danger">{errorMessage}</Alert>}
+                <Modal.Body>
+                  {errorMessage && <Alert variant="danger">{errorMessage}</Alert>}
 
-    <div className="text-center">
-      <input
-        type="file"
-        id="file-upload"
-        style={{ display: 'none' }}
-        accept=".pdf,.docx,.jpg,.jpeg,.png,.mp4,.webm"
-        onChange={(e) => setPendingFile(e.target.files[0])}
-      />
+                  <div className="text-center">
+                    <input
+                      type="file"
+                      id="file-upload"
+                      style={{ display: 'none' }}
+                      accept=".pdf,.docx,.jpg,.jpeg,.png,.mp4,.webm"
+                      onChange={(e) => setPendingFile(e.target.files[0])}
+                    />
 
-      <Button
-        variant="outline-primary"
-        onClick={() => document.getElementById('file-upload').click()}
-        className="d-flex align-items-center justify-content-center mx-auto"
-        style={{
-          height: '45px',
-          width: '100%',
-          maxWidth: '350px',
-          whiteSpace: 'nowrap',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          borderRadius: '8px'
-        }}
-      >
-        <FaCloudUploadAlt size={20} className="me-2" />
-        {pendingFile ? pendingFile.name : 'Choisir un fichier'}
-      </Button>
-    </div>
-  </Modal.Body>
+                    <Button
+                      variant="outline-primary"
+                      onClick={() => document.getElementById('file-upload').click()}
+                      className="d-flex align-items-center justify-content-center mx-auto"
+                      style={{
+                        height: '45px',
+                        width: '100%',
+                        maxWidth: '350px',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        borderRadius: '8px'
+                      }}
+                    >
+                      <FaCloudUploadAlt size={20} className="me-2" />
+                      {pendingFile ? pendingFile.name : 'Choisir un fichier'}
+                    </Button>
+                  </div>
+                </Modal.Body>
 
-  <Modal.Footer>
-    <Button
-      variant="secondary"
-      onClick={() => setShowUploadForm(false)}
-    >
-      Annuler
-    </Button>
-    <Button
-      variant="primary"
-      disabled={!pendingFile}
-      onClick={handleNextStep}
-    >
-      Suivant
-    </Button>
-  </Modal.Footer>
-</Modal>
+                <Modal.Footer>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowUploadForm(false)}
+                  >
+                    Annuler
+                  </Button>
+                  <Button
+                    variant="primary"
+                    disabled={!pendingFile}
+                    onClick={handleNextStep}
+                  >
+                    Suivant
+                  </Button>
+                </Modal.Footer>
+              </Modal>
 
 
               <div className="container-fluid d-flex flex-column gap-4 mb-4">

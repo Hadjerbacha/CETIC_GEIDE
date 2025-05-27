@@ -97,6 +97,38 @@ router.delete('/folders/:id', auth, async (req, res) => {
   }
 });
 
+router.get('/folders/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const result = await pool.query('SELECT * FROM folders WHERE id = $1', [id]);
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Dossier non trouvé" });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Erreur lors de la récupération du dossier:', err.stack);
+    res.status(500).json({ error: 'Erreur serveur', details: err.message });
+  }
+});
+
+// GET : Sous-dossiers d’un dossier parent
+router.get('/folders/:id/children', auth, async (req, res) => {
+  const parentId = req.params.id;
+
+  try {
+    const result = await pool.query(
+      'SELECT * FROM folders WHERE parent_id = $1 AND user_id = $2',
+      [parentId, req.user.id]
+    );
+    res.status(200).json(result.rows);
+  } catch (err) {
+    console.error('Erreur récupération sous-dossiers :', err.stack);
+    res.status(500).json({ error: 'Erreur serveur', details: err.message });
+  }
+});
+
+
 
 // Initialisation des tables
 initializeDatabase();
