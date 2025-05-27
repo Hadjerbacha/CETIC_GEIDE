@@ -45,7 +45,7 @@ const upload = multer({
 
 // Modifiez la fonction classifyText
 const classifyText = async (text) => {
-  const defaultCategories = ["contrat", "facture", "rapport", "cv"];
+  const defaultCategories = ["contrat", "facture", "demande_conge", "cv"];
 
   const truncatedText = text.substring(0, 5000);
 
@@ -79,8 +79,8 @@ const classifyText = async (text) => {
     if (lowerText.includes('facture') || lowerText.includes('invoice') || lowerText.includes('paiement')) {
       return 'facture';
     }
-    if (lowerText.includes('rapport') || lowerText.includes('report') || lowerText.includes('analyse')) {
-      return 'rapport';
+    if (lowerText.includes('demande') || lowerText.includes('conge') || lowerText.includes('jours')) {
+      return 'demande_conge';
     }
     if (lowerText.includes('cv') || lowerText.includes('curriculum') || lowerText.includes('expérience') || lowerText.includes('compétence')) {
       return 'cv';

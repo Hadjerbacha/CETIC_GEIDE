@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom'; // ⬅️ Ajout de useNavigate
 import { Form, Button, Card, Alert } from 'react-bootstrap';
-
+import { jwtDecode } from 'jwt-decode';
 const DetailsTask = () => {
   const { id } = useParams();
   const navigate = useNavigate(); // ⬅️ Hook pour la navigation
@@ -38,36 +38,60 @@ const DetailsTask = () => {
   const handleCommentChange = (e) => setComment(e.target.value);
   const handleFileChange = (e) => setResponseFile(e.target.files[0]);
 
-  const handleUpdate = async () => {
-    try {
-      await axios.patch(`http://localhost:5000/api/tasks/${id}/comment`, {
-        assignment_note: comment
-      }, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
+const handleUpdate = async () => {
+  try {
+    // 1. Mise à jour du commentaire
+    await axios.patch(`http://localhost:5000/api/tasks/${id}/comment`, {
+      user_id: task.created_by,
+      assignment_note: comment
+    }, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
 
-      if (responseFile) {
-        const formData = new FormData();
-        formData.append('fichier', responseFile);
-        formData.append('task_id', id);
-
-        await axios.post('http://localhost:5000/api/documents/reponse', formData, {
+    // 2. Envoi du fichier de réponse
+    if (responseFile) {
+      const formData = new FormData();
+      formData.append('responseFile', responseFile);
+      formData.append('comment', comment);
+      
+      await axios.post(
+        `http://localhost:5000/api/tasks/${id}/upload-response`,
+        formData, 
+        {
           headers: {
             Authorization: `Bearer ${token}`,
             'Content-Type': 'multipart/form-data'
           }
-        });
-      }
-
-      setSuccessMessage('Mise à jour réussie !');
-      setTimeout(() => setSuccessMessage(''), 3000);
-    } catch (error) {
-      console.error('Erreur lors de la mise à jour :', error);
-      alert('Erreur lors de la mise à jour.');
+        }
+      );
     }
-  };
+
+    // 3. Envoyer une notification au créateur de la tâche
+    const decodedToken = jwtDecode(token);
+    const currentUserId = decodedToken.id;
+    
+    await axios.post('http://localhost:5000/api/notifications', {
+      user_id: task.created_by, // ID du créateur de la tâche
+      sender_id: currentUserId, // ID de l'utilisateur actuel
+      message: `Une réponse a été ajoutée à la tâche "${task.title}"`,
+      type: 'task',
+      related_task_id: task.id,
+      is_read: false
+    }, {
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    setSuccessMessage('Mise à jour réussie !');
+    setTimeout(() => setSuccessMessage(''), 3000);
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour :', error);
+    alert(error.response?.data?.error || 'Erreur lors de la mise à jour.');
+  }
+};
 
   if (!task) return <p>Chargement...</p>;
 

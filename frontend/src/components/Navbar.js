@@ -97,11 +97,11 @@ const handleLogout = async () => {
       path: '/folder',
       icon: <FaIcons.FaFolderOpen />,
     },
-    {
+    /*{
       title: 'Workflows',
       path: '/workflow',
       icon: <FaIcons.FaClipboardList />,
-    },
+    },*/
     {
       title: 'Mes tâches',
       path: '/mes-taches',
