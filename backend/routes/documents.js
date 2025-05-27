@@ -277,7 +277,7 @@ router.get('/', auth, async (req, res) => {
 router.post('/', auth, upload.single('file'), async (req, res) => {
   let {
     name,
-    access,
+    access = req.body.access || req.body.visibility || 'private',
     summary = '',
     tags = '',
     prio,
@@ -292,7 +292,6 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
   folder_id = Number(folder_id);
   if (isNaN(folder_id)) folder_id = null;
 
-   console.log('Folder ID reçu:', folder_id);
 
   if (!req.file) {
     return res.status(400).json({ error: 'Fichier non téléchargé' });
@@ -569,7 +568,6 @@ router.get('/documents/search', async (req, res) => {
     res.status(500).json({ error: 'Erreur lors de la recherche' });
   }
 });
-
 router.put('/:id', auth, async (req, res) => {
   const documentId = parseInt(req.params.id, 10);
   const {
@@ -644,7 +642,7 @@ router.put('/:id', auth, async (req, res) => {
           req.body.experience || '',
           req.body.domaine || ''
         ]);
-break; 
+
 
 
       case 'demande_conge':
@@ -697,8 +695,6 @@ break;
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
-
-
 router.get('/:id/details', auth, async (req, res) => {
   const documentId = req.params.id;
 
@@ -867,7 +863,59 @@ router.get('/:id', auth, async (req, res) => {
 
 
 
+router.post('/folders', auth, async (req, res) => {
+  const { name, parent_id } = req.body;
 
+  if (!name) {
+    return res.status(400).json({ error: 'Nom du dossier requis' });
+  }
+
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({ error: 'Utilisateur non authentifié' });
+  }
+
+  try {
+    console.log('Utilisateur connecté:', req.user); // Pour debug
+
+    const result = await pool.query(
+      `INSERT INTO folders (name, parent_id, user_id) VALUES ($1, $2, $3) RETURNING *`,
+      [name, parent_id || null, req.user.id]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Erreur lors de la création du dossier:', err.stack);
+    res.status(500).json({ error: 'Erreur serveur', details: err.message });
+  }
+});
+router.post('/', upload.array('files'), async (req, res) => {
+  try {
+    const { folder_name, folder_description, created_by } = req.body;
+    const files = req.files;
+
+    // 1. Insérer le dossier
+    const folderResult = await pool.query(
+      `INSERT INTO folders (name, description, created_by, created_at)
+       VALUES ($1, $2, $3, NOW()) RETURNING id`,
+      [folder_name, folder_description, created_by]
+    );
+    const folderId = folderResult.rows[0].id;
+
+    // 2. Insérer les fichiers dans la table documents
+    for (const file of files) {
+      await pool.query(
+        `INSERT INTO documents (name, file_path, folder_id, user_id, created_at)
+         VALUES ($1, $2, $3, $4, NOW())`,
+        [file.originalname, file.path, folderId, created_by]
+      );
+    }
+
+    res.status(201).json({ message: 'Dossier importé avec succès', folderId });
+  } catch (error) {
+    console.error('Erreur lors de l’import du dossier :', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
 
 
 // DELETE : supprimer un document de la base de données et du disque

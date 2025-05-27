@@ -113,45 +113,81 @@ const DocumentCompletion = () => {
 
     if (id && token) fetchDocumentAndMetadata();
   }, [id, token]);
+  useEffect(() => {
+    const fetchDocument = async () => {
+      try {
+        const res = await axios.get(`http://localhost:5000/api/documents/${id}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const doc = res.data;
+        setDocInfo(doc);
+        setName(doc.name);
+        setSummary(doc.summary || '');
+        setTags((doc.tags || []).join(', '));
+        setPriority(doc.priority || '');
+      } catch (error) {
+        console.error('Erreur chargement document :', error);
+        setErrorMessage("Erreur lors du chargement du document.");
+      }
+    };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const tagArray = tags.split(',').map(t => t.trim()).filter(Boolean);
+    if (id && token) fetchDocument();
+  }, [id, token]);
 
-    if (isDuplicate && !canAddVersion) {
-      setErrorMessage("❌ Ce nom est déjà utilisé. Veuillez en choisir un autre.");
-      return;
+  useEffect(() => {
+    if (!docInfo) return;
+    switch (docInfo.category) {
+      case 'facture':
+        setExtraFields({
+          montant: '',
+          date_facture: '',
+          numero_facture: ''
+        });
+        break;
+      case 'cv':
+        setExtraFields({
+          nom_candidat: '',
+          experience: '',
+          domaine: ''
+        });
+        break;
+      default:
+        setExtraFields({});
     }
+  }, [docInfo]);
 
-    try {
-      setIsSaving(true);
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  const tagArray = tags.split(',').map(t => t.trim()).filter(Boolean);
 
-      await axios.put(`http://localhost:5000/api/documents/${id}`, {
-        name,
-        summary,
-        tags: tagArray,
-        prio: priority,
-        ...extraFields,
-        difference_note: isDuplicate && canAddVersion ? differenceNote : undefined
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        }
-      });
+  try {
+    setIsSaving(true); // On active le mode sauvegarde / succès
 
-      setSuccessMessage("✅ Document enregistré avec succès !");
-      setTimeout(() => {
-        navigate('/Documents');
-      }, 2000);
+    await axios.put(`http://localhost:5000/api/documents/${id}`, {
+      name,
+      summary,
+      tags: tagArray,
+      prio: priority,
+      ...extraFields
+    }, {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      }
+    });
 
-    } catch (error) {
-      console.error(error);
-      setIsSaving(false);
-      setErrorMessage("❌ Échec de la mise à jour.");
-    }
-  };
+    setSuccessMessage("Document enregistré avec succès !");
+    
+    // Après 2 secondes on redirige
+    setTimeout(() => {
+      navigate('/Documents');
+    }, 2000);
 
+  } catch (error) {
+    setIsSaving(false);
+    setErrorMessage("Échec de la mise à jour.");
+  }
+};
   const renderDocumentViewer = () => {
     if (!docInfo || !docInfo.file_path) return null;
 
@@ -215,18 +251,18 @@ const DocumentCompletion = () => {
                 </Alert>
               )}
               <Form onSubmit={handleSubmit}>
-              <Form.Group className="mb-3">
-  <Form.Label>Nom du document</Form.Label>
-  <div className="d-flex align-items-center">
-    <Form.Control
-      type="text"
-      value={baseName}
-      onChange={(e) => setBaseName(e.target.value)}
-      required
-    />
-    <span className="ms-2">.<strong>{extension}</strong></span>
-  </div>
-</Form.Group>
+                <Form.Group className="mb-3">
+                  <Form.Label>Nom du document</Form.Label>
+                  <div className="d-flex align-items-center">
+                    <Form.Control
+                      type="text"
+                      value={baseName}
+                      onChange={(e) => setBaseName(e.target.value)}
+                      required
+                    />
+                    <span className="ms-2">.<strong>{extension}</strong></span>
+                  </div>
+                </Form.Group>
 
 
                 {Object.entries(extraFields).map(([key, value]) => (
