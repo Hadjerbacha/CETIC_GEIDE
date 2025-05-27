@@ -90,37 +90,7 @@ const classifyText = async (text) => {
   }
 };
 
-
-router.get('/:id/my-permissions', auth, async (req, res) => {
-  const documentId = req.params.id;
-  const userId = req.user.id;
-
-  try {
-    const result = await pool.query(`
-      SELECT can_read, can_modify, can_delete, can_share, access_type
-      FROM document_permissions
-      WHERE document_id = $1 AND user_id = $2
-      ORDER BY 
-        CASE access_type
-          WHEN 'owner' THEN 1
-          WHEN 'custom' THEN 2
-          WHEN 'public' THEN 3
-          WHEN 'read' THEN 4
-          ELSE 5
-        END
-      LIMIT 1;
-    `, [documentId, userId]);
-
-    if (result.rowCount === 0) {
-      return res.status(403).json({ error: "Aucune permission trouvée pour ce document." });
-    }
-
-    res.status(200).json(result.rows[0]);
-  } catch (err) {
-    console.error('Erreur récupération des permissions:', err.stack);
-    res.status(500).json({ error: 'Erreur serveur', details: err.message });
-  }
-});
+;
 router.get('/:id/my-permissions', auth, async (req, res) => {
   const documentId = req.params.id;
   const userId = req.user.id;
@@ -264,40 +234,6 @@ async function initializeDatabase() {
   }
 }
 
-router.post('/upload-folder', auth, upload.array('files'), async (req, res) => {
-  const files = req.files;
-  const userId = req.user.id;
-
-  // 🔍 Extraire le nom du dossier racine depuis webkitRelativePath
-  const folderName = files[0]?.originalname?.split('/')[0] || 'Nouveau dossier';
-
-  try {
-    // 🗂 Créer une entrée dans la table folders
-    const folderResult = await pool.query(
-      'INSERT INTO folders (name, user_id, date) VALUES ($1, $2, NOW()) RETURNING id',
-      [folderName, userId]
-    );
-    const folderId = folderResult.rows[0].id;
-
-    // 📄 Ensuite, insérer chaque fichier comme document lié à ce dossier
-    for (const file of files) {
-      const filePath = path.join(uploadDir, file.filename);
-      const category = 'autre'; // ou classifierText(text) si tu veux faire de l’analyse OCR ici
-
-      await pool.query(
-        `INSERT INTO documents (name, file_path, category, owner_id, visibility, original_id, date)
-         VALUES ($1, $2, $3, $4, 'private', NULL, NOW())`,
-        [file.originalname, filePath, category, userId]
-      );
-    }
-
-    res.status(200).json({ message: 'Dossier importé avec succès', folderId });
-
-  } catch (error) {
-    console.error('Erreur lors de l\'import du dossier:', error);
-    res.status(500).json({ error: 'Erreur serveur', details: error.message });
-  }
-});
 
 router.get('/', auth, async (req, res) => {
   const userId = req.user.id;
@@ -347,15 +283,21 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
     prio,
     id_share,
     id_group,
+    folder_id,
     can_modify = false,
     can_delete = false
   } = req.body;
+
+  // Cast folder_id en entier, ou null si absent/invalide
+  folder_id = Number(folder_id);
+  if (isNaN(folder_id)) folder_id = null;
+
+   console.log('Folder ID reçu:', folder_id);
 
   if (!req.file) {
     return res.status(400).json({ error: 'Fichier non téléchargé' });
   }
 
-  // Si `name` vide → nom de secours
   if (!name || name.trim() === '') {
     name = req.file.originalname || `document-${Date.now()}`;
   }
@@ -455,10 +397,10 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
     const result = await pool.query(`
       INSERT INTO documents 
         (name, file_path, category, text_content, summary, tags, owner_id,
-         visibility, version, original_id, ocr_text, priority, id_share, id_group, metadata)
+         visibility, version, original_id, ocr_text, priority, id_share, id_group, folder_id, metadata)
       VALUES 
         ($1, $2, $3, $4, $5, $6::text[], $7,
-         $8, $9, $10, $11, $12, $13::int[], $14::int[], $15)
+         $8, $9, $10, $11, $12, $13::int[], $14::int[], $15, $16)
       RETURNING *;
     `, [
       name,
@@ -475,6 +417,7 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
       priority,
       id_share,
       id_group,
+      folder_id,
       {} // metadata vide à l'étape 1
     ]);
 
@@ -523,7 +466,6 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
     res.status(500).json({ error: 'Erreur upload étape 1', details: err.message });
   }
 });
-
 
 router.get('/latest', auth, async (req, res) => {
   const userId = req.user.id;
@@ -702,7 +644,7 @@ router.put('/:id', auth, async (req, res) => {
           req.body.experience || '',
           req.body.domaine || ''
         ]);
-
+break; 
 
 
       case 'demande_conge':
@@ -753,57 +695,6 @@ router.put('/:id', auth, async (req, res) => {
   } catch (err) {
     console.error('❌ Erreur update document :', err);
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
-  }
-});
-
-router.post('/documents/upload-folder', upload.array('files'), async (req, res) => {
-  const files = req.files;
-
-  // 1. Créer le dossier racine
-  const { folderName } = req.body;
-  const folderRes = await pool.query('INSERT INTO folders (name) VALUES ($1) RETURNING id', [folderName]);
-  const folderId = folderRes.rows[0].id;
-
-  // 2. Boucler sur les fichiers
-  for (const file of files) {
-    await pool.query(
-      `INSERT INTO documents (name, file_path, folder_id) VALUES ($1, $2, $3)`,
-      [file.originalname, file.path, folderId]
-    );
-  }
-
-  res.json({ success: true });
-});
-
-router.post('/folders/upload', upload.array('files'), async (req, res) => {
-  const { folder_name, folder_description, created_by } = req.body;
-  const files = req.files;
-
-  try {
-    // 1. Enregistrer le dossier
-    const folderResult = await pool.query(
-      'INSERT INTO folders (name, description, created_by, created_at) VALUES ($1, $2, $3, NOW()) RETURNING id',
-      [folder_name, folder_description, created_by]
-    );
-    const folderId = folderResult.rows[0].id;
-
-    // 2. Pour chaque fichier → traitement + insertion
-    for (const file of files) {
-      const ocrText = await runOCR(file.path); // ta fonction Tesseract
-      const category = await classifyDocument(ocrText); // auto-catégorisation
-
-      await pool.query(
-        `INSERT INTO documents 
-        (name, file_path, ocr_text, category, uploaded_by, created_at, folder_id)
-        VALUES ($1, $2, $3, $4, $5, NOW(), $6)`,
-        [file.originalname, file.path, ocrText, category, created_by, folderId]
-      );
-    }
-
-    res.status(200).json({ message: 'Dossier importé avec succès', folderId });
-  } catch (error) {
-    console.error('Erreur import dossier :', error);
-    res.status(500).json({ error: 'Erreur lors de l’importation du dossier' });
   }
 });
 

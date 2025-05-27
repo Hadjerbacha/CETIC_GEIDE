@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Container, Card, Button, Alert, Spinner, Row, Col, Dropdown, DropdownButton, Form } from 'react-bootstrap';
-import { useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
+import {  Container, Card, Button, Alert, Spinner, Row, Col,  ButtonGroup, Dropdown, DropdownButton, Form, Modal} from 'react-bootstrap';
 import axios from 'axios';
 import Navbar from './Navbar';
-import { FaFolderOpen, FaPlus } from 'react-icons/fa';
+import { FaFolderOpen, FaPlus, FaFolderPlus, FaFileUpload } from 'react-icons/fa';
+import { FaCloudUploadAlt } from 'react-icons/fa';
+
 
 const FolderListPage = () => {
   const [folders, setFolders] = useState([]);
@@ -11,9 +13,28 @@ const FolderListPage = () => {
   const [error, setError] = useState(null);
   const [sortOption, setSortOption] = useState('date');
   const [searchTerm, setSearchTerm] = useState('');
+  const [showModal, setShowModal] = useState(false);
+  const [modalType, setModalType] = useState(null); // 'document' ou 'subfolder'
+  const [selectedFolderId, setSelectedFolderId] = useState(null);
+  const [inputName, setInputName] = useState('');
+  const [inputDescription, setInputDescription] = useState('');
   const navigate = useNavigate();
   const token = localStorage.getItem('token');
+   const { id } = useParams(); // récupère le folder_id depuis l'URL
+  const currentFolderId = parseInt(id); // s’assure que c’est bien un nombre
 
+  const [pendingFile, setPendingFile] = useState(null);
+const [errorMessage, setErrorMessage] = useState('');
+const [accessType, setAccessType] = useState('private');
+const [permissions, setPermissions] = useState({
+  can_modify: false,
+  can_delete: false
+});
+const [allowedUsers, setAllowedUsers] = useState([]);
+const [selectedGroup, setSelectedGroup] = useState(null);
+const [showUploadForm, setShowUploadForm] = useState(false);
+const [documentId, setDocumentId] = useState(null);
+const [step, setStep] = useState(1);
   useEffect(() => {
     const fetchFolders = async () => {
       try {
@@ -28,16 +49,11 @@ const FolderListPage = () => {
         setLoading(false);
       }
     };
-
     fetchFolders();
   }, [token]);
 
   const handleViewFolder = (folderId) => {
     navigate(`/folder/${folderId}`);
-  };
-
-  const handleAddSubfolder = (parentId) => {
-    navigate(`/folders/upload?parent=${parentId}`);
   };
 
   const sortFolders = (folders) => {
@@ -61,6 +77,97 @@ const FolderListPage = () => {
 
   const sortedFolders = sortFolders(filteredFolders);
 
+ const openModal = (folderId, type) => {
+  setSelectedFolderId(folderId);
+  setModalType(type);
+
+  if (type === 'document') {
+    setShowUploadForm(true); // <-- Ouvre le bon modal
+  } else {
+    setShowModal(true);
+  }
+}
+
+  const handleSubmit = async () => {
+    try {
+      if (modalType === 'subfolder') {
+        await axios.post(`http://localhost:5000/api/folders/${selectedFolderId}/subfolders`, {
+          name: inputName,
+          description: inputDescription
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      } else if (modalType === 'document') {
+        // Redirection vers une page d'upload avec le folderId
+        navigate(`/folders/${selectedFolderId}/upload-document`);
+        return;
+      }
+
+      // Réinitialisation et recharge des dossiers
+      setInputName('');
+      setInputDescription('');
+      setShowModal(false);
+      const res = await axios.get('http://localhost:5000/api/folders', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setFolders(res.data);
+    } catch (error) {
+      console.error('Erreur lors de la création :', error);
+    }
+  };
+
+  const handleNextStep = async () => {
+    if (!pendingFile) {
+      setErrorMessage('Veuillez sélectionner un fichier.');
+      return;
+    }
+
+    if (pendingFile.size > 100 * 1024 * 1024) {
+      setErrorMessage('La vidéo dépasse la limite de 100 Mo.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', pendingFile);
+    formData.append('visibility', accessType);
+    formData.append('access', accessType);
+    formData.append('can_modify', permissions.modify);
+    formData.append('can_delete', permissions.delete);
+    formData.append('can_share', permissions.share);
+    formData.append("folder_id", selectedFolderId);
+
+    const allowedIds = allowedUsers.map(u => u?.id || u).filter(Boolean);
+    formData.append('id_share', JSON.stringify(allowedIds));
+
+    const groupIds = selectedGroup ? [selectedGroup] : [];
+    formData.append('id_group', JSON.stringify(groupIds));
+
+    try {
+      const res = await fetch('http://localhost:5000/api/documents', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (!res.ok) throw new Error(`Erreur upload fichier : ${res.status}`);
+      const data = await res.json();
+
+      setDocumentId(data.id); // ou data.document_id selon ce que tu retournes
+      setStep(2); // Facultatif maintenant
+      setShowUploadForm(false); // ferme le modal
+
+      console.log("Folder ID reçu :", selectedFolderId);
+console.log("useParams id :", id); 
+      // Rediriger vers la page de complétion
+      navigate(`/document/${data.id}/complete`);
+    } catch (err) {
+      console.error("Erreur lors de l'envoi du fichier :", err);
+      setErrorMessage("Erreur lors de l'envoi du fichier.");
+    }
+  };
+
   return (
     <>
       <Navbar />
@@ -76,7 +183,7 @@ const FolderListPage = () => {
             />
           </Form>
           <div className="d-flex justify-content-end">
-            <DropdownButton id="dropdown-sort" title={`Trier par`} variant="outline-secondary" onSelect={setSortOption}>
+            <DropdownButton id="dropdown-sort" title="Trier par" variant="outline-secondary" onSelect={setSortOption}>
               <Dropdown.Item eventKey="date">Date</Dropdown.Item>
               <Dropdown.Item eventKey="alpha">Nom (A-Z)</Dropdown.Item>
               <Dropdown.Item eventKey="size">Taille</Dropdown.Item>
@@ -85,9 +192,8 @@ const FolderListPage = () => {
           </div>
         </div>
 
-        {loading && <Spinner animation="border" />} 
+        {loading && <Spinner animation="border" />}
         {error && <Alert variant="danger">{error}</Alert>}
-
         {!loading && !error && sortedFolders.length === 0 && (
           <Alert variant="info">Aucun dossier trouvé.</Alert>
         )}
@@ -99,14 +205,21 @@ const FolderListPage = () => {
                 <Card.Body>
                   <Card.Title className="d-flex justify-content-between align-items-center">
                     <span><FaFolderOpen className="me-2 text-primary" /> {folder.name}</span>
-                    <Button 
-                      variant="light" 
-                      size="sm" 
-                      title="Ajouter un sous-dossier"
-                      onClick={() => handleAddSubfolder(folder.id)}
-                    >
-                      <FaPlus />
-                    </Button>
+                    <Dropdown as={ButtonGroup} className="mb-3 float-end">
+                      <Dropdown.Toggle variant="light" size="sm" title="Ajouter">
+                        <FaPlus />
+                      </Dropdown.Toggle>
+                      <Dropdown.Menu>
+                        <Dropdown.Item onClick={() => openModal(folder.id, 'subfolder')}>
+                          <FaFolderPlus className="me-2" />
+                          Ajouter un sous-dossier
+                        </Dropdown.Item>
+                        <Dropdown.Item onClick={() => openModal(folder.id, 'document')}>
+                          <FaFileUpload className="me-2" />
+                          Ajouter un document
+                        </Dropdown.Item>
+                      </Dropdown.Menu>
+                    </Dropdown>
                   </Card.Title>
                   <Card.Text>{folder.description || 'Aucune description'}</Card.Text>
                 </Card.Body>
@@ -115,9 +228,9 @@ const FolderListPage = () => {
                     <small className="text-muted">
                       📅 {new Date(folder.date).toLocaleDateString()}
                     </small>
-                    <Button 
-                      variant="outline-primary" 
-                      size="sm" 
+                    <Button
+                      variant="outline-primary"
+                      size="sm"
                       onClick={() => handleViewFolder(folder.id)}
                     >
                       Ouvrir
@@ -129,6 +242,66 @@ const FolderListPage = () => {
           ))}
         </Row>
       </Container>
+
+    <Modal
+                 show={showUploadForm}
+                 onHide={() => setShowUploadForm(false)}
+                 centered
+                 backdrop="static"
+                 style={{ zIndex: 1050 }}
+               >
+                 <Modal.Header closeButton>
+                   <Modal.Title>Importer un fichier</Modal.Title>
+                 </Modal.Header>
+ 
+                 <Modal.Body>
+                   {errorMessage && <Alert variant="danger">{errorMessage}</Alert>}
+ 
+                   <div className="text-center">
+                     <input
+                       type="file"
+                       id="file-upload"
+                       style={{ display: 'none' }}
+                       accept=".pdf,.docx,.jpg,.jpeg,.png,.mp4,.webm"
+                       onChange={(e) => setPendingFile(e.target.files[0])}
+                     />
+ 
+                     <Button
+                       variant="outline-primary"
+                       onClick={() => document.getElementById('file-upload').click()}
+                       className="d-flex align-items-center justify-content-center mx-auto"
+                       style={{
+                         height: '45px',
+                         width: '100%',
+                         maxWidth: '350px',
+                         whiteSpace: 'nowrap',
+                         overflow: 'hidden',
+                         textOverflow: 'ellipsis',
+                         borderRadius: '8px'
+                       }}
+                     >
+                       <FaCloudUploadAlt size={20} className="me-2" />
+                       {pendingFile ? pendingFile.name : 'Choisir un fichier'}
+                     </Button>
+                   </div>
+                 </Modal.Body>
+ 
+                 <Modal.Footer>
+                   <Button
+                     variant="secondary"
+                     onClick={() => setShowUploadForm(false)}
+                   >
+                     Annuler
+                   </Button>
+                   <Button
+                     variant="primary"
+                     disabled={!pendingFile}
+                     onClick={handleNextStep}
+                   >
+                     Suivant
+                   </Button>
+                 </Modal.Footer>
+               </Modal>
     </>
   );
 };

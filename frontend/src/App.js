@@ -28,17 +28,20 @@ import Statistique from './components/Statistique';
 import Reclamation from './components/Reclamation';
 import ReclamationList from './components/ReclamationList';
 import DocVoir from './components/DocVoir';
-import DocumentVersion from './components/DocumentVersion'; 
+import DocumentVersion from './components/DocumentVersion';
 import Archive from './components/Archive';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import Activite from './components/historique';
 import DocumentCompletion from './components/DocumentCompletion';
+import FolderUploadPage from './components/FolderUploadPage';
+import FolderDetailsPage from './components/FolderDetailsPage';
+
 
 
 function App() {
   return (
     <Router>
-     <Container fluid style={{ minHeight: '100vh' }} className="g-0">
+      <Container fluid style={{ minHeight: '100vh' }} className="g-0">
         <Routes>
           {/* Route non protégée */}
           <Route path="/" element={<Login />} />
@@ -53,7 +56,7 @@ function App() {
           <Route path="/AdminUsers" element={<ProtectedRoute element={<AdminUsers />} />} />
           <Route path="/document" element={<ProtectedRoute element={<Doc />} />} />
           <Route path="/documents" element={<ProtectedRoute element={<Document />} />} />
-          <Route path="/folder" element={<ProtectedRoute element={<Folder/>} />} />      
+          <Route path="/folder" element={<ProtectedRoute element={<Folder />} />} />
           <Route path="/workflows" element={<ProtectedRoute element={<Workflows />} />} />
           <Route path="/workflow" element={<ProtectedRoute element={<Workflow />} />} />
           <Route path="/workflowz/:id" element={<ProtectedRoute element={<Workflowz />} />} />
@@ -69,10 +72,12 @@ function App() {
           <Route path="/ReclamationList" element={<ProtectedRoute element={<ReclamationList />} />} />
           <Route path="/DocVoir" element={<ProtectedRoute element={<DocVoir />} />} />
           <Route path="/docvoir/:id" element={<ProtectedRoute element={<DocVoir />} />} />
-         <Route path="/document/:id/versions" element={<ProtectedRoute element={<DocumentVersion />} />} />
+          <Route path="/document/:id/versions" element={<ProtectedRoute element={<DocumentVersion />} />} />
           <Route path="/archive" element={<ProtectedRoute element={<Archive />} />} />
           <Route path="/activites" element={<ProtectedRoute element={<Activite />} />} />
           <Route path="/document/:id/complete" element={<ProtectedRoute element={<DocumentCompletion />} />} />
+          <Route path="/folders/upload" element={<ProtectedRoute element={<FolderUploadPage />} />} />
+           <Route path="/folder/:id" element={<ProtectedRoute element={<FolderDetailsPage  />} />} />
         </Routes>
       </Container>
     </Router>
