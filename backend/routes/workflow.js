@@ -277,28 +277,56 @@ router.delete('/:id',authMiddleware, async (req, res) => {
 });
 
 // 🔄 Mettre à jour uniquement le status
-router.patch('/:id/status',authMiddleware, async (req, res) => {
-    const taskId = parseInt(req.params.id, 10);
-    const { status } = req.body;
-  
-    try {
-      const result = await pool.query(
-        'UPDATE tasks SET status = $1 WHERE id = $2 RETURNING *',
-        [status, taskId]
-      );
-  
-      if (result.rowCount === 0) {
-        logger.error(`Task not found for status update: ${taskId}`);
-        return res.status(404).json({ message: 'Tâche non trouvée' });
-      }
-  
-      logger.info(`Task ${taskId} status updated to ${status}`);
-      res.json(result.rows[0]);
-    } catch (err) {
-      logger.error(`Error updating status for task ${taskId}: ${err.message}`);
-      res.status(500).json({ error: err.message });
+router.patch('/:id/status', authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  // Validation du statut
+  const allowedStatuses = ['pending', 'completed', 'in_progress', 'blocked', 'cancelled'];
+  if (!allowedStatuses.includes(status)) {
+    return res.status(400).json({ error: 'Statut invalide' });
+  }
+
+  try {
+    // 1. Conversion explicite des types
+    const taskId = parseInt(id);
+    const statusText = String(status); // Conversion explicite en texte
+
+    // 2. Mise à jour avec typage forcé
+    const result = await pool.query(
+      `UPDATE tasks 
+       SET status = $1::varchar(50),  -- Conversion explicite
+           completed_at = CASE WHEN $1 = 'completed' THEN NOW() ELSE completed_at END
+       WHERE id = $2
+       RETURNING *`,
+      [statusText, taskId]  // Paramètres typés
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Tâche non trouvée' });
     }
-  });
+
+    // 3. Déblocage des tâches dépendantes (avec typage forcé)
+    if (status === 'completed') {
+      await pool.query(
+        `UPDATE tasks 
+         SET status = 'pending'::varchar(50)  -- Conversion explicite
+         WHERE depends_on = $1::integer 
+           AND status = 'blocked'::varchar(50)`,  // Types explicites
+        [taskId]
+      );
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error('Erreur SQL:', err);
+    res.status(500).json({ 
+      error: 'Erreur serveur',
+      details: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+  }
+});
   
   router.post('/notify', authMiddleware, async (req, res) => {
     const { assigned_to, title, description, due_date } = req.body;
@@ -445,6 +473,83 @@ router.post('/:taskId/upload-response', authMiddleware, upload.single('responseF
   } catch (err) {
     console.error('Erreur lors de l\'enregistrement de la réponse:', err);
     if (req.file) fs.unlink(req.file.path, () => {});
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+router.post('/:id/complete', authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  const userId = req.user.id;
+
+  try {
+    // 1. Marquer la tâche comme complétée
+    const result = await pool.query(
+      `UPDATE tasks 
+       SET status = 'completed', 
+           completed_at = NOW() 
+       WHERE id = $1 
+       RETURNING *`,
+      [id]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Tâche non trouvée' });
+    }
+
+    const completedTask = result.rows[0];
+
+    // 2. Trouver et débloquer les tâches qui dépendent de celle-ci
+    const dependentTasks = await pool.query(
+      `SELECT id FROM tasks 
+       WHERE depends_on = $1 
+       AND status = 'blocked'`,
+      [id]
+    );
+
+    for (const task of dependentTasks.rows) {
+      await pool.query(
+        `UPDATE tasks 
+         SET status = 'pending' 
+         WHERE id = $1`,
+        [task.id]
+      );
+
+      // Notifier les utilisateurs assignés aux tâches débloquées
+      const taskWithAssignee = await pool.query(
+        `SELECT assigned_to FROM tasks WHERE id = $1`,
+        [task.id]
+      );
+
+      if (taskWithAssignee.rows[0]?.assigned_to?.length > 0) {
+        await pool.query(
+          `INSERT INTO notifications (
+            user_id, 
+            sender_id, 
+            message, 
+            type, 
+            related_task_id,
+            is_read
+          ) VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            taskWithAssignee.rows[0].assigned_to[0],
+            userId,
+            `Une nouvelle tâche vous a été assignée et est maintenant disponible`,
+            'task',
+            task.id,
+            false
+          ]
+        );
+      }
+    }
+
+    res.json({ 
+      success: true,
+      message: 'Tâche complétée avec succès',
+      unlockedTasks: dependentTasks.rowCount
+    });
+
+  } catch (err) {
+    console.error('Erreur lors de la complétion de la tâche:', err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });

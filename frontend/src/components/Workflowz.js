@@ -86,24 +86,34 @@ const StatsPanel = ({ workflow, steps }) => {
 };
 
 // Composant d'étape simplifié
-const StepItem = ({ step, onComplete }) => {
+const StepItem = ({ step, onComplete, workflowStatus }) => {
   const isCompleted = step.status === 'completed';
+  const isPending = step.status === 'pending';
+  const isBlocked = step.status === 'blocked';
   const completionDate = step.completed_at ? parseISO(step.completed_at) : null;
 
+  const handleComplete = async () => {
+    try {
+      await onComplete(step);
+    } catch (err) {
+      toast.error('Erreur lors de la complétion');
+    }
+  };
+
   return (
-    <motion.div 
-      whileHover={{ scale: 1.01 }}
-      transition={{ duration: 0.2 }}
-    >
-      <Card className={`mb-2 ${isCompleted ? 'border-success' : ''}`}>
+    <motion.div whileHover={{ scale: 1.01 }} transition={{ duration: 0.2 }}>
+      <Card className={`mb-2 ${isCompleted ? 'border-success' : ''} ${isBlocked ? 'bg-light' : ''}`}>
         <Card.Body className="p-3">
           <div className="d-flex justify-content-between align-items-center">
             <div className="d-flex align-items-center">
-              <div className={`rounded-circle bg-${isCompleted ? 'success' : 'light'} p-2 me-3`}>
-                {isCompleted ? 
-                  <FiCheckCircle className="text-white" /> : 
-                  <FiClock className={isCompleted ? 'text-white' : 'text-secondary'} />
-                }
+              <div className={`rounded-circle bg-${isCompleted ? 'success' : isBlocked ? 'secondary' : 'light'} p-2 me-3`}>
+                {isCompleted ? (
+                  <FiCheckCircle className="text-white" />
+                ) : isBlocked ? (
+                  <FiClock className="text-white" />
+                ) : (
+                  <FiClock className="text-secondary" />
+                )}
               </div>
               <div>
                 <h5 className="mb-1">{step.name}</h5>
@@ -113,8 +123,22 @@ const StepItem = ({ step, onComplete }) => {
                     Terminé le {format(completionDate, 'PPp', { locale: fr })}
                   </small>
                 )}
+                {isBlocked && (
+                  <small className="text-warning">
+                    En attente des tâches précédentes
+                  </small>
+                )}
               </div>
             </div>
+            {isPending && workflowStatus === 'in_progress' && (
+              <Button 
+                variant="outline-success" 
+                size="sm"
+                onClick={handleComplete}
+              >
+                Marquer comme terminé
+              </Button>
+            )}
           </div>
         </Card.Body>
       </Card>
@@ -282,20 +306,22 @@ export default function WorkflowPage() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  const completeStep = async (step) => {
-    try {
-      await axios.post(
-        `http://localhost:5000/api/workflows/${id}/steps/${step.id}/complete`, 
-        {}, 
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      toast.success(`Étape "${step.name}" complétée`);
-      fetchAll();
-    } catch {
-      toast.error('Erreur lors de la complétion');
-    }
-  };
-
+const completeStep = async (step) => {
+  try {
+    const response = await axios.patch(
+      `http://localhost:5000/api/tasks/${step.id}/status`,
+      { status: 'completed' }, // Corps de la requête
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    
+    console.log('Réponse du serveur:', response.data); // Debug
+    toast.success('Statut mis à jour !');
+    fetchAll();
+  } catch (err) {
+    console.error('Erreur:', err.response?.data || err.message);
+    toast.error('Échec de la mise à jour');
+  }
+};
   const analyzeLogsWithAI = async () => {
     try {
       setIsAnalyzing(true);

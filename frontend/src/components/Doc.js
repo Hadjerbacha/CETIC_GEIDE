@@ -77,9 +77,6 @@ const Doc = () => {
   const [uploadType, setUploadType] = useState(null);
   const [folderFiles, setFolderFiles] = useState([]);
   const [folderName, setFolderName] = useState('');
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [folders, setFolders] = useState([]);
   const [folderDescription, setFolderDescription] = useState('');
 
 
@@ -145,22 +142,6 @@ const Doc = () => {
     }
   }, []);
 
-    useEffect(() => {
-      const fetchFolders = async () => {
-        try {
-          const res = await axios.get('http://localhost:5000/api/folders', {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          setFolders(res.data);
-        } catch (err) {
-          console.error('Erreur chargement des dossiers :', err);
-          setError("Erreur lors du chargement des dossiers.");
-        } finally {
-          setLoading(false);
-        }
-      };
-      fetchFolders();
-    }, [token]);
 
 
   const openShareModal = (doc) => {
@@ -349,7 +330,6 @@ const Doc = () => {
     formData.append('can_modify', permissions.modify);
     formData.append('can_delete', permissions.delete);
     formData.append('can_share', permissions.share);
-    
 
     const allowedIds = allowedUsers.map(u => u?.id || u).filter(Boolean);
     formData.append('id_share', JSON.stringify(allowedIds));
@@ -650,7 +630,7 @@ const Doc = () => {
     formData.append('created_by', userId); // ID utilisateur connecté
 
     try {
-      const res = await axios.post('http://localhost:5000/api/folders', formData);
+      const res = await axios.post('http://localhost:5000/folders/upload', formData);
       const { folderId } = res.data;
       navigate(`/folder/${folderId}/complete`);
     } catch (error) {

@@ -1227,18 +1227,15 @@ router.post('/:id/generate-from-template', authMiddleware, async (req, res) => {
 
     // 4. Créer les tâches avec dépendances
     const insertedTasks = [];
+    const taskMap = {}; 
     const today = new Date();
-    const taskMap = {}; // Pour mapper order → task_id
     
-    // Trier les tâches par ordre
     const sortedTemplates = templates[documentType].tasks.sort((a, b) => a.order - b.order);
     
     for (const taskTemplate of sortedTemplates) {
-      // Calculer la date d'échéance basée sur la durée
       const dueDate = new Date(today);
       dueDate.setDate(dueDate.getDate() + taskTemplate.durationDays);
       
-      // Sélectionner un utilisateur aléatoire pour ce rôle
       const availableUsers = usersByRole[taskTemplate.role];
       if (!availableUsers || availableUsers.length === 0) {
         console.error(`Aucun utilisateur trouvé pour le rôle: ${taskTemplate.role}`);
@@ -1280,7 +1277,7 @@ router.post('/:id/generate-from-template', authMiddleware, async (req, res) => {
           initialStatus,
           taskTemplate.depends_on ? taskMap[taskTemplate.depends_on] : null,
           taskTemplate.order,
-          userId // L'utilisateur connecté comme créateur de la tâche
+          userId
         ]
       );
 
@@ -1288,7 +1285,14 @@ router.post('/:id/generate-from-template', authMiddleware, async (req, res) => {
       taskMap[taskTemplate.order] = newTask.id;
       insertedTasks.push(newTask);
 
-      // Envoyer une notification à l'utilisateur assigné
+      // Envoyer une notification pour TOUTES les tâches en pending (y compris celles débloquées plus tard)
+      if (initialStatus === 'pending') {
+        await sendTaskNotification(newTask.id, selectedUser.id, userId, taskTemplate.title);
+      }
+    }
+
+    // Fonction helper pour envoyer des notifications
+    async function sendTaskNotification(taskId, assigneeId, creatorId, taskTitle) {
       await pool.query(
         `INSERT INTO notifications (
           user_id, 
@@ -1299,63 +1303,59 @@ router.post('/:id/generate-from-template', authMiddleware, async (req, res) => {
           is_read
         ) VALUES ($1, $2, $3, $4, $5, $6)`,
         [
-          selectedUser.id,
-          userId,
-          `Une nouvelle tâche vous a été assignée: "${taskTemplate.title}"`,
+          assigneeId,
+          creatorId,
+          `Nouvelle tâche assignée: "${taskTitle}"`,
           'task',
-          newTask.id,
+          taskId,
           false
         ]
       );
+      
+      // Optionnel: Envoyer un email
+      await sendNotificationEmail(assigneeId, taskTitle);
     }
 
-    // 5. Mettre à jour le statut du workflow
-    await pool.query(
-      'UPDATE workflow SET status = $1 WHERE id = $2',
-      ['in_progress', id]
-    );
+    // 5. Créer un déclencheur pour les notifications futures
+    await pool.query(`
+      CREATE OR REPLACE FUNCTION notify_on_task_unblock()
+      RETURNS TRIGGER AS $$
+      BEGIN
+        IF NEW.status = 'pending' AND OLD.status = 'blocked' THEN
+          INSERT INTO notifications (
+            user_id, sender_id, message, type, related_task_id, is_read
+          ) SELECT
+            assigned_to[1],  -- Premier utilisateur assigné
+            NEW.created_by,
+            'Tâche débloquée: "' || NEW.title || '"',
+            'task',
+            NEW.id,
+            false
+          FROM tasks WHERE id = NEW.id;
+        END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql;
 
-    // 6. Notifier l'utilisateur de la création du workflow
-    await pool.query(
-      `INSERT INTO notifications (
-        user_id, 
-        sender_id, 
-        message, 
-        type, 
-        related_task_id,
-        is_read
-      ) VALUES ($1, $2, $3, $4, $5, $6)`,
-      [
-        userId,
-        userId, // L'utilisateur se notifie lui-même
-        `Votre workflow "${templates[documentType].workflowName}" a été créé avec ${insertedTasks.length} tâches`,
-        'workflow',
-        null,
-        false
-      ]
-    );
+      DROP TRIGGER IF EXISTS task_status_change ON tasks;
+      CREATE TRIGGER task_status_change
+      AFTER UPDATE ON tasks
+      FOR EACH ROW
+      EXECUTE FUNCTION notify_on_task_unblock();
+    `);
 
     res.status(201).json({
-      message: `Workflow "${templates[documentType].workflowName}" créé avec succès`,
+      message: `Workflow généré avec notifications activées`,
       workflowId: id,
-      tasks: insertedTasks.map(t => ({
-        id: t.id,
-        title: t.title,
-        assigned_to: t.assigned_to,
-        status: t.status,
-        due_date: t.due_date
-      }))
+      tasks: insertedTasks
     });
 
   } catch (err) {
-    console.error('Erreur génération workflow:', err);
-    res.status(500).json({ 
-      error: 'Erreur lors de la génération du workflow',
-      details: err.message,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-    });
+    console.error('Erreur:', err);
+    res.status(500).json({ error: 'Échec de la génération' });
   }
 });
+
 
 router.get('/:workflowId/responses', authMiddleware, async (req, res) => {
   try {
