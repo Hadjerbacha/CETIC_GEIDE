@@ -2,6 +2,21 @@ const express = require('express');
 const { Pool } = require('pg');
 const { auth } = require('../middleware/auth');
 const router = express.Router();
+const multer = require('multer');
+const path = require('path');
+
+// Configuration du stockage
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/'); // Dossier où enregistrer les fichiers
+  },
+  filename: function (req, file, cb) {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, uniqueSuffix + '-' + file.originalname);
+  }
+});
+
+const upload = multer({ storage: storage });
 
 // PostgreSQL Pool configuration
 const pool = new Pool({
@@ -31,7 +46,6 @@ async function initializeDatabase() {
   }
 }
 
-// POST : Créer un dossier
 router.post('/folders', auth, async (req, res) => {
   const { name, parent_id } = req.body;
 
@@ -39,17 +53,79 @@ router.post('/folders', auth, async (req, res) => {
     return res.status(400).json({ error: 'Nom du dossier requis' });
   }
 
+  if (!req.user || !req.user.id) {
+    return res.status(401).json({ error: 'Utilisateur non authentifié' });
+  }
+
   try {
+    console.log('Utilisateur connecté:', req.user); // Pour debug
+
     const result = await pool.query(
       `INSERT INTO folders (name, parent_id, user_id) VALUES ($1, $2, $3) RETURNING *`,
       [name, parent_id || null, req.user.id]
     );
+
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error('Erreur lors de la création du dossier:', err.stack);
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
+
+// Express backend
+router.get('/folders/:id/documents', auth, async (req, res) => {
+  const folderId = req.params.id;
+  try {
+    const result = await pool.query('SELECT * FROM documents WHERE folder_id = $1', [folderId]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Erreur lors de la récupération des documents:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
+router.get('/folders/:parentId', async (req, res) => {
+  const parentId = parseInt(req.params.parentId);
+  try {
+    const folders = await pool.query(
+      'SELECT * FROM folders WHERE parent_id = $1',
+      [parentId]
+    );
+    res.json(folders.rows);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Erreur serveur');
+  }
+});
+
+
+router.post('/', upload.array('files'), async (req, res) => {
+  try {
+    const { folder_name, folder_description, created_by } = req.body;
+    const files = req.files;
+
+    const folderResult = await pool.query(
+      `INSERT INTO folders (name, user_id, date)
+       VALUES ($1, $2, NOW()) RETURNING id`,
+      [folder_name, created_by]
+    );
+    const folderId = folderResult.rows[0].id;
+
+    for (const file of files) {
+      await pool.query(
+        `INSERT INTO documents (name, file_path, folder_id, user_id, created_at)
+         VALUES ($1, $2, $3, $4, NOW())`,
+        [file.originalname, file.path, folderId, created_by]
+      );
+    }
+
+    res.status(201).json({ message: 'Dossier importé avec succès', folderId });
+  } catch (error) {
+    console.error('Erreur lors de l’import du dossier :', error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 
 // GET : Récupérer les dossiers (option parent_id)
 router.get('/folders', auth, async (req, res) => {

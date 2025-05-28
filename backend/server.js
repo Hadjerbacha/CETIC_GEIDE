@@ -19,7 +19,7 @@ const dossierRoutes = require('./routes/dossier'); // Assure-toi que le chemin e
 const summarizeRoute = require('./routes/summarize');
 const chatRoutes = require('./routes/chat');
 const { router: activityRoutes, logActivity } = require('./routes/activite');
-
+const folderRoutes = require('./routes/dossier');
 
 
 
@@ -60,6 +60,7 @@ app.use('/api/', aiRoutes);
 app.use('/api/summarize', summarizeRoute);
 app.use('/api/activities', activityRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/folders', folderRoutes);
 // Lancement du serveur
 app.listen(PORT, () => console.log(`🚀 Serveur lancé sur le port ${PORT}`));
 
