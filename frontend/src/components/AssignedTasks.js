@@ -55,42 +55,38 @@ const AssignedTasks = () => {
   };
 
   useEffect(() => {
-    const fetchTasks = async () => {
-      if (!userId || !token) {
-        return;
-      }
+   const fetchTasks = async () => {
+  if (!userId || !token) return;
 
-      try {
-        const response = await axios.get('http://localhost:5000/api/tasks/mes-taches', axiosConfig);
-        console.log("Réponse des tâches:", response.data);
+  try {
+    const response = await axios.get('http://localhost:5000/api/tasks/mes-taches', axiosConfig);
+    
+    // Filtrer les tâches assignées ET non bloquées
+    const assignedTasks = response.data.filter(task => {
+      return task.assigned_to?.includes(userId) && task.status !== 'blocked';
+    });
 
-        // Filtrer les tâches assignées à l'utilisateur connecté
-        const assignedTasks = response.data.filter(task => {
-          console.log("Assigned_to:", task.assigned_to);
-          return task.assigned_to && Array.isArray(task.assigned_to) && task.assigned_to.includes(userId);
-        });
-
-        console.log("Tâches assignées à l'utilisateur:", assignedTasks);
-        setTasks(assignedTasks);
-        const statusCounts = {
-            pending: 0,
-            cancelled: 0,
-            in_progress: 0,
-            completed: 0,
-          };
-      
-          assignedTasks.forEach(task => {
-            if (task.status in statusCounts) {
-              statusCounts[task.status]++;
-            }
-          });
-      
-          setStats(statusCounts);
-      } catch (error) {
-        setError("Erreur lors de la récupération des tâches.");
-        console.error("Erreur lors de la récupération des tâches :", error);
-      }
+    setTasks(assignedTasks);
+    
+    // Mise à jour des stats (optionnel - retirez "blocked" si nécessaire)
+    const statusCounts = {
+      pending: 0,
+      cancelled: 0,
+      in_progress: 0,
+      completed: 0,
     };
+
+    assignedTasks.forEach(task => {
+      if (task.status in statusCounts) {
+        statusCounts[task.status]++;
+      }
+    });
+
+    setStats(statusCounts);
+  } catch (error) {
+    console.error("Erreur:", error);
+  }
+};
 
     if (token && userId) fetchTasks();
   }, [userId, token]);

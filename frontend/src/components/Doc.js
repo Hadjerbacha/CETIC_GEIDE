@@ -77,9 +77,6 @@ const Doc = () => {
   const [uploadType, setUploadType] = useState(null);
   const [folderFiles, setFolderFiles] = useState([]);
   const [folderName, setFolderName] = useState('');
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [folders, setFolders] = useState([]);
   const [folderDescription, setFolderDescription] = useState('');
   const [parentId, setParentId] = useState(null);
 
@@ -147,22 +144,6 @@ const Doc = () => {
     }
   }, []);
 
-    useEffect(() => {
-      const fetchFolders = async () => {
-        try {
-          const res = await axios.get('http://localhost:5000/api/folders', {
-            headers: { Authorization: `Bearer ${token}` }
-          });
-          setFolders(res.data);
-        } catch (err) {
-          console.error('Erreur chargement des dossiers :', err);
-          setError("Erreur lors du chargement des dossiers.");
-        } finally {
-          setLoading(false);
-        }
-      };
-      fetchFolders();
-    }, [token]);
 
 
   const openShareModal = (doc) => {
@@ -351,7 +332,6 @@ const Doc = () => {
     formData.append('can_modify', permissions.modify);
     formData.append('can_delete', permissions.delete);
     formData.append('can_share', permissions.share);
-    
 
     const allowedIds = allowedUsers.map(u => u?.id || u).filter(Boolean);
     formData.append('id_share', JSON.stringify(allowedIds));
@@ -639,689 +619,702 @@ const Doc = () => {
     }
   };
 
- const handleFolderUpload = async () => {
-  const formData = new FormData();
-  folderFiles.forEach((file) => {
-    formData.append('files', file);
-  });
-formData.append('name', folderName); // ✅ attendu côté backend
-if (userId) {
-  formData.append('userId', userId); // ✅ optionnel
-}
+  const handleFolderUpload = async () => {
+    const formData = new FormData();
+    folderFiles.forEach((file) => {
+      formData.append('files', file);
+    });
+    formData.append('name', folderName); // ✅ attendu côté backend
+    if (userId) {
+      formData.append('userId', userId); // ✅ optionnel
+    }
+
+    try {
+      const token = localStorage.getItem('token'); // ou selon où tu stockes ton token
+
+      const res = await axios.post('http://localhost:5000/api/folders', formData, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      const { folderId } = res.data;
+      navigate(`/folder/${folderId}`);
+    } catch (error) {
+      console.error('Erreur upload dossier :', error);
+    }
+  };
+  // Ajouter les infos du dossier
+  formData.append('folder_name', folderName);
+  formData.append('folder_description', folderDescription);
+  formData.append('created_by', userId); // ID utilisateur connecté
 
   try {
-    const token = localStorage.getItem('token'); // ou selon où tu stockes ton token
-
-    const res = await axios.post('http://localhost:5000/api/folders', formData, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'Content-Type': 'multipart/form-data'
-      }
-    });
-
+    const res = await axios.post('http://localhost:5000/folders/upload', formData);
     const { folderId } = res.data;
-    navigate(`/folder/${folderId}`);
+    navigate(`/folder/${folderId}/complete`);
   } catch (error) {
     console.error('Erreur upload dossier :', error);
   }
 };
 
-  return (
-    <>
-      <Navbar />
-      <div className="container-fluid">
-        <Row className="my-3">
-          <Col md={4}><Form.Control type="text" placeholder="Rechercher..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} /></Col>
-          <Col md={2}>
-            <Form.Select value={filterType} onChange={e => setFilterType(e.target.value)}>
-              <option value="Tous les documents">Tous</option>
-              <option value="pdf">PDF</option>
-              <option value="docx">Word</option>
-              <option value="jpg">Images</option>
-              <option value="mp4">Vidéo (MP4)</option>
-              <option value="webm">Vidéo (WebM)</option>
-            </Form.Select>
+return (
+  <>
+    <Navbar />
+    <div className="container-fluid">
+      <Row className="my-3">
+        <Col md={4}><Form.Control type="text" placeholder="Rechercher..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} /></Col>
+        <Col md={2}>
+          <Form.Select value={filterType} onChange={e => setFilterType(e.target.value)}>
+            <option value="Tous les documents">Tous</option>
+            <option value="pdf">PDF</option>
+            <option value="docx">Word</option>
+            <option value="jpg">Images</option>
+            <option value="mp4">Vidéo (MP4)</option>
+            <option value="webm">Vidéo (WebM)</option>
+          </Form.Select>
 
-          </Col>
+        </Col>
 
-          <Col md={2}><Form.Control type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /></Col>
-          <Col md={2}><Form.Control type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></Col>
-          <Col md={2}><Button variant={useAdvancedFilter ? 'danger' : 'success'} onClick={() => setUseAdvancedFilter(!useAdvancedFilter)}>
-            {useAdvancedFilter ? 'Désactiver Avancé' : 'Recherche Avancée'}
-          </Button></Col>
-        </Row>
-        <br />
+        <Col md={2}><Form.Control type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /></Col>
+        <Col md={2}><Form.Control type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></Col>
+        <Col md={2}><Button variant={useAdvancedFilter ? 'danger' : 'success'} onClick={() => setUseAdvancedFilter(!useAdvancedFilter)}>
+          {useAdvancedFilter ? 'Désactiver Avancé' : 'Recherche Avancée'}
+        </Button></Col>
+      </Row>
+      <br />
 
-        <Container fluid className="d-flex justify-content-center">
-          <Card className="w-100 border border-transparent">
-            <Card.Body>
-              <br />
-              <Dropdown as={ButtonGroup} className="mb-3 float-end">
-  <Dropdown.Toggle variant="light" size="sm" title="Importer">
-    <FaUpload className="me-1" />
-    Importer
-  </Dropdown.Toggle>
-  <Dropdown.Menu>
-    <Dropdown.Item onClick={() => setShowUploadForm(prev => !prev)}>
-      <FaFileUpload className="me-2" />
-      Télécharger un document
-    </Dropdown.Item>
-    <Dropdown.Item onClick={() => setShowUploadFolderForm(true)}>
-      <FaFolderOpen className="me-2" />
-      Télécharger un dossier
-    </Dropdown.Item>
-  </Dropdown.Menu>
-</Dropdown>
+      <Container fluid className="d-flex justify-content-center">
+        <Card className="w-100 border border-transparent">
+          <Card.Body>
+            <br />
+            <Dropdown as={ButtonGroup} className="mb-3 float-end">
+              <Dropdown.Toggle variant="light" size="sm" title="Importer">
+                <FaUpload className="me-1" />
+                Importer
+              </Dropdown.Toggle>
+              <Dropdown.Menu>
+                <Dropdown.Item onClick={() => setShowUploadForm(prev => !prev)}>
+                  <FaFileUpload className="me-2" />
+                  Télécharger un document
+                </Dropdown.Item>
+                <Dropdown.Item onClick={() => setShowUploadFolderForm(true)}>
+                  <FaFolderOpen className="me-2" />
+                  Télécharger un dossier
+                </Dropdown.Item>
+              </Dropdown.Menu>
+            </Dropdown>
 
-              <Modal
-                show={showUploadFolderForm}
-                onHide={() => setShowUploadFolderForm(false)}
-                centered
-                backdrop="static"
-                style={{ zIndex: 1050 }}
-              >
-                <Modal.Header closeButton>
-                  <Modal.Title>Importer un dossier</Modal.Title>
-                </Modal.Header>
+            <Modal
+              show={showUploadFolderForm}
+              onHide={() => setShowUploadFolderForm(false)}
+              centered
+              backdrop="static"
+              style={{ zIndex: 1050 }}
+            >
+              <Modal.Header closeButton>
+                <Modal.Title>Importer un dossier</Modal.Title>
+              </Modal.Header>
 
-                <Modal.Body>
-                  <Form>
-                    <Form.Group className="mb-3">
-                      <Form.Label>Nom du dossier</Form.Label>
-                      <Form.Control
-                        type="text"
-                        placeholder="Nom du dossier"
-                        value={folderName}
-                        onChange={(e) => setFolderName(e.target.value)}
-                      />
-                    </Form.Group>
-
-                    <Form.Group className="mb-3">
-                      <Form.Label>Description du dossier</Form.Label>
-                      <Form.Control
-                        as="textarea"
-                        rows={2}
-                        placeholder="Description"
-                        value={folderDescription}
-                        onChange={(e) => setFolderDescription(e.target.value)}
-                      />
-                    </Form.Group>
-
-                    <Form.Group className="mb-3">
-                      <Form.Label>Fichiers</Form.Label>
-                      <Form.Control
-                        type="file"
-                        webkitdirectory="true"
-                        directory=""
-                        multiple
-                        onChange={(e) => {
-                          const files = Array.from(e.target.files);
-                          setFolderFiles(files);
-                          console.log('📁 Fichiers du dossier sélectionné :', files);
-                        }}
-                      />
-                    </Form.Group>
-                  </Form>
-                </Modal.Body>
-
-                <Modal.Footer>
-                  <Button variant="secondary" onClick={() => setShowUploadFolderForm(false)}>
-                    Annuler
-                  </Button>
-                  <Button
-                    variant="primary"
-                    disabled={!folderFiles.length || !folderName}
-                    onClick={handleFolderUpload}
-                  >
-                    Suivant
-                  </Button>
-                </Modal.Footer>
-              </Modal>
-
-              <Modal
-                show={showUploadForm}
-                onHide={() => setShowUploadForm(false)}
-                centered
-                backdrop="static"
-                style={{ zIndex: 1050 }}
-              >
-                <Modal.Header closeButton>
-                  <Modal.Title>Importer un fichier</Modal.Title>
-                </Modal.Header>
-
-                <Modal.Body>
-                  {errorMessage && <Alert variant="danger">{errorMessage}</Alert>}
-
-                  <div className="text-center">
-                    <input
-                      type="file"
-                      id="file-upload"
-                      style={{ display: 'none' }}
-                      accept=".pdf,.docx,.jpg,.jpeg,.png,.mp4,.webm"
-                      onChange={(e) => setPendingFile(e.target.files[0])}
+              <Modal.Body>
+                <Form>
+                  <Form.Group className="mb-3">
+                    <Form.Label>Nom du dossier</Form.Label>
+                    <Form.Control
+                      type="text"
+                      placeholder="Nom du dossier"
+                      value={folderName}
+                      onChange={(e) => setFolderName(e.target.value)}
                     />
+                  </Form.Group>
 
-                    <Button
-                      variant="outline-primary"
-                      onClick={() => document.getElementById('file-upload').click()}
-                      className="d-flex align-items-center justify-content-center mx-auto"
-                      style={{
-                        height: '45px',
-                        width: '100%',
-                        maxWidth: '350px',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        borderRadius: '8px'
+                  <Form.Group className="mb-3">
+                    <Form.Label>Description du dossier</Form.Label>
+                    <Form.Control
+                      as="textarea"
+                      rows={2}
+                      placeholder="Description"
+                      value={folderDescription}
+                      onChange={(e) => setFolderDescription(e.target.value)}
+                    />
+                  </Form.Group>
+
+                  <Form.Group className="mb-3">
+                    <Form.Label>Fichiers</Form.Label>
+                    <Form.Control
+                      type="file"
+                      webkitdirectory="true"
+                      directory=""
+                      multiple
+                      onChange={(e) => {
+                        const files = Array.from(e.target.files);
+                        setFolderFiles(files);
+                        console.log('📁 Fichiers du dossier sélectionné :', files);
                       }}
-                    >
-                      <FaCloudUploadAlt size={20} className="me-2" />
-                      {pendingFile ? pendingFile.name : 'Choisir un fichier'}
-                    </Button>
-                  </div>
-                </Modal.Body>
+                    />
+                  </Form.Group>
+                </Form>
+              </Modal.Body>
 
-                <Modal.Footer>
+              <Modal.Footer>
+                <Button variant="secondary" onClick={() => setShowUploadFolderForm(false)}>
+                  Annuler
+                </Button>
+                <Button
+                  variant="primary"
+                  disabled={!folderFiles.length || !folderName}
+                  onClick={handleFolderUpload}
+                >
+                  Suivant
+                </Button>
+              </Modal.Footer>
+            </Modal>
+
+            <Modal
+              show={showUploadForm}
+              onHide={() => setShowUploadForm(false)}
+              centered
+              backdrop="static"
+              style={{ zIndex: 1050 }}
+            >
+              <Modal.Header closeButton>
+                <Modal.Title>Importer un fichier</Modal.Title>
+              </Modal.Header>
+
+              <Modal.Body>
+                {errorMessage && <Alert variant="danger">{errorMessage}</Alert>}
+
+                <div className="text-center">
+                  <input
+                    type="file"
+                    id="file-upload"
+                    style={{ display: 'none' }}
+                    accept=".pdf,.docx,.jpg,.jpeg,.png,.mp4,.webm"
+                    onChange={(e) => setPendingFile(e.target.files[0])}
+                  />
+
                   <Button
-                    variant="secondary"
-                    onClick={() => setShowUploadForm(false)}
+                    variant="outline-primary"
+                    onClick={() => document.getElementById('file-upload').click()}
+                    className="d-flex align-items-center justify-content-center mx-auto"
+                    style={{
+                      height: '45px',
+                      width: '100%',
+                      maxWidth: '350px',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      borderRadius: '8px'
+                    }}
                   >
-                    Annuler
+                    <FaCloudUploadAlt size={20} className="me-2" />
+                    {pendingFile ? pendingFile.name : 'Choisir un fichier'}
                   </Button>
-                  <Button
-                    variant="primary"
-                    disabled={!pendingFile}
-                    onClick={handleNextStep}
-                  >
-                    Suivant
-                  </Button>
-                </Modal.Footer>
-              </Modal>
+                </div>
+              </Modal.Body>
+
+              <Modal.Footer>
+                <Button
+                  variant="secondary"
+                  onClick={() => setShowUploadForm(false)}
+                >
+                  Annuler
+                </Button>
+                <Button
+                  variant="primary"
+                  disabled={!pendingFile}
+                  onClick={handleNextStep}
+                >
+                  Suivant
+                </Button>
+              </Modal.Footer>
+            </Modal>
 
 
-              <div className="container-fluid d-flex flex-column gap-4 mb-4">
-                <div className="d-flex flex-wrap gap-2 justify-content-center">
+            <div className="container-fluid d-flex flex-column gap-4 mb-4">
+              <div className="d-flex flex-wrap gap-2 justify-content-center">
+                <Button
+                  key="all"
+                  variant={selectedCategory === '' ? 'secondary' : 'outline-secondary'}
+                  className="rounded-pill fw-semibold px-4 py-2"
+                  style={{ transition: 'all 0.2s ease-in-out' }}
+                  onClick={() => setSelectedCategory('')}
+                  onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.97)')}
+                  onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                >
+                  Toutes
+                </Button>
+
+                {categories.map((cat) => (
                   <Button
-                    key="all"
-                    variant={selectedCategory === '' ? 'secondary' : 'outline-secondary'}
+                    key={cat}
+                    variant={selectedCategory === cat ? 'secondary' : 'outline-secondary'}
                     className="rounded-pill fw-semibold px-4 py-2"
                     style={{ transition: 'all 0.2s ease-in-out' }}
-                    onClick={() => setSelectedCategory('')}
+                    onClick={() => handleCategoryButtonClick(cat)}
                     onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.97)')}
                     onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
                   >
-                    Toutes
+                    {cat}
                   </Button>
+                ))}
 
-                  {categories.map((cat) => (
-                    <Button
-                      key={cat}
-                      variant={selectedCategory === cat ? 'secondary' : 'outline-secondary'}
-                      className="rounded-pill fw-semibold px-4 py-2"
-                      style={{ transition: 'all 0.2s ease-in-out' }}
-                      onClick={() => handleCategoryButtonClick(cat)}
-                      onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.97)')}
-                      onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-                    >
-                      {cat}
-                    </Button>
-                  ))}
-
-                </div>
-
-                {selectedCategory === 'facture' && (
-                  <Card className="p-3">
-                    <h5 className="mb-3">🔎 Recherche avancée - Facture</h5>
-                    <Form>
-                      <Form.Group className="mb-2">
-                        <Form.Label>Montant minimum</Form.Label>
-                        <Form.Control
-                          type="number"
-                          value={searchFilters.montant || ''}
-                          onChange={(e) => setSearchFilters({ ...searchFilters, montant: e.target.value })}
-                        />
-                      </Form.Group>
-                      <Form.Group className="mb-2">
-                        <Form.Label>Nom entreprise</Form.Label>
-                        <Form.Control
-                          type="text"
-                          value={searchFilters.nom_entreprise || ''}
-                          onChange={(e) => setSearchFilters({ ...searchFilters, nom_entreprise: e.target.value })}
-                        />
-                      </Form.Group>
-                      <Form.Group className="mb-2">
-                        <Form.Label>Produit</Form.Label>
-                        <Form.Control
-                          type="text"
-                          value={searchFilters.produit || ''}
-                          onChange={(e) => setSearchFilters({ ...searchFilters, produit: e.target.value })}
-                        />
-                      </Form.Group>
-                      <Button variant="primary" onClick={() => handleAdvancedSearch()}>
-                        Rechercher
-                      </Button>
-                    </Form>
-                  </Card>
-                )}
-
-                {selectedCategory === 'cv' && (
-                  <Card className="p-3">
-                    <h5 className="mb-3">🔎 Recherche avancée - CV</h5>
-                    <Form>
-                      <Form.Group className="mb-2">
-                        <Form.Label>Nom candidat</Form.Label>
-                        <Form.Control
-                          type="text"
-                          value={searchFilters.nom_candidat || ''}
-                          onChange={(e) => setSearchFilters({ ...searchFilters, nom_candidat: e.target.value })}
-                        />
-                      </Form.Group>
-                      <Form.Group className="mb-2">
-                        <Form.Label>Métier</Form.Label>
-                        <Form.Control
-                          type="text"
-                          value={searchFilters.metier || ''}
-                          onChange={(e) => setSearchFilters({ ...searchFilters, metier: e.target.value })}
-                        />
-                      </Form.Group>
-                      <Button variant="primary" onClick={() => handleAdvancedSearch()}>
-                        Rechercher
-                      </Button>
-                    </Form>
-                  </Card>
-                )}
-
-                {selectedCategory === 'demande_conge' && (
-                  <Card className="p-3">
-                    <h5 className="mb-3">🔎 Recherche avancée - Demande de congé</h5>
-                    <Form>
-                      <Form.Group className="mb-2">
-                        <Form.Label>Numéro demande</Form.Label>
-                        <Form.Control
-                          type="text"
-                          value={searchFilters.numdemande || ''}
-                          onChange={(e) => setSearchFilters({ ...searchFilters, numdemande: e.target.value })}
-                        />
-                      </Form.Group>
-                      <Form.Group className="mb-2">
-                        <Form.Label>Date congé</Form.Label>
-                        <Form.Control
-                          type="date"
-                          value={searchFilters.dateconge || ''}
-                          onChange={(e) => setSearchFilters({ ...searchFilters, dateconge: e.target.value })}
-                        />
-                      </Form.Group>
-                      <Button variant="primary" onClick={() => handleAdvancedSearch()}>
-                        Rechercher
-                      </Button>
-                    </Form>
-                  </Card>
-                )}
-
-
-                <Table striped bordered hover responsive>
-                  <thead>
-                    <tr>
-                      <th>Document</th>
-                      <th>Date</th>
-                      <th>Catégorie</th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredDocuments.length > 0 ? (
-                      filteredDocuments
-                        .sort((a, b) => new Date(b.date) - new Date(a.date)) // tri du plus récent au plus ancien
-                        .map(doc => {
-                          const perms = permissionsByDoc[doc.id] || {};
-                          return (
-                            <tr key={doc.id}>
-                              <td>
-                                <span>
-                                  {doc.name} {doc.version && `(version ${doc.version})`}
-                                </span>
-
-                                <button
-                                  onClick={() => {
-                                    setSelectedDoc(doc);
-                                    navigate(`/docvoir/${doc.id}`);
-                                    setShowModal(false);
-                                  }}
-                                  className="p-0 m-0 bg-transparent border-0"
-                                  style={{ cursor: 'pointer' }}
-                                >
-                                  📄
-                                </button>
-                              </td>
-
-                              <td>{doc.date ? new Date(doc.date).toLocaleString() : 'Inconnue'}</td>
-                              <td>{doc.category || 'Non spécifiée'}</td>
-                              <td>
-                                {/* Détails (toujours actif) */}
-                                <Button
-                                  variant="info"
-                                  size="sm"
-                                  className="me-2"
-                                  onClick={() => navigate(`/documents/${doc.id}`)}
-                                  title="Voir les détails"
-                                >
-                                  <i className="bi bi-list-ul"></i>
-                                </Button>
-
-                                {/* Supprimer */}
-                                <Button
-                                  variant="danger"
-                                  size="sm"
-                                  className="me-2"
-                                  onClick={() => {
-                                    if (userRole === 'admin' || perms.can_delete || doc.owner_id === userId) {
-                                      handleDelete(doc.id);
-                                    }
-                                  }}
-                                  disabled={!(userRole === 'admin' || perms.can_delete || doc.owner_id === userId)}
-                                  title={
-                                    userRole === 'admin' || perms.can_delete || doc.owner_id === userId
-                                      ? 'Supprimer'
-                                      : 'Non autorisé à supprimer'
-                                  }
-                                  style={{
-                                    opacity: userRole === 'admin' || perms.can_delete || doc.owner_id === userId ? 1 : 0.15,
-                                    pointerEvents: userRole === 'admin' || perms.can_delete || doc.owner_id === userId ? 'auto' : 'none'
-                                  }}
-                                >
-                                  <i className="bi bi-trash"></i>
-                                </Button>
-
-                                {/* Partager */}
-                                <Button
-                                  variant="light"
-                                  size="sm"
-                                  className="me-2"
-                                  onClick={() => {
-                                    if (userRole === 'admin' || perms.can_share || doc.owner_id === userId) {
-                                      openShareModal(doc);
-                                    }
-                                  }}
-                                  disabled={!(userRole === 'admin' || perms.can_share || doc.owner_id === userId)}
-                                  title={
-                                    userRole === 'admin' || perms.can_share || doc.owner_id === userId
-                                      ? 'Partager'
-                                      : 'Non autorisé à partager'
-                                  }
-                                  style={{
-                                    opacity: userRole === 'admin' || perms.can_share || doc.owner_id === userId ? 1 : 0.15,
-                                    pointerEvents: userRole === 'admin' || perms.can_share || doc.owner_id === userId ? 'auto' : 'none'
-                                  }}
-                                >
-                                  <img src={shareIcon} width="20" alt="Partager" />
-                                </Button>
-
-                                {/* Créer un workflow */}
-                                <Button
-                                  variant="dark"
-                                  size="sm"
-                                  className="ms-2"
-                                  onClick={() => {
-                                    if (userRole === 'admin' || doc.owner_id === userId) {
-                                      handleOpenConfirm(doc);
-                                    }
-                                  }}
-                                  disabled={!(userRole === 'admin' || doc.owner_id === userId)}
-                                  title={
-                                    userRole === 'admin' || doc.owner_id === userId
-                                      ? 'Créer un workflow'
-                                      : 'Non autorisé à créer un workflow'
-                                  }
-                                  style={{
-                                    opacity: userRole === 'admin' || doc.owner_id === userId ? 1 : 0.15,
-                                    pointerEvents: userRole === 'admin' || doc.owner_id === userId ? 'auto' : 'none'
-                                  }}
-                                >
-                                  <i className="bi bi-play-fill me-1"></i>
-                                </Button>
-                              </td>
-
-                            </tr>
-                          );
-                        })
-                    ) : (
-                      <tr>
-                        <td colSpan="4" className="text-center">
-                          Aucun document trouvé
-                        </td>
-                      </tr>
-                    )}
-
-                  </tbody>
-                </Table>
               </div>
 
-
-              <Modal
-                show={showShareModal}
-                onHide={() => setShowShareModal(false)}
-                backdrop="static"
-                keyboard={false}
-                centered
-                style={{ zIndex: 1050 }}
-              >
-                <Modal.Header closeButton>
-                  <Modal.Title>Partager le document : {docToShare?.name}</Modal.Title>
-                </Modal.Header>
-                <Modal.Body>
+              {selectedCategory === 'facture' && (
+                <Card className="p-3">
+                  <h5 className="mb-3">🔎 Recherche avancée - Facture</h5>
                   <Form>
-                    <Form.Group className="mb-3">
-                      <Form.Label>Type d'accès</Form.Label>
-                      <Form.Select
-                        value={shareAccessType}
-                        onChange={(e) => setShareAccessType(e.target.value)}
-                      >
-                        <option value="public">Public (Tous les utilisateurs)</option>
-                        <option value="custom">Sélectionner des utilisateurs ou des groupes</option>
-                      </Form.Select>
+                    <Form.Group className="mb-2">
+                      <Form.Label>Montant minimum</Form.Label>
+                      <Form.Control
+                        type="number"
+                        value={searchFilters.montant || ''}
+                        onChange={(e) => setSearchFilters({ ...searchFilters, montant: e.target.value })}
+                      />
                     </Form.Group>
-
-                    {shareAccessType === 'custom' && (
-                      <>
-                        <Form.Group as={Row} className="mb-3">
-                          <Col md={6}>
-                            <Form.Label>Utilisateurs</Form.Label>
-                            <Select
-                              isMulti
-                              options={allUsers}
-                              value={allUsers.filter(option => allowedUsers.includes(option.value))}
-                              onChange={(selectedOptions) => {
-                                const selectedUserIds = selectedOptions.map(opt => opt.value);
-                                setSelectedUsers(selectedUserIds);
-                                setAllowedUsers(selectedUserIds);
-                              }}
-                              placeholder="Select users..."
-                              classNamePrefix="select"
-                            />
-                          </Col>
-
-                          <Col md={6}>
-                            <Form.Label>Groupe</Form.Label>
-                            <Select
-                              value={
-                                selectedGroup
-                                  ? {
-                                    value: selectedGroup,
-                                    label: allGroups.find(group => group.id === selectedGroup)?.nom,
-                                  }
-                                  : null
-                              }
-                              options={allGroups.map(group => ({
-                                value: group.id,
-                                label: group.nom,
-                              }))}
-                              onChange={(selectedOption) => {
-                                setSelectedGroup(selectedOption ? selectedOption.value : null);
-                              }}
-                              placeholder="Sélectionner un groupe..."
-                              classNamePrefix="select"
-                            />
-                          </Col>
-                        </Form.Group>
-                      </>
-                    )}
+                    <Form.Group className="mb-2">
+                      <Form.Label>Nom entreprise</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={searchFilters.nom_entreprise || ''}
+                        onChange={(e) => setSearchFilters({ ...searchFilters, nom_entreprise: e.target.value })}
+                      />
+                    </Form.Group>
+                    <Form.Group className="mb-2">
+                      <Form.Label>Produit</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={searchFilters.produit || ''}
+                        onChange={(e) => setSearchFilters({ ...searchFilters, produit: e.target.value })}
+                      />
+                    </Form.Group>
+                    <Button variant="primary" onClick={() => handleAdvancedSearch()}>
+                      Rechercher
+                    </Button>
                   </Form>
+                </Card>
+              )}
 
-
-                  {(userId === docToShare?.owner_id || userRole === 'admin') && (
-                    <Col md={4} className="d-flex flex-column justify-content-start">
-                      <label><strong>Droits d'accès :</strong></label>
-
-                      <Form.Check
-                        type="checkbox"
-                        id="read-access"
-                        label="Consulter"
-                        checked={permissions.consult}
-                        disabled // toujours activé
+              {selectedCategory === 'cv' && (
+                <Card className="p-3">
+                  <h5 className="mb-3">🔎 Recherche avancée - CV</h5>
+                  <Form>
+                    <Form.Group className="mb-2">
+                      <Form.Label>Nom candidat</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={searchFilters.nom_candidat || ''}
+                        onChange={(e) => setSearchFilters({ ...searchFilters, nom_candidat: e.target.value })}
                       />
-
-                      <Form.Check
-                        type="checkbox"
-                        id="modify-access"
-                        label="Modifier"
-                        checked={permissions.modify}
-                        onChange={(e) =>
-                          setPermissions((prev) => ({ ...prev, modify: e.target.checked }))
-                        }
+                    </Form.Group>
+                    <Form.Group className="mb-2">
+                      <Form.Label>Métier</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={searchFilters.metier || ''}
+                        onChange={(e) => setSearchFilters({ ...searchFilters, metier: e.target.value })}
                       />
+                    </Form.Group>
+                    <Button variant="primary" onClick={() => handleAdvancedSearch()}>
+                      Rechercher
+                    </Button>
+                  </Form>
+                </Card>
+              )}
 
-                      <Form.Check
-                        type="checkbox"
-                        id="delete-access"
-                        label="Supprimer"
-                        checked={permissions.delete}
-                        onChange={(e) =>
-                          setPermissions((prev) => ({ ...prev, delete: e.target.checked }))
-                        }
+              {selectedCategory === 'demande_conge' && (
+                <Card className="p-3">
+                  <h5 className="mb-3">🔎 Recherche avancée - Demande de congé</h5>
+                  <Form>
+                    <Form.Group className="mb-2">
+                      <Form.Label>Numéro demande</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={searchFilters.numdemande || ''}
+                        onChange={(e) => setSearchFilters({ ...searchFilters, numdemande: e.target.value })}
                       />
+                    </Form.Group>
+                    <Form.Group className="mb-2">
+                      <Form.Label>Date congé</Form.Label>
+                      <Form.Control
+                        type="date"
+                        value={searchFilters.dateconge || ''}
+                        onChange={(e) => setSearchFilters({ ...searchFilters, dateconge: e.target.value })}
+                      />
+                    </Form.Group>
+                    <Button variant="primary" onClick={() => handleAdvancedSearch()}>
+                      Rechercher
+                    </Button>
+                  </Form>
+                </Card>
+              )}
 
-                      <Form.Check
-                        type="checkbox"
-                        id="share-access"
-                        label="Partager"
-                        checked={permissions.share}
-                        onChange={(e) =>
-                          setPermissions((prev) => ({ ...prev, share: e.target.checked }))
-                        }
-                      />
-                    </Col>
+
+              <Table striped bordered hover responsive>
+                <thead>
+                  <tr>
+                    <th>Document</th>
+                    <th>Date</th>
+                    <th>Catégorie</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredDocuments.length > 0 ? (
+                    filteredDocuments
+                      .sort((a, b) => new Date(b.date) - new Date(a.date)) // tri du plus récent au plus ancien
+                      .map(doc => {
+                        const perms = permissionsByDoc[doc.id] || {};
+                        return (
+                          <tr key={doc.id}>
+                            <td>
+                              <span>
+                                {doc.name} {doc.version && `(version ${doc.version})`}
+                              </span>
+
+                              <button
+                                onClick={() => {
+                                  setSelectedDoc(doc);
+                                  navigate(`/docvoir/${doc.id}`);
+                                  setShowModal(false);
+                                }}
+                                className="p-0 m-0 bg-transparent border-0"
+                                style={{ cursor: 'pointer' }}
+                              >
+                                📄
+                              </button>
+                            </td>
+
+                            <td>{doc.date ? new Date(doc.date).toLocaleString() : 'Inconnue'}</td>
+                            <td>{doc.category || 'Non spécifiée'}</td>
+                            <td>
+                              {/* Détails (toujours actif) */}
+                              <Button
+                                variant="info"
+                                size="sm"
+                                className="me-2"
+                                onClick={() => navigate(`/documents/${doc.id}`)}
+                                title="Voir les détails"
+                              >
+                                <i className="bi bi-list-ul"></i>
+                              </Button>
+
+                              {/* Supprimer */}
+                              <Button
+                                variant="danger"
+                                size="sm"
+                                className="me-2"
+                                onClick={() => {
+                                  if (userRole === 'admin' || perms.can_delete || doc.owner_id === userId) {
+                                    handleDelete(doc.id);
+                                  }
+                                }}
+                                disabled={!(userRole === 'admin' || perms.can_delete || doc.owner_id === userId)}
+                                title={
+                                  userRole === 'admin' || perms.can_delete || doc.owner_id === userId
+                                    ? 'Supprimer'
+                                    : 'Non autorisé à supprimer'
+                                }
+                                style={{
+                                  opacity: userRole === 'admin' || perms.can_delete || doc.owner_id === userId ? 1 : 0.15,
+                                  pointerEvents: userRole === 'admin' || perms.can_delete || doc.owner_id === userId ? 'auto' : 'none'
+                                }}
+                              >
+                                <i className="bi bi-trash"></i>
+                              </Button>
+
+                              {/* Partager */}
+                              <Button
+                                variant="light"
+                                size="sm"
+                                className="me-2"
+                                onClick={() => {
+                                  if (userRole === 'admin' || perms.can_share || doc.owner_id === userId) {
+                                    openShareModal(doc);
+                                  }
+                                }}
+                                disabled={!(userRole === 'admin' || perms.can_share || doc.owner_id === userId)}
+                                title={
+                                  userRole === 'admin' || perms.can_share || doc.owner_id === userId
+                                    ? 'Partager'
+                                    : 'Non autorisé à partager'
+                                }
+                                style={{
+                                  opacity: userRole === 'admin' || perms.can_share || doc.owner_id === userId ? 1 : 0.15,
+                                  pointerEvents: userRole === 'admin' || perms.can_share || doc.owner_id === userId ? 'auto' : 'none'
+                                }}
+                              >
+                                <img src={shareIcon} width="20" alt="Partager" />
+                              </Button>
+
+                              {/* Créer un workflow */}
+                              <Button
+                                variant="dark"
+                                size="sm"
+                                className="ms-2"
+                                onClick={() => {
+                                  if (userRole === 'admin' || doc.owner_id === userId) {
+                                    handleOpenConfirm(doc);
+                                  }
+                                }}
+                                disabled={!(userRole === 'admin' || doc.owner_id === userId)}
+                                title={
+                                  userRole === 'admin' || doc.owner_id === userId
+                                    ? 'Créer un workflow'
+                                    : 'Non autorisé à créer un workflow'
+                                }
+                                style={{
+                                  opacity: userRole === 'admin' || doc.owner_id === userId ? 1 : 0.15,
+                                  pointerEvents: userRole === 'admin' || doc.owner_id === userId ? 'auto' : 'none'
+                                }}
+                              >
+                                <i className="bi bi-play-fill me-1"></i>
+                              </Button>
+                            </td>
+
+                          </tr>
+                        );
+                      })
+                  ) : (
+                    <tr>
+                      <td colSpan="4" className="text-center">
+                        Aucun document trouvé
+                      </td>
+                    </tr>
                   )}
 
-
-                </Modal.Body>
-                <Modal.Footer>
-                  <Button variant="secondary" onClick={() => setShowShareModal(false)}>
-                    Annuler
-                  </Button>
-                  <Button
-                    variant="primary"
-                    onClick={async () => {
-                      const visibilityValue = shareAccessType === 'public' ? 'public' : 'custom';
-
-                      try {
-                        await axios.put(
-                          `http://localhost:5000/api/documents/${docToShare.id}`,
-                          {
-                            visibility: visibilityValue,
-                            id_share: selectedUsers.length > 0 ? selectedUsers : [],     // tableau d'IDs
-                            id_group: selectedGroup ? [selectedGroup] : [],              // tableau d'un seul élément ou vide
-                          },
-                          { headers: { Authorization: `Bearer ${token}` } }
-                        );
-
-                        setDocuments(docs =>
-                          docs.map(doc =>
-                            doc.id === docToShare.id
-                              ? {
-                                ...doc,
-                                visibility: visibilityValue,
-                                id_share: selectedUsers,
-                                id_group: selectedGroup ? [selectedGroup] : [],
-                              }
-                              : doc
-                          )
-                        );
-
-                        setShowShareModal(false);
-                      } catch (err) {
-                        console.error('Erreur de mise à jour des permissions', err);
-                      }
-                    }}
-                  >
-                    Enregistrer
-                  </Button>
+                </tbody>
+              </Table>
+            </div>
 
 
-                </Modal.Footer>
-              </Modal>
+            <Modal
+              show={showShareModal}
+              onHide={() => setShowShareModal(false)}
+              backdrop="static"
+              keyboard={false}
+              centered
+              style={{ zIndex: 1050 }}
+            >
+              <Modal.Header closeButton>
+                <Modal.Title>Partager le document : {docToShare?.name}</Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                <Form>
+                  <Form.Group className="mb-3">
+                    <Form.Label>Type d'accès</Form.Label>
+                    <Form.Select
+                      value={shareAccessType}
+                      onChange={(e) => setShareAccessType(e.target.value)}
+                    >
+                      <option value="public">Public (Tous les utilisateurs)</option>
+                      <option value="custom">Sélectionner des utilisateurs ou des groupes</option>
+                    </Form.Select>
+                  </Form.Group>
 
-              <Modal
-                show={showConfirmModal}
-                onHide={() => setShowConfirmModal(false)}
-                centered
-                style={{ zIndex: 1050 }}
-              >
-                <Modal.Header closeButton>
-                  <Modal.Title>Créer un nouveau workflow ?</Modal.Title>
-                </Modal.Header>
-                <Modal.Body>
-                  {existingWorkflow ? (
-                    <div className="text-center">
-                      <Alert variant="warning">
-                        Un workflow existe déjà pour ce document !
-                      </Alert>
-                      <p><strong>Nom:</strong> {existingWorkflow.name}</p>
-                      <p><strong>Statut:</strong> {existingWorkflow.status}</p>
-                      <Button
-                        variant="primary"
-                        onClick={() => {
-                          setShowConfirmModal(false);
-                          navigate(`/workflowz/${existingWorkflow.id}`);
-                        }}
-                      >
-                        Voir le workflow existant
-                      </Button>
-                    </div>
-                  ) : (
+                  {shareAccessType === 'custom' && (
                     <>
-                      <p>Vous êtes sur le point de créer le workflow pour le document :</p>
-                      <strong>{modalDoc?.name}</strong>
-                      <hr />
-                      <Form.Group>
-                        <Form.Label>Nom du workflow</Form.Label>
-                        <Form.Control
-                          type="text"
-                          value={autoWfName}
-                          onChange={e => setAutoWfName(e.target.value)}
-                        />
+                      <Form.Group as={Row} className="mb-3">
+                        <Col md={6}>
+                          <Form.Label>Utilisateurs</Form.Label>
+                          <Select
+                            isMulti
+                            options={allUsers}
+                            value={allUsers.filter(option => allowedUsers.includes(option.value))}
+                            onChange={(selectedOptions) => {
+                              const selectedUserIds = selectedOptions.map(opt => opt.value);
+                              setSelectedUsers(selectedUserIds);
+                              setAllowedUsers(selectedUserIds);
+                            }}
+                            placeholder="Select users..."
+                            classNamePrefix="select"
+                          />
+                        </Col>
+
+                        <Col md={6}>
+                          <Form.Label>Groupe</Form.Label>
+                          <Select
+                            value={
+                              selectedGroup
+                                ? {
+                                  value: selectedGroup,
+                                  label: allGroups.find(group => group.id === selectedGroup)?.nom,
+                                }
+                                : null
+                            }
+                            options={allGroups.map(group => ({
+                              value: group.id,
+                              label: group.nom,
+                            }))}
+                            onChange={(selectedOption) => {
+                              setSelectedGroup(selectedOption ? selectedOption.value : null);
+                            }}
+                            placeholder="Sélectionner un groupe..."
+                            classNamePrefix="select"
+                          />
+                        </Col>
                       </Form.Group>
                     </>
                   )}
-                </Modal.Body>
+                </Form>
 
-                <Modal.Footer>
-                  <Button variant="secondary" onClick={() => setShowConfirmModal(false)}>
-                    Annuler
-                  </Button>
-                  <Button
-                    variant="primary"
-                    onClick={handleConfirmCreate}
-                    disabled={!!existingWorkflow}
-                  >
-                    Créer
-                  </Button>
-                </Modal.Footer>
-              </Modal>
-            </Card.Body>
-          </Card>
-        </Container>
-      </div>
-    </>
-  );
+
+                {(userId === docToShare?.owner_id || userRole === 'admin') && (
+                  <Col md={4} className="d-flex flex-column justify-content-start">
+                    <label><strong>Droits d'accès :</strong></label>
+
+                    <Form.Check
+                      type="checkbox"
+                      id="read-access"
+                      label="Consulter"
+                      checked={permissions.consult}
+                      disabled // toujours activé
+                    />
+
+                    <Form.Check
+                      type="checkbox"
+                      id="modify-access"
+                      label="Modifier"
+                      checked={permissions.modify}
+                      onChange={(e) =>
+                        setPermissions((prev) => ({ ...prev, modify: e.target.checked }))
+                      }
+                    />
+
+                    <Form.Check
+                      type="checkbox"
+                      id="delete-access"
+                      label="Supprimer"
+                      checked={permissions.delete}
+                      onChange={(e) =>
+                        setPermissions((prev) => ({ ...prev, delete: e.target.checked }))
+                      }
+                    />
+
+                    <Form.Check
+                      type="checkbox"
+                      id="share-access"
+                      label="Partager"
+                      checked={permissions.share}
+                      onChange={(e) =>
+                        setPermissions((prev) => ({ ...prev, share: e.target.checked }))
+                      }
+                    />
+                  </Col>
+                )}
+
+
+              </Modal.Body>
+              <Modal.Footer>
+                <Button variant="secondary" onClick={() => setShowShareModal(false)}>
+                  Annuler
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={async () => {
+                    const visibilityValue = shareAccessType === 'public' ? 'public' : 'custom';
+
+                    try {
+                      await axios.put(
+                        `http://localhost:5000/api/documents/${docToShare.id}`,
+                        {
+                          visibility: visibilityValue,
+                          id_share: selectedUsers.length > 0 ? selectedUsers : [],     // tableau d'IDs
+                          id_group: selectedGroup ? [selectedGroup] : [],              // tableau d'un seul élément ou vide
+                        },
+                        { headers: { Authorization: `Bearer ${token}` } }
+                      );
+
+                      setDocuments(docs =>
+                        docs.map(doc =>
+                          doc.id === docToShare.id
+                            ? {
+                              ...doc,
+                              visibility: visibilityValue,
+                              id_share: selectedUsers,
+                              id_group: selectedGroup ? [selectedGroup] : [],
+                            }
+                            : doc
+                        )
+                      );
+
+                      setShowShareModal(false);
+                    } catch (err) {
+                      console.error('Erreur de mise à jour des permissions', err);
+                    }
+                  }}
+                >
+                  Enregistrer
+                </Button>
+
+
+              </Modal.Footer>
+            </Modal>
+
+            <Modal
+              show={showConfirmModal}
+              onHide={() => setShowConfirmModal(false)}
+              centered
+              style={{ zIndex: 1050 }}
+            >
+              <Modal.Header closeButton>
+                <Modal.Title>Créer un nouveau workflow ?</Modal.Title>
+              </Modal.Header>
+              <Modal.Body>
+                {existingWorkflow ? (
+                  <div className="text-center">
+                    <Alert variant="warning">
+                      Un workflow existe déjà pour ce document !
+                    </Alert>
+                    <p><strong>Nom:</strong> {existingWorkflow.name}</p>
+                    <p><strong>Statut:</strong> {existingWorkflow.status}</p>
+                    <Button
+                      variant="primary"
+                      onClick={() => {
+                        setShowConfirmModal(false);
+                        navigate(`/workflowz/${existingWorkflow.id}`);
+                      }}
+                    >
+                      Voir le workflow existant
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <p>Vous êtes sur le point de créer le workflow pour le document :</p>
+                    <strong>{modalDoc?.name}</strong>
+                    <hr />
+                    <Form.Group>
+                      <Form.Label>Nom du workflow</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={autoWfName}
+                        onChange={e => setAutoWfName(e.target.value)}
+                      />
+                    </Form.Group>
+                  </>
+                )}
+              </Modal.Body>
+
+              <Modal.Footer>
+                <Button variant="secondary" onClick={() => setShowConfirmModal(false)}>
+                  Annuler
+                </Button>
+                <Button
+                  variant="primary"
+                  onClick={handleConfirmCreate}
+                  disabled={!!existingWorkflow}
+                >
+                  Créer
+                </Button>
+              </Modal.Footer>
+            </Modal>
+          </Card.Body>
+        </Card>
+      </Container>
+    </div>
+  </>
+);
 };
 export default Doc;
