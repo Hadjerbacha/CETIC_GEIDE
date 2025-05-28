@@ -634,7 +634,7 @@ const Doc = () => {
 
   try {
     const token = localStorage.getItem('token'); // si besoin
-    const res = await axios.post('http://localhost:5000/folders/upload', formData, {
+    const res = await axios.post('http://localhost:5000/api/folders', formData, {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'multipart/form-data'
@@ -642,7 +642,7 @@ const Doc = () => {
     });
 
     const { folderId } = res.data;
-    navigate(`/folder/${folderId}/complete`);
+    navigate(`/folder/${folderId}`);
   } catch (error) {
     console.error('Erreur upload dossier :', error);
   }

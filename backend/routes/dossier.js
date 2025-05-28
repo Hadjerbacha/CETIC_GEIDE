@@ -47,7 +47,7 @@ async function initializeDatabase() {
 }
 
 router.post('/', upload.any(), async (req, res) => {
-  const { name, parent_id, userId } = req.body;
+  const { name, parent_id, userId, description } = req.body;
 
   if (!name) {
     return res.status(400).json({ error: 'Nom du dossier requis' });
@@ -58,10 +58,10 @@ router.post('/', upload.any(), async (req, res) => {
   }
 
   try {
-    // 1. Création du dossier
+    // 1. Création du dossier avec description
     const folderResult = await pool.query(
-      `INSERT INTO folders (name, parent_id, user_id) VALUES ($1, $2, $3) RETURNING *`,
-      [name, parent_id || null, userId]
+      `INSERT INTO folders (name, parent_id, user_id, description) VALUES ($1, $2, $3, $4) RETURNING *`,
+      [name, parent_id || null, userId, description || null]
     );
 
     const folder = folderResult.rows[0];
@@ -87,6 +87,7 @@ router.post('/', upload.any(), async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
+
 
 
 
