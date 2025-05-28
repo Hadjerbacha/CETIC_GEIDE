@@ -620,44 +620,34 @@ const Doc = () => {
   };
 
   const handleFolderUpload = async () => {
-    const formData = new FormData();
-    folderFiles.forEach((file) => {
-      formData.append('files', file);
-    });
-    formData.append('name', folderName); // ✅ attendu côté backend
-    if (userId) {
-      formData.append('userId', userId); // ✅ optionnel
-    }
+  const formData = new FormData();
+  
+  folderFiles.forEach((file) => {
+    formData.append('files', file);
+  });
 
-    try {
-      const token = localStorage.getItem('token'); // ou selon où tu stockes ton token
-
-      const res = await axios.post('http://localhost:5000/api/folders', formData, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-
-      const { folderId } = res.data;
-      navigate(`/folder/${folderId}`);
-    } catch (error) {
-      console.error('Erreur upload dossier :', error);
-    }
-  };
-  // Ajouter les infos du dossier
-  formData.append('folder_name', folderName);
-  formData.append('folder_description', folderDescription);
-  formData.append('created_by', userId); // ID utilisateur connecté
+  formData.append('name', folderName);           // ✔️ nom du dossier
+  formData.append('description', folderDescription); // ✔️ description
+  if (userId) {
+    formData.append('userId', userId);           // ✔️ optionnel mais utile
+  }
 
   try {
-    const res = await axios.post('http://localhost:5000/folders/upload', formData);
+    const token = localStorage.getItem('token'); // si besoin
+    const res = await axios.post('http://localhost:5000/folders/upload', formData, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+
     const { folderId } = res.data;
     navigate(`/folder/${folderId}/complete`);
   } catch (error) {
     console.error('Erreur upload dossier :', error);
   }
 };
+
 
 return (
   <>
@@ -1315,6 +1305,8 @@ return (
       </Container>
     </div>
   </>
+
 );
 };
+
 export default Doc;
