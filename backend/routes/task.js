@@ -1068,7 +1068,7 @@ router.post("/:id/assign-tasks", authMiddleware, async (req, res) => {
       error: err.message
     });
   }
-});
+}); 
 
 
 // Dans task.js, ajoutez cette nouvelle route avant module.exports
