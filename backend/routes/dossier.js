@@ -46,31 +46,49 @@ async function initializeDatabase() {
   }
 }
 
-router.post('/folders', auth, async (req, res) => {
-  const { name, parent_id } = req.body;
+router.post('/', upload.any(), async (req, res) => {
+  const { name, parent_id, userId } = req.body;
 
   if (!name) {
     return res.status(400).json({ error: 'Nom du dossier requis' });
   }
 
-  if (!req.user || !req.user.id) {
-    return res.status(401).json({ error: 'Utilisateur non authentifié' });
+  if (!userId) {
+    return res.status(401).json({ error: 'Utilisateur non spécifié' });
   }
 
   try {
-    console.log('Utilisateur connecté:', req.user); // Pour debug
-
-    const result = await pool.query(
+    // 1. Création du dossier
+    const folderResult = await pool.query(
       `INSERT INTO folders (name, parent_id, user_id) VALUES ($1, $2, $3) RETURNING *`,
-      [name, parent_id || null, req.user.id]
+      [name, parent_id || null, userId]
     );
 
-    res.status(201).json(result.rows[0]);
+    const folder = folderResult.rows[0];
+
+    // 2. Insertion des documents uploadés dans le dossier
+    if (req.files && req.files.length > 0) {
+      const insertDocPromises = req.files.map(file => {
+        return pool.query(
+          `INSERT INTO documents (name, file_path, folder_id, owner_id, date, version)
+           VALUES ($1, $2, $3, $4, NOW(), 1)`,
+          [file.originalname, file.path, folder.id, userId]
+        );
+      });
+
+      await Promise.all(insertDocPromises);
+    }
+
+    // 3. Réponse avec l'ID du dossier créé
+    res.status(201).json({ folderId: folder.id });
+
   } catch (err) {
-    console.error('Erreur lors de la création du dossier:', err.stack);
+    console.error('Erreur lors de la création du dossier et des documents :', err.stack);
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
+
+
 
 // Express backend
 router.get('/folders/:id/documents', auth, async (req, res) => {

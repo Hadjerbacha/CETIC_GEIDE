@@ -81,6 +81,8 @@ const Doc = () => {
   const [loading, setLoading] = useState(true);
   const [folders, setFolders] = useState([]);
   const [folderDescription, setFolderDescription] = useState('');
+  const [parentId, setParentId] = useState(null);
+
 
 
 
@@ -595,7 +597,6 @@ const Doc = () => {
         [documentId]: data,
       }));
     } catch (err) {
-      console.error(`Erreur récupération permissions document ${documentId}:`, err);
       setPermissionsByDoc((prev) => ({
         ...prev,
         [documentId]: null,
@@ -638,25 +639,32 @@ const Doc = () => {
     }
   };
 
-  const handleFolderUpload = async () => {
-    const formData = new FormData();
-    folderFiles.forEach((file, index) => {
-      formData.append('files', file);
+ const handleFolderUpload = async () => {
+  const formData = new FormData();
+  folderFiles.forEach((file) => {
+    formData.append('files', file);
+  });
+formData.append('name', folderName); // ✅ attendu côté backend
+if (userId) {
+  formData.append('userId', userId); // ✅ optionnel
+}
+
+  try {
+    const token = localStorage.getItem('token'); // ou selon où tu stockes ton token
+
+    const res = await axios.post('http://localhost:5000/api/folders', formData, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data'
+      }
     });
 
-    // Ajouter les infos du dossier
-    formData.append('folder_name', folderName);
-    formData.append('folder_description', folderDescription);
-    formData.append('created_by', userId); // ID utilisateur connecté
-
-    try {
-      const res = await axios.post('http://localhost:5000/api/folders', formData);
-      const { folderId } = res.data;
-      navigate(`/folder/${folderId}/complete`);
-    } catch (error) {
-      console.error('Erreur upload dossier :', error);
-    }
-  };
+    const { folderId } = res.data;
+    navigate(`/folder/${folderId}`);
+  } catch (error) {
+    console.error('Erreur upload dossier :', error);
+  }
+};
 
   return (
     <>

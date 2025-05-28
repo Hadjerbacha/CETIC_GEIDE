@@ -23,6 +23,9 @@ const FolderListPage = () => {
   const { id } = useParams(); // récupère le folder_id depuis l'URL
   const currentFolderId = parseInt(id); // s’assure que c’est bien un nombre
   const [showImportFolderModal, setShowImportFolderModal] = useState(false);
+  const [showUploadFolderForm, setShowUploadFolderForm] = useState(false);
+const [folderDescription, setFolderDescription] = useState('');
+
 
   const [pendingFile, setPendingFile] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
@@ -39,23 +42,25 @@ const FolderListPage = () => {
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
   const [folderName, setFolderName] = useState('');
   const [userId, setUserId] = useState(null);
+  const [folderFiles, setFolderFiles] = useState([]);
 
-  useEffect(() => {
-    const fetchFolders = async () => {
-      try {
-        const res = await axios.get('http://localhost:5000/api/folders', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setFolders(res.data);
-      } catch (err) {
-        console.error('Erreur chargement des dossiers :', err);
-        setError("Erreur lors du chargement des dossiers.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchFolders();
-  }, [token]);
+    useEffect(() => {
+      const fetchFolders = async () => {
+        try {
+          const res = await axios.get('http://localhost:5000/api/folders', {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          setFolders(res.data);
+        } catch (err) {
+          console.error('Erreur chargement des dossiers :', err);
+          setError("Erreur lors du chargement des dossiers.");
+        } finally {
+          setLoading(false);
+        }
+      };
+      fetchFolders();
+    }, [token]);
+
 
   const handleViewFolder = (folderId) => {
     navigate(`/folder/${folderId}`);
@@ -208,43 +213,58 @@ const FolderListPage = () => {
   }
 };
 const handleImportFolder = async () => {
-  if (!folderName || !pendingFile || pendingFile.length === 0) {
-    alert("Veuillez fournir un nom de dossier et au moins un fichier.");
-    return;
-  }
-
   const formData = new FormData();
-  formData.append("name", folderName);
-
-  for (let i = 0; i < pendingFile.length; i++) {
-    formData.append("files", pendingFile[i]);
-  }
+  folderFiles.forEach((file) => {
+    formData.append('files', file);
+  });
+formData.append('name', folderName); // ✅ attendu côté backend
+if (userId) {
+  formData.append('userId', userId); // ✅ optionnel
+}
 
   try {
-    const res = await axios.post("http://localhost:5000/api/folders/import", formData, {
+    const token = localStorage.getItem('token'); // ou selon où tu stockes ton token
+
+    const res = await axios.post('http://localhost:5000/api/folders', formData, {
       headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "multipart/form-data"
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data'
       }
     });
 
-    console.log("Dossier importé :", res.data);
-    setShowImportFolderModal(false);
-    setFolderName('');
-    setPendingFile(null);
-
-    // Recharger les dossiers
-    const updated = await axios.get('http://localhost:5000/api/folders', {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    setFolders(updated.data);
-
-  } catch (err) {
-    console.error("Erreur lors de l'importation :", err);
-    alert("Erreur lors de l'importation du dossier.");
+    const { folderId } = res.data;
+    navigate(`/folder/${folderId}`);
+  } catch (error) {
+    console.error('Erreur upload dossier :', error);
   }
 };
 
+ const handleFolderUpload = async () => {
+  const formData = new FormData();
+  folderFiles.forEach((file) => {
+    formData.append('files', file);
+  });
+formData.append('name', folderName); // ✅ attendu côté backend
+if (userId) {
+  formData.append('userId', userId); // ✅ optionnel
+}
+
+  try {
+    const token = localStorage.getItem('token'); // ou selon où tu stockes ton token
+
+    const res = await axios.post('http://localhost:5000/api/folders', formData, {
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+
+    const { folderId } = res.data;
+    navigate(`/folder/${folderId}`);
+  } catch (error) {
+    console.error('Erreur upload dossier :', error);
+  }
+};
 
   return (
     <>
@@ -271,7 +291,7 @@ const handleImportFolder = async () => {
       Créer un dossier vide
     </Dropdown.Item>
 
-    <Dropdown.Item onClick={() => setShowImportFolderModal(true)}>
+    <Dropdown.Item onClick={() => setShowUploadFolderForm(true)}>
       <FaFolderOpen className="me-2" />
       Importer un dossier
     </Dropdown.Item>
@@ -340,46 +360,72 @@ const handleImportFolder = async () => {
           ))}
         </Row>
       </Container>
+ <Modal
+                show={showUploadFolderForm}
+                onHide={() => setShowUploadFolderForm(false)}
+                centered
+                backdrop="static"
+                style={{ zIndex: 1050 }}
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Importer un dossier</Modal.Title>
+                </Modal.Header>
 
-      <Modal style={{ zIndex: 1050 }} show={showImportFolderModal} onHide={() => setShowImportFolderModal(false)}>
-  <Modal.Header closeButton>
-    <Modal.Title>Importer un dossier</Modal.Title>
-  </Modal.Header>
-  <Modal.Body>
-    <Form>
-      <Form.Group controlId="formFolderName">
-        <Form.Label>Nom du dossier</Form.Label>
-        <Form.Control
-          type="text"
-          placeholder="Nom du dossier"
-          value={folderName}
-          onChange={(e) => setFolderName(e.target.value)}
-        />
-      </Form.Group>
-      <Form.Group controlId="formFolderFiles" className="mt-3">
-        <Form.Label>Fichiers</Form.Label>
-        <Form.Control
-          type="file"
-          multiple
-          webkitdirectory="true"
-          directory="true"
-          onChange={(e) => setPendingFile(e.target.files)}
-        />
-        <Form.Text className="text-muted">
-          Sélectionnez un dossier à importer depuis votre système de fichiers.
-        </Form.Text>
-      </Form.Group>
-    </Form>
-  </Modal.Body>
-  <Modal.Footer>
-    <Button variant="secondary" onClick={() => setShowImportFolderModal(false)}>
-      Annuler
-    </Button>
-    <Button variant="primary" onClick={handleImportFolder}>
-      Importer
-    </Button>
-  </Modal.Footer>
-</Modal>
+                <Modal.Body>
+                  <Form>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Nom du dossier</Form.Label>
+                      <Form.Control
+                        type="text"
+                        placeholder="Nom du dossier"
+                        value={folderName}
+                        onChange={(e) => setFolderName(e.target.value)}
+                      />
+                    </Form.Group>
+
+                    <Form.Group className="mb-3">
+                      <Form.Label>Description du dossier</Form.Label>
+                      <Form.Control
+                        as="textarea"
+                        rows={2}
+                        placeholder="Description"
+                        value={folderDescription}
+                        onChange={(e) => setFolderDescription(e.target.value)}
+                      />
+                    </Form.Group>
+
+                    <Form.Group className="mb-3">
+                      <Form.Label>Fichiers</Form.Label>
+                      <Form.Control
+                        type="file"
+                        webkitdirectory="true"
+                        directory=""
+                        multiple
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files);
+                          setFolderFiles(files);
+                          console.log('📁 Fichiers du dossier sélectionné :', files);
+                        }}
+                      />
+                    </Form.Group>
+                  </Form>
+                </Modal.Body>
+
+                <Modal.Footer>
+                  <Button variant="secondary" onClick={() => setShowUploadFolderForm(false)}>
+                    Annuler
+                  </Button>
+                  <Button
+                    variant="primary"
+                    disabled={!folderFiles.length || !folderName}
+                    onClick={handleFolderUpload}
+                  >
+                    Suivant
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+    
 
 
       <Modal show={showCreateFolderModal} style={{ zIndex: 1050 }} onHide={() => setShowCreateFolderModal(false)}>
