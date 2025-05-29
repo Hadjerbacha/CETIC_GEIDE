@@ -463,7 +463,7 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
 
   } catch (err) {
     console.error('❌ Erreur upload étape 1 :', err.stack);
-    if (req.file) fs.unlink(req.file.path, () => {});
+    if (req.file) fs.unlink(req.file.path, () => { });
     res.status(500).json({ error: 'Erreur upload étape 1', details: err.message });
   }
 });
@@ -571,6 +571,8 @@ router.get('/documents/search', async (req, res) => {
     res.status(500).json({ error: 'Erreur lors de la recherche' });
   }
 });
+
+//complete upload
 router.put('/:id', auth, async (req, res) => {
   const documentId = parseInt(req.params.id, 10);
   const {
@@ -588,7 +590,49 @@ router.put('/:id', auth, async (req, res) => {
       return res.status(400).json({ error: 'Le nom du document est requis.' });
     }
 
-    // 1. Mise à jour de la table documents
+    // 1. Récupération de la catégorie
+    const catRes = await pool.query(`SELECT category FROM documents WHERE id = $1`, [documentId]);
+    const category = catRes.rows[0]?.category;
+
+    // 2. Déduction de is_completed selon la catégorie
+    let is_completed = req.body.is_completed ?? false;
+
+
+    if (category === 'facture') {
+      const {
+        num_facture = '',
+        nom_entreprise = '',
+        produit = '',
+        montant = 0,
+        date_facture = null
+      } = req.body;
+
+      is_completed = Boolean(num_facture && nom_entreprise && produit && montant && date_facture);
+    }
+
+    if (category === 'cv') {
+      const {
+        num_cv = '',
+        nom_candidat = '',
+        metier = '',
+        lieu = '',
+        experience = '',
+        domaine = ''
+      } = req.body;
+
+      is_completed = Boolean(num_cv && nom_candidat && metier && lieu && experience && domaine);
+    }
+
+    if (category === 'demande_conge') {
+      const {
+        numDemande = '',
+        dateConge = null
+      } = extraFields;
+
+      is_completed = Boolean(numDemande && dateConge);
+    }
+
+    // 3. Mise à jour de la table documents
     await pool.query(`
       UPDATE documents 
       SET 
@@ -596,47 +640,45 @@ router.put('/:id', auth, async (req, res) => {
         summary = $2,
         tags = $3,
         priority = $4,
-        metadata = $5
-      WHERE id = $6
-    `, [name, summary, tags, prio, metadata, documentId]);
+        metadata = $5,
+        is_completed = $6
+      WHERE id = $7
+    `, [name, summary, tags, prio, metadata, is_completed, documentId]);
 
-    // 2. Ajout/MAJ dans la table spécialisée
-    const catRes = await pool.query(`SELECT category FROM documents WHERE id = $1`, [documentId]);
-    const category = catRes.rows[0]?.category;
-
+    // 4. Ajout/MAJ dans la table spécialisée
     switch (category) {
-  case 'facture':
-  await pool.query(`
-    INSERT INTO factures (document_id, numero_facture, nom_entreprise, produit, montant, date_facture)
-    VALUES ($1, $2, $3, $4, $5, $6)
-    ON CONFLICT (document_id) DO UPDATE 
-    SET numero_facture = $2,
-        nom_entreprise = $3,
-        produit = $4,
-        montant = $5,
-        date_facture = $6;
-  `, [
-    documentId,
-    req.body.num_facture || '',
-    req.body.nom_entreprise || '',
-    req.body.produit || '',
-    req.body.montant || 0,
-    req.body.date_facture || null
-  ]);
-  break;
+      case 'facture':
+        await pool.query(`
+          INSERT INTO factures (document_id, numero_facture, nom_entreprise, produit, montant, date_facture)
+          VALUES ($1, $2, $3, $4, $5, $6)
+          ON CONFLICT (document_id) DO UPDATE 
+          SET numero_facture = $2,
+              nom_entreprise = $3,
+              produit = $4,
+              montant = $5,
+              date_facture = $6;
+        `, [
+          documentId,
+          req.body.num_facture || '',
+          req.body.nom_entreprise || '',
+          req.body.produit || '',
+          req.body.montant || 0,
+          req.body.date_facture || null
+        ]);
+        break;
 
       case 'cv':
         await pool.query(`
-  INSERT INTO cv (document_id, num_cv, nom_candidat, metier, lieu, experience, domaine)
-  VALUES ($1, $2, $3, $4, $5, $6, $7)
-  ON CONFLICT (document_id) DO UPDATE SET
-    num_cv = $2,
-    nom_candidat = $3,
-    metier = $4,
-    lieu = $5,
-    experience = $6,
-    domaine = $7
-`, [
+          INSERT INTO cv (document_id, num_cv, nom_candidat, metier, lieu, experience, domaine)
+          VALUES ($1, $2, $3, $4, $5, $6, $7)
+          ON CONFLICT (document_id) DO UPDATE SET
+            num_cv = $2,
+            nom_candidat = $3,
+            metier = $4,
+            lieu = $5,
+            experience = $6,
+            domaine = $7
+        `, [
           documentId,
           req.body.num_cv || '',
           req.body.nom_candidat || '',
@@ -645,8 +687,7 @@ router.put('/:id', auth, async (req, res) => {
           req.body.experience || '',
           req.body.domaine || ''
         ]);
-
-
+        break;
 
       case 'demande_conge':
         await pool.query(`
@@ -665,7 +706,7 @@ router.put('/:id', auth, async (req, res) => {
         break;
     }
 
-    // 3. Gestion des collections (optionnelle)
+    // 5. Gestion des collections (optionnelle)
     if (collection_name) {
       const resCollection = await pool.query(
         `SELECT id FROM collections WHERE name = $1 AND user_id = $2`,
@@ -689,15 +730,18 @@ router.put('/:id', auth, async (req, res) => {
       `, [documentId, collectionId, collection_name]);
     }
 
-    // 4. Renvoi du document mis à jour
+    // 6. Renvoi du document mis à jour
     const updated = await pool.query('SELECT * FROM documents WHERE id = $1', [documentId]);
     res.status(200).json(updated.rows[0]);
 
   } catch (err) {
     console.error('❌ Erreur update document :', err);
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
+    console.log("is_completed reçu :", req.body.is_completed); // doit afficher true
+
   }
 });
+
 router.get('/:id/details', auth, async (req, res) => {
   const documentId = req.params.id;
 
@@ -920,6 +964,16 @@ router.post('/', upload.array('files'), async (req, res) => {
   }
 });
 
+// Suppression des documents non complétés après 10 min
+setTimeout(async () => {
+  const doc = await pool.query("SELECT is_completed FROM documents WHERE id = $1", [id]);
+  if (!doc.rows[0]?.is_completed) {
+    await pool.query("DELETE FROM documents WHERE id = $1", [id]);
+    console.log("Document supprimé automatiquement car incomplet.");
+  }
+}, 10 * 60 * 1000); // 10 minutes
+
+
 
 // DELETE : supprimer un document de la base de données et du disque
 router.delete('/:id', auth, async (req, res) => {
@@ -1039,9 +1093,11 @@ router.put('/:id/access', async (req, res) => {
     });
   } catch (error) {
     console.error('Erreur lors de la mise à jour de l\'accès :', error);
+    
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
+
 
 
 // POST /api/categories
