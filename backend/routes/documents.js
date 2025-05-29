@@ -274,6 +274,7 @@ router.get('/', auth, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
+
 router.post('/', auth, upload.single('file'), async (req, res) => {
   let {
     name,
@@ -292,7 +293,6 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
   folder_id = Number(folder_id);
   if (isNaN(folder_id)) folder_id = null;
 
-
   if (!req.file) {
     return res.status(400).json({ error: 'Fichier non téléchargé' });
   }
@@ -303,7 +303,7 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
 
   const fullPath = req.file.path;
   const file_path = `/uploads/${req.file.filename}`;
-  const mimeType = mime.lookup(req.file.originalname);
+  const mimeType = mime.lookup(req.file.originalname) || ''; // ← FIX ici
 
   const canModify = can_modify === 'true' || can_modify === true;
   const canDelete = can_delete === 'true' || can_delete === true;
@@ -312,14 +312,14 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
   try {
     let extractedText = '';
 
-    if (mimeType === 'application/pdf') {
+    if (mimeType.startsWith('application/pdf')) {
       const dataBuffer = fs.readFileSync(fullPath);
       const data = await pdfParse(dataBuffer);
       extractedText = data.text;
-    } else if (mimeType?.startsWith('image/')) {
+    } else if (mimeType.startsWith('image/')) {
       const result = await Tesseract.recognize(fullPath, 'eng');
       extractedText = result.data.text;
-    } else if (mimeType?.startsWith('video/')) {
+    } else if (mimeType.startsWith('video/')) {
       try {
         extractedText = await extractFrameAndOcr(fullPath);
         if (!extractedText.trim()) {
@@ -392,7 +392,6 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
     id_share = parseIntArray(id_share);
     id_group = parseIntArray(id_group);
 
-    // ⚠️ Ajoute "metadata" JSON vide pour compatibilité future
     const result = await pool.query(`
       INSERT INTO documents 
         (name, file_path, category, text_content, summary, tags, owner_id,
@@ -417,17 +416,19 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
       id_share,
       id_group,
       folder_id,
-      {} // metadata vide à l'étape 1
+      {} // metadata vide
     ]);
 
     const documentId = result.rows[0].id;
 
+    // Autorisation propriétaire
     await pool.query(`
       INSERT INTO document_permissions 
       (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
       VALUES ($1, $2, 'owner', true, true, true, true)
     `, [req.user.id, documentId]);
 
+    // Accès public
     if (visibility === 'public') {
       const allUsers = await pool.query('SELECT id FROM users');
       await Promise.all(allUsers.rows.map(user =>
@@ -440,6 +441,7 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
       ));
     }
 
+    // Accès personnalisés
     if (visibility === 'custom' && Array.isArray(id_share)) {
       await Promise.all(
         id_share.map(userId =>
@@ -461,10 +463,11 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
 
   } catch (err) {
     console.error('❌ Erreur upload étape 1 :', err.stack);
-    if (req.file) fs.unlink(req.file.path, () => { });
+    if (req.file) fs.unlink(req.file.path, () => {});
     res.status(500).json({ error: 'Erreur upload étape 1', details: err.message });
   }
 });
+
 
 router.get('/latest', auth, async (req, res) => {
   const userId = req.user.id;

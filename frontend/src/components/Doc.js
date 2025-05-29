@@ -238,6 +238,7 @@ const Doc = () => {
 
     if (existingDoc && !forceUpload) {
       const isAllowedToModify =
+         
         userRole === 'admin' ||
         existingDoc.owner_id === userId ||
         (existingDoc.permissions && existingDoc.permissions.can_modify);
@@ -649,6 +650,8 @@ const Doc = () => {
 };
 
 
+
+
 return (
   <>
     <Navbar />
@@ -780,7 +783,7 @@ return (
                     type="file"
                     id="file-upload"
                     style={{ display: 'none' }}
-                    accept=".pdf,.docx,.jpg,.jpeg,.png,.mp4,.webm"
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.gif,.bmp,.mp3,.mp4,.avi,.mkv,.zip,.rar,.7z,.py,.js"
                     onChange={(e) => setPendingFile(e.target.files[0])}
                   />
 

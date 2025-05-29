@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Form, Button, Container, Card, Alert } from 'react-bootstrap';
 import axios from 'axios';
 import Navbar from './Navbar';
+import { jwtDecode } from 'jwt-decode';
 
 const DocumentCompletion = () => {
   const { id } = useParams();
@@ -25,6 +26,25 @@ const DocumentCompletion = () => {
 
   const [baseName, setBaseName] = useState('');
   const [extension, setExtension] = useState('');
+  const [userId, setUserId] = useState(null);
+  const [userRole, setUserRole] = useState('');
+
+  
+
+  // Modifiez le useEffect pour récupérer le rôle
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+        const { id, role } = jwtDecode(token);
+        setUserId(id);
+        setUserRole(role);
+      } catch (e) {
+        console.error('Token invalide:', e);
+      }
+    }
+  }, []);
+
 
 
   useEffect(() => {
@@ -99,7 +119,7 @@ const DocumentCompletion = () => {
 
         if (duplicate) {
           setIsDuplicate(true);
-          const isAdmin = localStorage.getItem('role') === 'admin';
+          const isAdmin = userRole === 'admin';
           const canModify = doc.permissions?.can_modify === true;
 
           setCanAddVersion(isAdmin || canModify);
@@ -113,6 +133,8 @@ const DocumentCompletion = () => {
 
     if (id && token) fetchDocumentAndMetadata();
   }, [id, token]);
+
+
   useEffect(() => {
     const fetchDocument = async () => {
       try {
@@ -156,38 +178,38 @@ const DocumentCompletion = () => {
     }
   }, [docInfo]);
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
-  const tagArray = tags.split(',').map(t => t.trim()).filter(Boolean);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    const tagArray = tags.split(',').map(t => t.trim()).filter(Boolean);
 
-  try {
-    setIsSaving(true); // On active le mode sauvegarde / succès
+    try {
+      setIsSaving(true); // On active le mode sauvegarde / succès
 
-    await axios.put(`http://localhost:5000/api/documents/${id}`, {
-      name,
-      summary,
-      tags: tagArray,
-      prio: priority,
-      ...extraFields
-    }, {
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`
-      }
-    });
+      await axios.put(`http://localhost:5000/api/documents/${id}`, {
+        name,
+        summary,
+        tags: tagArray,
+        prio: priority,
+        ...extraFields
+      }, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      });
 
-    setSuccessMessage("Document enregistré avec succès !");
-    
-    // Après 2 secondes on redirige
-    setTimeout(() => {
-      navigate('/Documents');
-    }, 2000);
+      setSuccessMessage("Document enregistré avec succès !");
 
-  } catch (error) {
-    setIsSaving(false);
-    setErrorMessage("Échec de la mise à jour.");
-  }
-};
+      // Après 2 secondes on redirige
+      setTimeout(() => {
+        navigate('/Documents');
+      }, 2000);
+
+    } catch (error) {
+      setIsSaving(false);
+      setErrorMessage("Échec de la mise à jour.");
+    }
+  };
   const renderDocumentViewer = () => {
     if (!docInfo || !docInfo.file_path) return null;
 
@@ -229,6 +251,52 @@ const handleSubmit = async (e) => {
     setCanAddVersion(isAdmin || can_modify);
   };
 
+  console.log('🔍 userRole', userRole);
+
+  // Annule l'action actuelle (retour ou reset selon votre logique)
+const handleCancel = () => {
+  // Exemple : revenir à la page précédente ou fermer la section duplication
+  setIsDuplicate(false);
+  setDifferenceNote('');
+};
+
+// Enregistre comme une nouvelle version
+const handleSaveAsNewVersion = () => {
+  if (!differenceNote.trim()) return;
+
+  // Ajoutez ici l’appel à votre fonction backend d'enregistrement
+  // Exemple :
+  const payload = {
+    originalDocumentId: existingDocumentId,
+    newVersionNote: differenceNote,
+    file: uploadedFile,
+    // autres métadonnées nécessaires
+  };
+
+  // Appel à l'API (exemple avec fetch ou axios)
+  saveDocumentVersion(payload)
+    .then(() => {
+      toast.success("Nouvelle version enregistrée avec succès !");
+      navigate("/documents"); // ou autre redirection
+    })
+    .catch((error) => {
+      console.error("Erreur lors de l'enregistrement :", error);
+      toast.error("Échec de l'enregistrement de la nouvelle version.");
+    });
+};
+
+// Propose de renommer le fichier
+const handleRename = () => {
+  // Ici vous pouvez soit :
+  // - afficher une modal de renommage
+  // - ou directement vider le champ pour laisser l’utilisateur en saisir un nouveau
+
+  // Exemple simple : vider le nom pour forcer un nouveau
+  setDocumentName('');
+  toast.info("Veuillez saisir un nouveau nom de document.");
+};
+
+
 
   return (
     <>
@@ -241,15 +309,62 @@ const handleSubmit = async (e) => {
           <div className="col-md-8">
             <Card className="p-4 shadow-sm">
               <h3 className="mb-4">📝 Compléter les informations du document</h3>
-              {isDuplicate && (
-                <Alert variant={canAddVersion ? "info" : "danger"}>
-                  {canAddVersion ? (
-                    <>⚠️ Un document avec ce nom existe déjà. Vous pouvez l'enregistrer comme <strong>nouvelle version</strong>.<br />Veuillez décrire les différences ci-dessous.</>
-                  ) : (
-                    <>🚫 Un document avec ce nom existe déjà <strong>Veuillez changer le nom du document.</strong></>
-                  )}
-                </Alert>
-              )}
+          {isDuplicate && (
+  userRole === "admin" ? (
+    <>
+      <Alert variant="info">
+        ⚠️ Un document portant ce nom existe déjà. Vous pouvez l'enregistrer comme une <strong>nouvelle version</strong>.<br />
+        Merci d’indiquer les différences par rapport à la version précédente.
+      </Alert>
+
+      <Form.Group className="mb-3">
+        <Form.Label>Différences apportées</Form.Label>
+        <Form.Control
+          as="textarea"
+          rows={3}
+          value={differenceNote}
+          onChange={(e) => setDifferenceNote(e.target.value)}
+          placeholder="Précisez les modifications ou ajouts apportés à cette version..."
+          required
+        />
+      </Form.Group>
+
+      <div className="d-flex justify-content-end gap-2">
+        <Button
+          variant="secondary"
+          onClick={handleCancel} // à définir si pas encore fait
+        >
+          Annuler
+        </Button>
+        <Button
+          variant="primary"
+          onClick={handleSaveAsNewVersion} // à définir aussi
+          disabled={!differenceNote.trim()} // pour éviter les validations vides
+        >
+          Enregistrer comme nouvelle version
+        </Button>
+      </div>
+    </>
+  ) : (
+    <>
+      <Alert variant="danger">
+        ❌ Ce nom de document est déjà utilisé et vous ne disposez pas des droits de modification.<br />
+        Veuillez renommer votre fichier pour poursuivre l’enregistrement.
+      </Alert>
+
+      <div className="d-flex justify-content-end">
+        <Button
+          variant="warning"
+          onClick={handleRename} // à définir pour proposer le renommage
+        >
+          Renommer le fichier
+        </Button>
+      </div>
+    </>
+  )
+)}
+
+
               <Form onSubmit={handleSubmit}>
                 <Form.Group className="mb-3">
                   <Form.Label>Nom du document</Form.Label>
