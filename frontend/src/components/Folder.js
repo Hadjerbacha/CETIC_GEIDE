@@ -23,6 +23,9 @@ const FolderListPage = () => {
   const { id } = useParams(); // récupère le folder_id depuis l'URL
   const currentFolderId = parseInt(id); // s’assure que c’est bien un nombre
   const [showImportFolderModal, setShowImportFolderModal] = useState(false);
+  const [showUploadFolderForm, setShowUploadFolderForm] = useState(false);
+  const [folderDescription, setFolderDescription] = useState('');
+
 
   const [pendingFile, setPendingFile] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
@@ -38,7 +41,9 @@ const FolderListPage = () => {
   const [step, setStep] = useState(1);
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
   const [folderName, setFolderName] = useState('');
-  const [userId, setUserId] = useState(null);
+  const [folderFiles, setFolderFiles] = useState([]);
+  const [userId, setUser] = useState(JSON.parse(localStorage.getItem("user")));
+
 
   useEffect(() => {
     const fetchFolders = async () => {
@@ -56,6 +61,7 @@ const FolderListPage = () => {
     };
     fetchFolders();
   }, [token]);
+
 
   const handleViewFolder = (folderId) => {
     navigate(`/folder/${folderId}`);
@@ -174,77 +180,74 @@ const FolderListPage = () => {
   };
 
   const handleCreateFolder = async (e) => {
-  e.preventDefault();
-  try {
-    const config = {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    };
+    e.preventDefault();
+    try {
+      const config = {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      };
 
-    // Changer ici : URL correcte pour création dossier
-    const response = await axios.post(
-      'http://localhost:5000/api/folders',
-      { 
-        name: folderName, 
-        parent_id: null // ou currentFolderId si tu veux créer un sous-dossier
-      },
-      config
-    );
+      // Changer ici : URL correcte pour création dossier
+      const response = await axios.post(
+        'http://localhost:5000/api/folders',
+        {
+          name: folderName,
+          parent_id: null // ou currentFolderId si tu veux créer un sous-dossier
+        },
+        config
+      );
 
-    console.log('Dossier créé:', response.data);
-    setShowCreateFolderModal(false);
-    setFolderName('');
-    // Recharge la liste des dossiers
-    const res = await axios.get('http://localhost:5000/api/folders', {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    setFolders(res.data);
+      console.log('Dossier créé:', response.data);
+      setShowCreateFolderModal(false);
+      setFolderName('');
+      // Recharge la liste des dossiers
+      const res = await axios.get('http://localhost:5000/api/folders', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setFolders(res.data);
 
-  } catch (error) {
-    console.error('Erreur création dossier:', error);
-    alert('Impossible de créer le dossier.');
-  }
-};
-const handleImportFolder = async () => {
-  if (!folderName || !pendingFile || pendingFile.length === 0) {
-    alert("Veuillez fournir un nom de dossier et au moins un fichier.");
-    return;
-  }
+    } catch (error) {
+      console.error('Erreur création dossier:', error);
+      alert('Impossible de créer le dossier.');
+    }
+  };
 
-  const formData = new FormData();
-  formData.append("name", folderName);
 
-  for (let i = 0; i < pendingFile.length; i++) {
-    formData.append("files", pendingFile[i]);
-  }
+  const handleFolderUpload = async () => {
+    const formData = new FormData();
 
-  try {
-    const res = await axios.post("http://localhost:5000/api/folders/import", formData, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "multipart/form-data"
-      }
+    folderFiles.forEach((file) => {
+      formData.append('files', file);
     });
 
-    console.log("Dossier importé :", res.data);
-    setShowImportFolderModal(false);
-    setFolderName('');
-    setPendingFile(null);
+    formData.append('name', folderName);           // ✔️ nom du dossier
+    formData.append('description', folderDescription); // ✔️ description
+    if (userId) {
+      formData.append('userId', userId.id);           // ✔️ optionnel mais utile
+    }
+    console.log("Utilisateur connecté :", userId);
+    console.log("🧾 Données envoyées :");
+    console.log("userId", userId); // <-- Vérifie qu'il ne contient pas un objet
+    console.log("userId.id", userId?.id);
 
-    // Recharger les dossiers
-    const updated = await axios.get('http://localhost:5000/api/folders', {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-    setFolders(updated.data);
 
-  } catch (err) {
-    console.error("Erreur lors de l'importation :", err);
-    alert("Erreur lors de l'importation du dossier.");
-  }
-};
+    try {
+      const token = localStorage.getItem('token'); // si besoin
+      const res = await axios.post('http://localhost:5000/api/folders', formData, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data'
+        }
+      });
 
+      const { folderId } = res.data;
+      navigate(`/folder/${folderId}`);
+    } catch (error) {
+      console.error('Erreur upload dossier :', error);
+    }
+  };
 
   return (
     <>
@@ -260,23 +263,23 @@ const handleImportFolder = async () => {
               onChange={(e) => setSearchTerm(e.target.value)}
             />
           </Form>
-    <Dropdown>
-  <Dropdown.Toggle variant="primary" id="dropdown-basic">
-    <FaFolderOpen className="me-2" /> Options
-  </Dropdown.Toggle>
+          <Dropdown>
+            <Dropdown.Toggle variant="primary" id="dropdown-basic">
+              <FaFolderOpen className="me-2" /> Options
+            </Dropdown.Toggle>
 
-  <Dropdown.Menu>
-    <Dropdown.Item onClick={() => setShowCreateFolderModal(true)}>
-      <FaFolderPlus className="me-2" />
-      Créer un dossier vide
-    </Dropdown.Item>
+            <Dropdown.Menu>
+              <Dropdown.Item onClick={() => setShowCreateFolderModal(true)}>
+                <FaFolderPlus className="me-2" />
+                Créer un dossier vide
+              </Dropdown.Item>
 
-    <Dropdown.Item onClick={() => setShowImportFolderModal(true)}>
-      <FaFolderOpen className="me-2" />
-      Importer un dossier
-    </Dropdown.Item>
-  </Dropdown.Menu>
-</Dropdown>
+              <Dropdown.Item onClick={() => setShowUploadFolderForm(true)}>
+                <FaFolderOpen className="me-2" />
+                Importer un dossier
+              </Dropdown.Item>
+            </Dropdown.Menu>
+          </Dropdown>
 
 
 
@@ -340,46 +343,72 @@ const handleImportFolder = async () => {
           ))}
         </Row>
       </Container>
+      <Modal
+        show={showUploadFolderForm}
+        onHide={() => setShowUploadFolderForm(false)}
+        centered
+        backdrop="static"
+        style={{ zIndex: 1050 }}
+      >
+        <Modal.Header closeButton>
+          <Modal.Title>Importer un dossier</Modal.Title>
+        </Modal.Header>
 
-      <Modal style={{ zIndex: 1050 }} show={showImportFolderModal} onHide={() => setShowImportFolderModal(false)}>
-  <Modal.Header closeButton>
-    <Modal.Title>Importer un dossier</Modal.Title>
-  </Modal.Header>
-  <Modal.Body>
-    <Form>
-      <Form.Group controlId="formFolderName">
-        <Form.Label>Nom du dossier</Form.Label>
-        <Form.Control
-          type="text"
-          placeholder="Nom du dossier"
-          value={folderName}
-          onChange={(e) => setFolderName(e.target.value)}
-        />
-      </Form.Group>
-      <Form.Group controlId="formFolderFiles" className="mt-3">
-        <Form.Label>Fichiers</Form.Label>
-        <Form.Control
-          type="file"
-          multiple
-          webkitdirectory="true"
-          directory="true"
-          onChange={(e) => setPendingFile(e.target.files)}
-        />
-        <Form.Text className="text-muted">
-          Sélectionnez un dossier à importer depuis votre système de fichiers.
-        </Form.Text>
-      </Form.Group>
-    </Form>
-  </Modal.Body>
-  <Modal.Footer>
-    <Button variant="secondary" onClick={() => setShowImportFolderModal(false)}>
-      Annuler
-    </Button>
-    <Button variant="primary" onClick={handleImportFolder}>
-      Importer
-    </Button>
-  </Modal.Footer>
-</Modal>
+        <Modal.Body>
+          <Form>
+            <Form.Group className="mb-3">
+              <Form.Label>Nom du dossier</Form.Label>
+              <Form.Control
+                type="text"
+                placeholder="Nom du dossier"
+                value={folderName}
+                onChange={(e) => setFolderName(e.target.value)}
+              />
+            </Form.Group>
+
+           <Form.Group controlId="folderDescription">
+  <Form.Label>Description</Form.Label>
+  <Form.Control
+    as="textarea"
+    rows={3}
+    value={folderDescription}
+    onChange={e => setFolderDescription(e.target.value)}
+    placeholder="Décris ton dossier ici..."
+  />
+</Form.Group>
+
+            <Form.Group className="mb-3">
+              <Form.Label>Fichiers</Form.Label>
+              <Form.Control
+                type="file"
+                webkitdirectory="true"
+                directory=""
+                multiple
+                onChange={(e) => {
+                  const files = Array.from(e.target.files);
+                  setFolderFiles(files);
+                  console.log('📁 Fichiers du dossier sélectionné :', files);
+                }}
+              />
+            </Form.Group>
+          </Form>
+        </Modal.Body>
+
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowUploadFolderForm(false)}>
+            Annuler
+          </Button>
+          <Button
+            variant="primary"
+            disabled={!folderFiles.length || !folderName}
+            onClick={handleFolderUpload}
+          >
+            Suivant
+          </Button>
+        </Modal.Footer>
+      </Modal>
+
+
 
 
       <Modal show={showCreateFolderModal} style={{ zIndex: 1050 }} onHide={() => setShowCreateFolderModal(false)}>
