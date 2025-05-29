@@ -277,42 +277,44 @@ router.delete('/:id',authMiddleware, async (req, res) => {
 });
 
 // 🔄 Mettre à jour uniquement le status
+// 🔄 Mettre à jour le statut d'une tâche, avec gestion de rejet et déblocage
 router.patch('/:id/status', authMiddleware, async (req, res) => {
   const { id } = req.params;
-  const { status } = req.body;
+  const { status, rejection_reason } = req.body;
 
-  // Validation du statut
-  const allowedStatuses = ['pending', 'completed', 'in_progress', 'blocked', 'cancelled'];
+  const allowedStatuses = ['pending', 'completed', 'in_progress', 'blocked', 'rejected', 'cancelled'];
   if (!allowedStatuses.includes(status)) {
     return res.status(400).json({ error: 'Statut invalide' });
   }
 
   try {
-    // 1. Conversion explicite des types
     const taskId = parseInt(id);
-    const statusText = String(status); // Conversion explicite en texte
+    const userId = req.user.id;
 
-    // 2. Mise à jour avec typage forcé
+    // Mise à jour principale de la tâche
     const result = await pool.query(
       `UPDATE tasks 
-       SET status = $1::varchar(50),  -- Conversion explicite
+       SET status = $1::varchar(50),
+           rejection_reason = $2,
+           rejected_at = CASE WHEN $1 = 'rejected' THEN NOW() ELSE NULL END,
+           rejected_by = CASE WHEN $1 = 'rejected' THEN $3 ELSE NULL END,
            completed_at = CASE WHEN $1 = 'completed' THEN NOW() ELSE completed_at END
-       WHERE id = $2
+       WHERE id = $4
        RETURNING *`,
-      [statusText, taskId]  // Paramètres typés
+      [status, rejection_reason, userId, taskId]
     );
 
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Tâche non trouvée' });
     }
 
-    // 3. Déblocage des tâches dépendantes (avec typage forcé)
+    // Si la tâche est complétée, débloquer les tâches suivantes
     if (status === 'completed') {
       await pool.query(
         `UPDATE tasks 
-         SET status = 'pending'::varchar(50)  -- Conversion explicite
-         WHERE depends_on = $1::integer 
-           AND status = 'blocked'::varchar(50)`,  // Types explicites
+         SET status = 'pending'::varchar(50)
+         WHERE depends_on = $1::integer
+           AND status = 'blocked'::varchar(50)`,
         [taskId]
       );
     }
@@ -320,13 +322,11 @@ router.patch('/:id/status', authMiddleware, async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     console.error('Erreur SQL:', err);
-    res.status(500).json({ 
-      error: 'Erreur serveur',
-      details: err.message,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-    });
+    res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
+
+
   
   router.post('/notify', authMiddleware, async (req, res) => {
     const { assigned_to, title, description, due_date } = req.body;
@@ -550,6 +550,51 @@ router.post('/:id/complete', authMiddleware, async (req, res) => {
 
   } catch (err) {
     console.error('Erreur lors de la complétion de la tâche:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Nouvelle route pour gérer les notifications de refus
+router.post('/:id/notify-rejection', authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  const { reason } = req.body;
+
+  try {
+    // 1. Récupérer les infos de la tâche
+    const taskRes = await pool.query(
+      `SELECT t.*, w.created_by as creator_id, 
+       u.name as creator_name, u.prenom as creator_prenom
+       FROM tasks t
+       JOIN workflow w ON t.workflow_id = w.id
+       JOIN users u ON w.created_by = u.id
+       WHERE t.id = $1`,
+      [id]
+    );
+
+    if (taskRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Tâche non trouvée' });
+    }
+
+    const task = taskRes.rows[0];
+
+    // 2. Créer la notification
+    await pool.query(
+      `INSERT INTO notifications 
+       (user_id, sender_id, message, type, related_task_id, is_read) 
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        task.creator_id,
+        req.user.id,
+        `Votre tâche "${task.title}" a été refusée. Raison: ${reason}`,
+        'task_rejected',
+        id,
+        false
+      ]
+    );
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('Erreur notification de refus:', err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });

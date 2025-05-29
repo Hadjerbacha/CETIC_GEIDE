@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
 import { useParams, useLocation, useNavigate } from 'react-router-dom';
-import { Button, Badge, Spinner, Modal, Form, Card, Row, Col, ProgressBar, Tooltip, OverlayTrigger, Accordion } from 'react-bootstrap';
+import { Alert, Button, Badge, Spinner, Modal, Form, Card, Row, Col, ProgressBar, Tooltip, OverlayTrigger, Accordion } from 'react-bootstrap';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   FiClock, 
@@ -86,11 +86,16 @@ const StatsPanel = ({ workflow, steps }) => {
 };
 
 // Composant d'étape simplifié
-const StepItem = ({ step, onComplete, workflowStatus }) => {
+const StepItem = ({ step, onComplete, onReject, workflowStatus }) => {
+  const [rejectReason, setRejectReason] = useState('');
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  
   const isCompleted = step.status === 'completed';
   const isPending = step.status === 'pending';
   const isBlocked = step.status === 'blocked';
+  const isRejected = step.status === 'rejected';
   const completionDate = step.completed_at ? parseISO(step.completed_at) : null;
+  const rejectionDate = step.rejected_at ? parseISO(step.rejected_at) : null;
 
   const handleComplete = async () => {
     try {
@@ -100,49 +105,102 @@ const StepItem = ({ step, onComplete, workflowStatus }) => {
     }
   };
 
+  const handleReject = () => {
+    setShowRejectModal(true);
+  };
+
+  const confirmReject = async () => {
+    try {
+      await onReject(step, rejectReason);
+      setShowRejectModal(false);
+      setRejectReason('');
+    } catch (err) {
+      toast.error('Erreur lors du rejet');
+    }
+  };
+
   return (
-    <motion.div whileHover={{ scale: 1.01 }} transition={{ duration: 0.2 }}>
-      <Card className={`mb-2 ${isCompleted ? 'border-success' : ''} ${isBlocked ? 'bg-light' : ''}`}>
-        <Card.Body className="p-3">
-          <div className="d-flex justify-content-between align-items-center">
-            <div className="d-flex align-items-center">
-              <div className={`rounded-circle bg-${isCompleted ? 'success' : isBlocked ? 'secondary' : 'light'} p-2 me-3`}>
-                {isCompleted ? (
-                  <FiCheckCircle className="text-white" />
-                ) : isBlocked ? (
-                  <FiClock className="text-white" />
-                ) : (
-                  <FiClock className="text-secondary" />
-                )}
+    <>
+      <motion.div whileHover={{ scale: 1.01 }} transition={{ duration: 0.2 }}>
+        <Card className={`mb-2 ${
+          isCompleted ? 'border-success' : 
+          isRejected ? 'border-danger' : 
+          isBlocked ? 'bg-light' : ''
+        }`}>
+          <Card.Body className="p-3">
+            <div className="d-flex justify-content-between align-items-center">
+              <div className="d-flex align-items-center">
+                <div className={`rounded-circle ${
+                  isCompleted ? 'bg-success' : 
+                  isRejected ? 'bg-danger' : 
+                  isBlocked ? 'bg-secondary' : 'bg-light'
+                } p-2 me-3`}>
+                  {isCompleted ? (
+                    <FiCheckCircle className="text-white" />
+                  ) : isRejected ? (
+                    <FiAlertCircle className="text-white" />
+                  ) : isBlocked ? (
+                    <FiClock className="text-white" />
+                  ) : (
+                    <FiClock className="text-secondary" />
+                  )}
+                </div>
+                <div>
+                  <h5 className="mb-1">{step.name}</h5>
+                  <p className="text-muted mb-0">{step.description}</p>
+                  
+                  {/* Date de complétion */}
+                  {completionDate && (
+                    <small className="text-muted d-block">
+                      Terminé le {format(completionDate, 'PPp', { locale: fr })}
+                    </small>
+                  )}
+                  
+                  {/* Raison du rejet */}
+                  {/*{isRejected && (
+                    <div className="mt-2">
+                      <small className="text-danger fw-bold">Raison du refus:</small>
+                      <p className="mb-0 small">{step.rejection_reason}</p>
+                      <small className="text-muted">
+                        Refusé le {format(rejectionDate, 'PPp', { locale: fr })}
+                        {step.rejected_by && ` par ${step.rejected_by}`}
+                      </small>
+                    </div>
+                  )}*/}
+                  
+                  {/* Statut bloqué */}
+                  {isBlocked && (
+                    <small className="text-warning d-block">
+                      En attente des tâches précédentes
+                    </small>
+                  )}
+                </div>
               </div>
-              <div>
-                <h5 className="mb-1">{step.name}</h5>
-                <p className="text-muted mb-0">{step.description}</p>
-                {completionDate && (
-                  <small className="text-muted">
-                    Terminé le {format(completionDate, 'PPp', { locale: fr })}
-                  </small>
-                )}
-                {isBlocked && (
-                  <small className="text-warning">
-                    En attente des tâches précédentes
-                  </small>
-                )}
-              </div>
+              
+              {/* Actions */}
+              {isPending && workflowStatus === 'in_progress' && (
+                <div className="d-flex gap-2">
+                  <Button 
+                    variant="outline-success" 
+                    size="sm"
+                    onClick={handleComplete}
+                  >
+                    Valider
+                  </Button>
+                  <Button 
+                    variant="outline-danger" 
+                    size="sm"
+                    onClick={handleReject}
+                  >
+                    Rejeter
+                  </Button>
+                </div>
+              )}
             </div>
-            {isPending && workflowStatus === 'in_progress' && (
-              <Button 
-                variant="outline-success" 
-                size="sm"
-                onClick={handleComplete}
-              >
-                Marquer comme terminé
-              </Button>
-            )}
-          </div>
-        </Card.Body>
-      </Card>
-    </motion.div>
+          </Card.Body>
+        </Card>
+      </motion.div>
+    </>
   );
 };
 

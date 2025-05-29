@@ -491,12 +491,12 @@ router.get('/:id', authMiddleware, async (req, res) => {
 // routes/workflow.js
 router.post('/:id/steps/:stepId/complete', authMiddleware, async (req, res) => {
   const { id, stepId } = req.params;
-  const userId = req.user.id; // Assurez-vous que l'utilisateur est authentifié
+  const userId = req.user.id;
 
   try {
     // Marquer l'étape comme complétée
     await pool.query(
-      'UPDATE workflow_steps SET status = $1, completed_at = NOW() WHERE id = $2 AND workflow_id = $3',
+      'UPDATE tasks SET status = $1, completed_at = NOW() WHERE id = $2 AND workflow_id = $3',
       ['completed', stepId, id]
     );
 
@@ -504,7 +504,13 @@ router.post('/:id/steps/:stepId/complete', authMiddleware, async (req, res) => {
     const message = `Étape ${stepId} complétée par l'utilisateur ${userId}`;
     await logWorkflowAction(id, message);
 
-    res.status(200).json({ message: 'Étape complétée avec succès.' });
+    // Mettre à jour le statut du workflow
+    const workflowStatus = await updateWorkflowStatus(id);
+
+    res.status(200).json({ 
+      message: 'Étape complétée avec succès.',
+      workflowStatus: workflowStatus || 'unchanged'
+    });
   } catch (err) {
     console.error('Erreur lors de la complétion de l\'étape :', err);
     res.status(500).json({ error: 'Impossible de compléter l\'étape.' });
@@ -645,59 +651,104 @@ router.post("/:id/generate-tasks", authMiddleware, async (req, res) => {
     }
   });
 
+  // Fonction pour mettre à jour le statut du workflow en fonction des tâches
+async function updateWorkflowStatus(workflowId) {
+  try {
+    // Récupérer toutes les tâches du workflow
+    const tasksRes = await pool.query(
+      'SELECT status FROM tasks WHERE workflow_id = $1',
+      [workflowId]
+    );
+
+    const tasks = tasksRes.rows;
+    if (tasks.length === 0) return;
+
+    // Vérifier les statuts
+    const hasRejected = tasks.some(task => task.status === 'rejected');
+    const allCompleted = tasks.every(task => task.status === 'completed');
+
+    let newStatus = null;
+    
+    if (hasRejected) {
+      newStatus = 'rejected';
+    } else if (allCompleted) {
+      newStatus = 'completed';
+    }
+
+    // Mettre à jour le workflow si nécessaire
+    if (newStatus) {
+      await pool.query(
+        'UPDATE workflow SET status = $1 WHERE id = $2',
+        [newStatus, workflowId]
+      );
+    }
+
+    return newStatus;
+  } catch (err) {
+    console.error('Erreur lors de la mise à jour du statut du workflow:', err);
+    throw err;
+  }
+}
+
   // Route pour mettre à jour le statut d'un workflow
 router.patch('/:id/status', authMiddleware, async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
-  // Validation du statut
-  const allowedStatuses = ['pending', 'in_progress', 'completed', 'cancelled'];
+  const allowedStatuses = ['pending', 'completed', 'in_progress', 'blocked', 'cancelled', 'rejected'];
   if (!allowedStatuses.includes(status)) {
-    return res.status(400).json({ 
-      error: 'Statut invalide', 
-      allowedStatuses: allowedStatuses 
-    });
+    return res.status(400).json({ error: 'Statut invalide' });
   }
 
   try {
-// Mise à jour du statut
-const result = await pool.query(
-  `UPDATE workflow SET status = $1 WHERE id = $2 RETURNING *`,
-  [status, id]
-);
+    const taskId = parseInt(id);
+    const statusText = String(status);
 
-// Archivage automatique si le workflow est terminé
-if (status === 'completed') {
-  // Générer un rapport automatique
-  const report = `Workflow terminé le ${new Date().toLocaleDateString()}`;
-  
-  await pool.query(
-    `INSERT INTO workflow_archive
-     (workflow_id, name, description, document_id, created_by, completed_at, validation_report)
-     VALUES ($1, $2, $3, $4, $5, NOW(), $6)`,
-    [
-      id,
-      result.rows[0].name,
-      result.rows[0].description,
-      result.rows[0].document_id,
-      req.user.id,
-      report
-    ]
-  );
+    // 1. Mettre à jour la tâche
+    const result = await pool.query(
+      `UPDATE tasks 
+       SET status = $1::varchar(50),  
+           completed_at = CASE WHEN $1 = 'completed' THEN NOW() ELSE completed_at END
+       WHERE id = $2
+       RETURNING *`,
+      [statusText, taskId]
+    );
 
-  // Marquer le document comme archivé
-  await pool.query(
-    'UPDATE documents SET is_archived = true WHERE id = $1',
-    [result.rows[0].document_id]
-  );
-}
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Tâche non trouvée' });
+    }
 
-res.json(result.rows[0]);
-} catch (err) {
-console.error('Erreur:', err);
-res.status(500).json({ error: 'Erreur serveur' });
-}
+    const updatedTask = result.rows[0];
+    const workflowId = updatedTask.workflow_id;
+
+    // 2. Débloquer les tâches suivantes si la tâche est terminée
+    if (status === 'completed') {
+      await pool.query(
+        `UPDATE tasks 
+         SET status = 'pending'
+         WHERE depends_on = $1 AND status = 'blocked'`,
+        [taskId]
+      );
+    }
+
+    // 3. Mettre à jour le statut du workflow en fonction de toutes les tâches
+    const workflowStatus = await updateWorkflowStatus(workflowId);
+
+    res.json({ 
+      updatedTask, 
+      workflowStatus: workflowStatus || 'unchanged' 
+    });
+
+  } catch (err) {
+    console.error('Erreur SQL:', err);
+    res.status(500).json({ 
+      error: 'Erreur serveur',
+      details: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+  }
 });
+
 
 router.get('/document/:documentId', authMiddleware, async (req, res) => {
   const { documentId } = req.params;
@@ -1285,77 +1336,50 @@ router.post('/:id/generate-from-template', authMiddleware, async (req, res) => {
       taskMap[taskTemplate.order] = newTask.id;
       insertedTasks.push(newTask);
 
-      // Envoyer une notification pour TOUTES les tâches en pending (y compris celles débloquées plus tard)
-      if (initialStatus === 'pending') {
-        await sendTaskNotification(newTask.id, selectedUser.id, userId, taskTemplate.title);
+      // Envoyer une notification seulement si la tâche n'est pas bloquée
+      if (initialStatus !== 'blocked') {
+        await pool.query(
+          `INSERT INTO notifications (
+            user_id, 
+            sender_id, 
+            message, 
+            type, 
+            related_task_id,
+            is_read
+          ) VALUES ($1, $2, $3, $4, $5, $6)`,
+          [
+            selectedUser.id,
+            userId,
+            `Une nouvelle tâche vous a été assignée: "${taskTemplate.title}"`,
+            'task',
+            newTask.id,
+            false
+          ]
+        );
       }
     }
 
-    // Fonction helper pour envoyer des notifications
-    async function sendTaskNotification(taskId, assigneeId, creatorId, taskTitle) {
-      await pool.query(
-        `INSERT INTO notifications (
-          user_id, 
-          sender_id, 
-          message, 
-          type, 
-          related_task_id,
-          is_read
-        ) VALUES ($1, $2, $3, $4, $5, $6)`,
-        [
-          assigneeId,
-          creatorId,
-          `Nouvelle tâche assignée: "${taskTitle}"`,
-          'task',
-          taskId,
-          false
-        ]
-      );
-      
-      // Optionnel: Envoyer un email
-      await sendNotificationEmail(assigneeId, taskTitle);
-    }
-
-    // 5. Créer un déclencheur pour les notifications futures
-    await pool.query(`
-      CREATE OR REPLACE FUNCTION notify_on_task_unblock()
-      RETURNS TRIGGER AS $$
-      BEGIN
-        IF NEW.status = 'pending' AND OLD.status = 'blocked' THEN
-          INSERT INTO notifications (
-            user_id, sender_id, message, type, related_task_id, is_read
-          ) SELECT
-            assigned_to[1],  -- Premier utilisateur assigné
-            NEW.created_by,
-            'Tâche débloquée: "' || NEW.title || '"',
-            'task',
-            NEW.id,
-            false
-          FROM tasks WHERE id = NEW.id;
-        END IF;
-        RETURN NEW;
-      END;
-      $$ LANGUAGE plpgsql;
-
-      DROP TRIGGER IF EXISTS task_status_change ON tasks;
-      CREATE TRIGGER task_status_change
-      AFTER UPDATE ON tasks
-      FOR EACH ROW
-      EXECUTE FUNCTION notify_on_task_unblock();
-    `);
-
     res.status(201).json({
-      message: `Workflow généré avec notifications activées`,
+      message: `Workflow "${templates[documentType].workflowName}" créé avec succès`,
       workflowId: id,
-      tasks: insertedTasks
+      tasks: insertedTasks.map(t => ({
+        id: t.id,
+        title: t.title,
+        assigned_to: t.assigned_to,
+        status: t.status,
+        due_date: t.due_date
+      }))
     });
 
   } catch (err) {
-    console.error('Erreur:', err);
-    res.status(500).json({ error: 'Échec de la génération' });
+    console.error('Erreur génération workflow:', err);
+    res.status(500).json({ 
+      error: 'Erreur lors de la génération du workflow',
+      details: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
   }
 });
-
 
 router.get('/:workflowId/responses', authMiddleware, async (req, res) => {
   try {
