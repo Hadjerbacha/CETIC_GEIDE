@@ -27,8 +27,7 @@ const AssignedTasks = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [stats, setStats] = useState({
     pending: 0,
-    cancelled: 0,
-    in_progress: 0,
+    rejected: 0,
     completed: 0,
   });
   const navigate = useNavigate();
@@ -53,9 +52,7 @@ const AssignedTasks = () => {
       Authorization: `Bearer ${token}`,
     },
   };
-
-  useEffect(() => {
-   const fetchTasks = async () => {
+  const fetchTasks = async () => {
   if (!userId || !token) return;
 
   try {
@@ -71,8 +68,7 @@ const AssignedTasks = () => {
     // Mise à jour des stats (optionnel - retirez "blocked" si nécessaire)
     const statusCounts = {
       pending: 0,
-      cancelled: 0,
-      in_progress: 0,
+      rejected: 0,
       completed: 0,
     };
 
@@ -88,21 +84,52 @@ const AssignedTasks = () => {
   }
 };
 
+  useEffect(() => {
     if (token && userId) fetchTasks();
   }, [userId, token]);
 
   const getStatusColor = (status) => {
     switch (status) {
       case 'pending': return 'secondary';
-      case 'cancelled': return 'danger';
-      case 'in_progress': return 'primary';
+      case 'rejected': return 'danger';
       case 'completed': return 'success';
       default: return 'light';
     }
   };
 
-  const handleStatusChange = async (taskId, newStatus) => {
-    try {
+const handleStatusChange = async (taskId, newStatus) => {
+  try {
+    // Si c'est un refus, demander une raison
+    if (newStatus === 'rejected') {
+      const reason = prompt("Veuillez saisir la raison du refus :");
+      if (!reason) return; // Annuler si pas de raison fournie
+      
+      const res = await fetch(`http://localhost:5000/api/tasks/${taskId}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ 
+          status: newStatus,
+          rejection_reason: reason 
+        }),
+      });
+
+      if (!res.ok) throw new Error('Erreur lors du refus');
+      
+      // Envoyer une notification au créateur
+      await fetch(`http://localhost:5000/api/tasks/${taskId}/notify-rejection`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ reason }),
+      });
+
+    } else {
+      // Logique normale pour les autres statuts
       const res = await fetch(`http://localhost:5000/api/tasks/${taskId}/status`, {
         method: 'PATCH',
         headers: {
@@ -111,19 +138,16 @@ const AssignedTasks = () => {
         },
         body: JSON.stringify({ status: newStatus }),
       });
-
       if (!res.ok) throw new Error('Erreur lors de la mise à jour du statut');
-
-      const updatedTask = await res.json();
-
-      setTasks(prev =>
-        prev.map(task => (task.id === taskId ? updatedTask : task))
-      );
-    } catch (error) {
-      console.error("Erreur de mise à jour automatique :", error);
-      alert("❌ Impossible de changer le statut !");
     }
-  };
+
+    // Recharger les tâches
+    fetchTasks();
+  } catch (error) {
+    console.error("Erreur:", error);
+    alert("❌ Impossible de changer le statut !");
+  }
+};
 
   const getPriorityColor = (priority) => {
     switch (priority) {
@@ -223,8 +247,7 @@ const AssignedTasks = () => {
   >
     <option value="">Filtrer par statut</option>
     <option value="pending">En attente</option>
-    <option value="cancelled">Annulée</option>
-    <option value="in_progress">En cours</option>
+    <option value="rejected">Refusée</option>
     <option value="completed">Terminée</option>
   </Form.Control>
   <Form.Control
@@ -289,8 +312,8 @@ const AssignedTasks = () => {
   <div className="col-md-3">
     <div className="card text-white bg-danger shadow">
       <div className="card-body">
-        <h5 className="card-title">❌ Annulées</h5>
-        <p className="card-text fs-4">{stats.cancelled}</p>
+        <h5 className="card-title">❌ Refusées</h5>
+        <p className="card-text fs-4">{stats.rejected}</p>
       </div>
     </div>
   </div>
@@ -351,8 +374,7 @@ const AssignedTasks = () => {
                     onChange={(e) => handleStatusChange(task.id, e.target.value)}
                   >
                     <option value="pending" className="text-dark">⏳ En attente</option>
-                    <option value="cancelled" className="text-dark">❌ Annulée</option>
-                    <option value="in_progress" className="text-dark">🔧 En cours</option>
+                    <option value="rejected" className="text-dark">❌ Refusée</option>
                     <option value="completed" className="text-dark">✅ Terminée</option>
                   </select>
                 </td>
