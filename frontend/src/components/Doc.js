@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { Card, Spinner, Tooltip, OverlayTrigger, Container, Row, Col, Button, Form, Table, Alert, InputGroup, FormControl, Modal } from 'react-bootstrap';
 import 'bootstrap/dist/css/bootstrap.min.css';
@@ -78,7 +78,20 @@ const Doc = () => {
   const [folderFiles, setFolderFiles] = useState([]);
   const [folderName, setFolderName] = useState('');
   const [folderDescription, setFolderDescription] = useState('');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [parentId, setParentId] = useState(null);
+  const btnRefs = useRef({});
+
+  useEffect(() => {
+    const activeBtn = btnRefs.current[selectedCategory || ''];
+    const highlight = document.querySelector('.category-highlight');
+    if (activeBtn && highlight) {
+      const { offsetLeft, offsetWidth } = activeBtn;
+      highlight.style.transform = `translateX(${offsetLeft}px)`;
+      highlight.style.width = `${offsetWidth}px`;
+    }
+  }, [selectedCategory]);
+
 
 
 
@@ -527,6 +540,7 @@ const Doc = () => {
     }
   };
 
+
   const handleUpdatePermissions = async () => {
     try {
       const payload = {
@@ -613,12 +627,15 @@ const Doc = () => {
 
   const handleCategoryButtonClick = (cat) => {
     if (selectedCategory === cat) {
-      setShowFilterCard(prev => !prev); // toggle
+      // Si on reclique sur la même catégorie
+      setShowAdvancedFilters(prev => !prev);
     } else {
+      // Si on clique sur une autre catégorie, on change sans afficher le filtre
       setSelectedCategory(cat);
-      setShowFilterCard(false); // reset
+      setShowAdvancedFilters(false);
     }
   };
+
 
   const handleFolderUpload = async () => {
     const formData = new FormData();
@@ -823,96 +840,230 @@ const Doc = () => {
                   </Button>
                 </Modal.Footer>
               </Modal>
+              {showAdvancedFilters && (
+                <div className="filter-container mt-3">
+                  <Card className="filter-card mt-3">
+                    {selectedCategory === 'demande_conge' && (
+                      <>
+                        <h5 className="mb-3">🔎 Recherche avancée - Demande de congé</h5>
+                        <Form>
+                          <div className="d-flex align-items-end gap-3 flex-wrap">
+                            <Form.Group className="mb-0">
+                              <Form.Label>Numéro demande</Form.Label>
+                              <Form.Control
+                                type="text"
+                                value={searchFilters.numdemande || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, numdemande: e.target.value })}
+                              />
+                            </Form.Group>
+                            <Form.Group className="mb-0">
+                              <Form.Label>Date congé</Form.Label>
+                              <Form.Control
+                                type="date"
+                                value={searchFilters.dateconge || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, dateconge: e.target.value })}
+                              />
+                            </Form.Group>
+                            <div className="d-flex align-items-end">
+                              <Button className="btn-purple" onClick={handleAdvancedSearch}>
+                                Rechercher
+                              </Button>
+
+                            </div>
+                          </div>
+                        </Form>
+                      </>
+                    )}
+
+                    {selectedCategory === 'cv' && (
+                      <>
+                        <h5 className="mb-3">🔎 Recherche avancée - CV</h5>
+                        <Form>
+                          <div className="d-flex align-items-end gap-3 flex-wrap">
+                            <Form.Group className="mb-0">
+                              <Form.Label>Nom candidat</Form.Label>
+                              <Form.Control
+                                type="text"
+                                value={searchFilters.nom_candidat || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, nom_candidat: e.target.value })}
+                              />
+                            </Form.Group>
+                            <Form.Group className="mb-0">
+                              <Form.Label>Métier</Form.Label>
+                              <Form.Control
+                                type="text"
+                                value={searchFilters.metier || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, metier: e.target.value })}
+                              />
+                            </Form.Group>
+                            <Form.Group className="mb-0">
+                              <Form.Label>Date</Form.Label>
+                              <Form.Control
+                                type="date"
+                                value={searchFilters.date_cv || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, date_cv: e.target.value })}
+                              />
+                            </Form.Group>
+                            <div className="d-flex align-items-end">
+                              <Button className="btn-purple" onClick={handleAdvancedSearch}>
+                                Rechercher
+                              </Button>
+
+                            </div>
+                          </div>
+                        </Form>
+                      </>
+                    )}
+
+                    {selectedCategory === 'facture' && (
+                      <>
+                        <h5 className="mb-3">🔎 Recherche avancée - Facture</h5>
+                        <Form>
+                          <div className="d-flex align-items-end gap-3 flex-wrap">
+                            <Form.Group className="mb-0">
+                              <Form.Label>Numéro Facture</Form.Label>
+                              <Form.Control
+                                type="text"
+                                value={searchFilters.numero_facture || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, numero_facture: e.target.value })}
+                              />
+                            </Form.Group>
+                            <Form.Group className="mb-0">
+                              <Form.Label>Montant</Form.Label>
+                              <Form.Control
+                                type="number"
+                                value={searchFilters.montant || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, montant: e.target.value })}
+                              />
+                            </Form.Group>
+                            <Form.Group className="mb-0">
+                              <Form.Label>Date Facture</Form.Label>
+                              <Form.Control
+                                type="date"
+                                value={searchFilters.date_facture || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, date_facture: e.target.value })}
+                              />
+                            </Form.Group>
+                            <div className="d-flex align-items-end">
+                              <Button className="btn-purple" onClick={handleAdvancedSearch}>
+                                Rechercher
+                              </Button>
+
+                            </div>
+                          </div>
+                        </Form>
+                      </>
+                    )}
+                  </Card>
+                </div>
+              )}
 
 
               <div className="container-fluid d-flex flex-column gap-4 mb-4">
-    <style>{`
-  .category-container {
-    display: inline-flex;
-    gap: 0;
-    border-radius: 40px;
-    overflow: hidden;
-    background: #f9f9f9;
-    padding: 3px;
-    position: relative;
-    justify-content: center;
-    align-items: center;
-    transition: all 0.3s ease-in-out;
-    box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
-  }
+                <style>{`
 
-  .category-btn {
-    border: none;
-    border-radius: 40px;
-    padding: 8px 18px;
-    font-weight: 600;
-    font-size: 0.95rem;
-    background: #f9f9f9;
-    color: #555;
-    transition: all 0.3s ease;
-    position: relative;
-    margin: 0 3px;
-    cursor: pointer;
-  }
+                .btn-purple {
+  background-color:rgb(83, 82, 99) !important;
+  border-color: rgb(83, 82, 99) !important;
+  color: #fff;
+  font-weight: 600;
+  transition: all 0.3s ease-in-out;
+  border-radius: 40px;
+}
 
-  .category-btn:hover {
-    background: #dee2e6;
-  }
+.btn-purple:hover {
+  background-color:rgb(33, 32, 39) !important;
+  border-color:rgb(33, 32, 39) !important;
+}
 
-  .category-btn.active {
-    background: #6c63ff; /* Couleur de mise en avant */
-    color: #fff;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-  }
+.form-control {
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+  border-radius: 8px !important;
+  border: 1px solid #ddd !important;
+}
+.form-control:hover {
+  box-shadow: inset 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+  border-radius: 8px !important;
+  border: 1px solid #ddd !important;
+}
+                .filter-card {
+  background: #f9f9f9;
+  border-radius: 40px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.05);
+  border: none;
+  padding: 1.5rem;
+  transition: all 0.3s ease-in-out;
+}
+
+.category-container {
+  display: inline-flex;
+  gap: 0;
+  border-radius: 40px;
+  overflow: hidden;
+  background: #f9f9f9;
+  padding: 3px;
+  position: relative;
+  justify-content: center;
+  align-items: center;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+}
+
+.category-highlight {
+  position: absolute;
+  height: 100%;
+  top: 0;
+  left: 0;
+  background: #6c63ff;
+  border-radius: 40px;
+  z-index: 1;
+  transition: all 0.3s ease;
+  width: 0;
+}
+
+.category-btn {
+  position: relative;
+  border: none;
+  border-radius: 40px;
+  padding: 8px 18px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  background: transparent;
+  color: #555;
+  margin: 0 3px;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.category-btn.active {
+  color: #fff;
+}
 `}</style>
+                <div className="d-flex justify-content-center mt-3">
+                  <div className="category-container position-relative">
+                    <div className="category-highlight"></div>
 
-<div className="d-flex justify-content-center mt-3">
-  <div className="category-container">
-    <button
-      className={`category-btn ${selectedCategory === '' ? 'active' : ''}`}
-      onClick={() => setSelectedCategory('')}
-    >
-      Toutes
-    </button>
-    {categories.map((cat) => (
-      <button
-        key={cat}
-        className={`category-btn ${selectedCategory === cat ? 'active' : ''}`}
-        onClick={() => handleCategoryButtonClick(cat)}
-      >
-        {cat}
-      </button>
-    ))}
-  </div>
-</div>
+                    <button
+                      ref={(el) => (btnRefs.current[''] = el)}
+                      className={`category-btn ${selectedCategory === '' ? 'active' : ''}`}
+                      onClick={() => setSelectedCategory('')}
+                    >
+                      Toutes
+                    </button>
+
+                    {categories.map((cat) => (
+                      <button
+                        key={cat}
+                        ref={(el) => (btnRefs.current[cat] = el)}
+                        className={`category-btn ${selectedCategory === cat ? 'active' : ''}`}
+                        onClick={() => handleCategoryButtonClick(cat)}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
 
-                {selectedCategory === 'demande_conge' && (
-                  <Card className="p-3">
-                    <h5 className="mb-3">🔎 Recherche avancée - Demande de congé</h5>
-                    <Form>
-                      <Form.Group className="mb-2">
-                        <Form.Label>Numéro demande</Form.Label>
-                        <Form.Control
-                          type="text"
-                          value={searchFilters.numdemande || ''}
-                          onChange={(e) => setSearchFilters({ ...searchFilters, numdemande: e.target.value })}
-                        />
-                      </Form.Group>
-                      <Form.Group className="mb-2">
-                        <Form.Label>Date congé</Form.Label>
-                        <Form.Control
-                          type="date"
-                          value={searchFilters.dateconge || ''}
-                          onChange={(e) => setSearchFilters({ ...searchFilters, dateconge: e.target.value })}
-                        />
-                      </Form.Group>
-                      <Button variant="primary" onClick={() => handleAdvancedSearch()}>
-                        Rechercher
-                      </Button>
-                    </Form>
-                  </Card>
-                )}
 
 
                 <Table striped bordered hover responsive>
