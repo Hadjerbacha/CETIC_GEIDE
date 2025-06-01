@@ -243,15 +243,16 @@ router.get('/', auth, async (req, res) => {
     let result;
 
     if (isAdmin) {
-      // Admin : accès à tous les documents
+      // Admin : accès à tous les documents finalisés
       result = await pool.query(`
         SELECT DISTINCT d.*, dc.is_saved, dc.collection_name
         FROM documents d
         LEFT JOIN document_collections dc ON dc.document_id = d.id
+        WHERE d.is_completed = true
         ORDER BY d.date DESC;
       `);
     } else {
-      // Utilisateur normal : documents accessibles via permissions
+      // Utilisateur normal : accès aux documents finalisés pour lesquels il a une permission
       result = await pool.query(
         `
         SELECT DISTINCT d.*, dc.is_saved, dc.collection_name
@@ -259,9 +260,12 @@ router.get('/', auth, async (req, res) => {
         JOIN document_permissions dp ON dp.document_id = d.id
         LEFT JOIN document_collections dc ON dc.document_id = d.id
         WHERE 
-          dp.access_type = 'public'
-          OR (dp.user_id = $1 AND dp.access_type = 'custom')
-          OR (dp.user_id = $1 AND dp.access_type = 'read')
+          (
+            dp.access_type = 'public'
+            OR (dp.user_id = $1 AND dp.access_type = 'custom')
+            OR (dp.user_id = $1 AND dp.access_type = 'read')
+          )
+          AND d.is_completed = true
         ORDER BY d.date DESC;
         `,
         [userId]
@@ -274,6 +278,7 @@ router.get('/', auth, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
+
 
 router.post('/', auth, upload.single('file'), async (req, res) => {
   let {
@@ -336,16 +341,25 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
     const finalCategory = await classifyText(extractedText);
 
     const existing = await pool.query(
-      'SELECT * FROM documents WHERE name = $1 ORDER BY version DESC LIMIT 1',
+      'SELECT * FROM documents WHERE name = $1 ORDER BY version DESC NULLS LAST LIMIT 1',
       [name]
     );
 
-    let version = 1;
+    let version = null;
     let original_id = null;
+
     if (existing.rowCount > 0) {
       const latestDoc = existing.rows[0];
-      version = latestDoc.version + 1;
-      original_id = latestDoc.original_id || latestDoc.id;
+
+      if (latestDoc.is_completed) {
+        version = latestDoc.version ? latestDoc.version + 1 : 1;
+        original_id = latestDoc.original_id || latestDoc.id;
+      } else {
+        version = null;
+        original_id = null;
+      }
+    } else {
+      version = 1;
     }
 
     const sanitizeVisibility = (val) => {
@@ -480,6 +494,7 @@ router.get('/latest', auth, async (req, res) => {
       result = await pool.query(`
         SELECT DISTINCT ON (name) d.*
         FROM documents d
+        WHERE d.is_completed = true
         ORDER BY name, version DESC
       `);
     } else {
@@ -490,6 +505,7 @@ router.get('/latest', auth, async (req, res) => {
         WHERE
           dp.user_id = $1
           AND dp.can_read = true
+          AND d.is_completed = true
         ORDER BY d.name, d.version DESC
       `, [userId]);
     }
@@ -501,37 +517,6 @@ router.get('/latest', auth, async (req, res) => {
   }
 });
 
-router.get('/latest', auth, async (req, res) => {
-  const userId = req.user.id;
-  const isAdmin = req.user.role === 'admin';
-
-  try {
-    let result;
-
-    if (isAdmin) {
-      result = await pool.query(`
-        SELECT DISTINCT ON (name) d.*
-        FROM documents d
-        ORDER BY name, version DESC
-      `);
-    } else {
-      result = await pool.query(`
-        SELECT DISTINCT ON (d.name) d.*
-        FROM documents d
-        JOIN document_permissions dp ON dp.document_id = d.id
-        WHERE
-          dp.user_id = $1
-          AND dp.can_read = true
-        ORDER BY d.name, d.version DESC
-      `, [userId]);
-    }
-
-    res.status(200).json(result.rows);
-  } catch (err) {
-    console.error('Erreur récupération dernières versions :', err);
-    res.status(500).json({ error: 'Erreur serveur' });
-  }
-});
 
 router.get('/documents/search', async (req, res) => {
   const { query, category, startDate, endDate } = req.query;
@@ -582,7 +567,7 @@ router.put('/:id', auth, async (req, res) => {
     prio = 'moyenne',
     collection_name = '',
     metadata = {},
-    ...extraFields // contient les champs dynamiques spécifiques
+    ...extraFields
   } = req.body;
 
   try {
@@ -596,7 +581,6 @@ router.put('/:id', auth, async (req, res) => {
 
     // 2. Déduction de is_completed selon la catégorie
     let is_completed = req.body.is_completed ?? false;
-
 
     if (category === 'facture') {
       const {
@@ -645,7 +629,22 @@ router.put('/:id', auth, async (req, res) => {
       WHERE id = $7
     `, [name, summary, tags, prio, metadata, is_completed, documentId]);
 
-    // 4. Ajout/MAJ dans la table spécialisée
+    // 4. Si le document vient juste d’être complété, on lui attribue une version
+    if (is_completed) {
+      const versionRes = await pool.query(`
+        SELECT MAX(version) as max_version 
+        FROM documents 
+        WHERE name = $1 AND version IS NOT NULL AND id != $2
+      `, [name, documentId]);
+
+      const lastVersion = versionRes.rows[0].max_version || 0;
+
+      await pool.query(`
+        UPDATE documents SET version = $1 WHERE id = $2
+      `, [lastVersion + 1, documentId]);
+    }
+
+    // 5. Ajout/MAJ dans la table spécialisée
     switch (category) {
       case 'facture':
         await pool.query(`
@@ -706,7 +705,7 @@ router.put('/:id', auth, async (req, res) => {
         break;
     }
 
-    // 5. Gestion des collections (optionnelle)
+    // 6. Gestion des collections (optionnelle)
     if (collection_name) {
       const resCollection = await pool.query(
         `SELECT id FROM collections WHERE name = $1 AND user_id = $2`,
@@ -730,17 +729,16 @@ router.put('/:id', auth, async (req, res) => {
       `, [documentId, collectionId, collection_name]);
     }
 
-    // 6. Renvoi du document mis à jour
+    // 7. Renvoi du document mis à jour
     const updated = await pool.query('SELECT * FROM documents WHERE id = $1', [documentId]);
     res.status(200).json(updated.rows[0]);
 
   } catch (err) {
     console.error('❌ Erreur update document :', err);
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
-    console.log("is_completed reçu :", req.body.is_completed); // doit afficher true
-
   }
 });
+
 
 router.get('/:id/details', auth, async (req, res) => {
   const documentId = req.params.id;
@@ -964,17 +962,6 @@ router.post('/', upload.array('files'), async (req, res) => {
   }
 });
 
-// Suppression des documents non complétés après 10 min
-setTimeout(async () => {
-  const doc = await pool.query("SELECT is_completed FROM documents WHERE id = $1", [id]);
-  if (!doc.rows[0]?.is_completed) {
-    await pool.query("DELETE FROM documents WHERE id = $1", [id]);
-    console.log("Document supprimé automatiquement car incomplet.");
-  }
-}, 10 * 60 * 1000); // 10 minutes
-
-
-
 // DELETE : supprimer un document de la base de données et du disque
 router.delete('/:id', auth, async (req, res) => {
   const { id } = req.params;
@@ -1093,7 +1080,7 @@ router.put('/:id/access', async (req, res) => {
     });
   } catch (error) {
     console.error('Erreur lors de la mise à jour de l\'accès :', error);
-    
+
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
