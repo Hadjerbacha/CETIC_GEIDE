@@ -234,6 +234,100 @@ async function initializeDatabase() {
   }
 }
 
+router.get('/search', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { category, ...filters } = req.query;
+
+    if (!category) {
+      return res.status(400).json({ error: 'Catégorie requise' });
+    }
+
+    let query = '';
+    let values = [];
+    let whereClauses = [];
+    let tableAlias = 'd';
+
+    if (category === 'cv') {
+      query = `
+        SELECT d.*, cv.*
+        FROM documents d
+        JOIN cv ON d.id = cv.document_id
+      `;
+
+      if (filters.nom_candidat) {
+        values.push(`%${filters.nom_candidat}%`);
+        whereClauses.push(`cv.nom_candidat ILIKE $${values.length}`);
+      }
+      if (filters.metier) {
+        values.push(`%${filters.metier}%`);
+        whereClauses.push(`cv.metier ILIKE $${values.length}`);
+      }
+      if (filters.date_cv) {
+        values.push(filters.date_cv);
+        whereClauses.push(`cv.date_cv = $${values.length}`);
+      }
+    }
+
+    else if (category === 'facture') {
+      query = `
+        SELECT d.*, f.*
+        FROM documents d
+        JOIN factures f ON d.id = f.document_id
+      `;
+
+      if (filters.numero_facture) {
+        values.push(`%${filters.numero_facture}%`);
+        whereClauses.push(`f.numero_facture ILIKE $${values.length}`);
+      }
+      if (filters.montant) {
+        values.push(filters.montant);
+        whereClauses.push(`f.montant = $${values.length}`);
+      }
+      if (filters.date_facture) {
+        values.push(filters.date_facture);
+        whereClauses.push(`f.date_facture = $${values.length}`);
+      }
+    }
+
+    else if (category === 'demande_conge') {
+      query = `
+        SELECT d.*, dc.*
+        FROM documents d
+        JOIN demande_conges dc ON d.id = dc.document_id
+      `;
+
+      if (filters.numdemande) {
+        values.push(`%${filters.numdemande}%`);
+        whereClauses.push(`dc.numdemande ILIKE $${values.length}`);
+      }
+      if (filters.dateconge) {
+        values.push(filters.dateconge);
+        whereClauses.push(`dc.dateconge = $${values.length}`);
+      }
+    }
+
+    else {
+      return res.status(400).json({ error: 'Catégorie non supportée' });
+    }
+
+    if (whereClauses.length > 0) {
+      query += ` WHERE ` + whereClauses.join(' AND ');
+    }
+
+    query += ` ORDER BY d.created_at DESC`;
+
+    const result = await client.query(query, values);
+    res.json(result.rows);
+  } catch (err) {
+    console.error('Erreur recherche avancée :', err);
+    res.status(500).json({ error: 'Erreur lors de la recherche avancée' });
+  } finally {
+    client.release();
+  }
+});
+
+
 
 router.get('/', auth, async (req, res) => {
   const userId = req.user.id;
@@ -518,44 +612,7 @@ router.get('/latest', auth, async (req, res) => {
 });
 
 
-router.get('/documents/search', async (req, res) => {
-  const { query, category, startDate, endDate } = req.query;
-  try {
-    const values = [];
-    let baseQuery = `
-      SELECT * FROM documents 
-      WHERE 1=1
-    `;
 
-    if (query) {
-      baseQuery += ` AND (LOWER(name) LIKE $${values.length + 1} OR LOWER(text_content) LIKE $${values.length + 1})`;
-      values.push(`%${query.toLowerCase()}%`);
-    }
-
-    if (category) {
-      baseQuery += ` AND LOWER(category) = $${values.length + 1}`;
-      values.push(category.toLowerCase());
-    }
-
-    if (startDate) {
-      baseQuery += ` AND date >= $${values.length + 1}`;
-      values.push(startDate);
-    }
-
-    if (endDate) {
-      baseQuery += ` AND date <= $${values.length + 1}`;
-      values.push(endDate);
-    }
-
-    baseQuery += ` ORDER BY date DESC`;
-
-    const { rows } = await pool.query(baseQuery, values);
-    res.status(200).json(rows);
-  } catch (err) {
-    console.error('Erreur recherche documents:', err);
-    res.status(500).json({ error: 'Erreur lors de la recherche' });
-  }
-});
 
 //complete upload
 router.put('/:id', auth, async (req, res) => {
