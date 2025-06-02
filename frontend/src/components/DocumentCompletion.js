@@ -5,6 +5,7 @@ import axios from 'axios';
 import Navbar from './Navbar';
 import { jwtDecode } from 'jwt-decode';
 import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const DocumentCompletion = () => {
   const { id } = useParams();
@@ -21,22 +22,19 @@ const DocumentCompletion = () => {
   const [successMessage, setSuccessMessage] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
   const [uploadedFile, setUploadedFile] = useState(null);
-
-
-
   const [isDuplicate, setIsDuplicate] = useState(false);
   const [canAddVersion, setCanAddVersion] = useState(false);
   const [existingDocumentId, setExistingDocumentId] = useState(null);
   const [differenceNote, setDifferenceNote] = useState('');
-
   const [baseName, setBaseName] = useState('');
   const [fileName, setFileName] = useState(baseName);
-
   // Ensuite, calcule si le nom a changé :
   const hasChangedName = fileName !== baseName;
   const [extension, setExtension] = useState('');
   const [userId, setUserId] = useState(null);
   const [userRole, setUserRole] = useState('');
+  const [documentName, setDocumentName] = useState('');
+const [documentSummary, setDocumentSummary] = useState('');
   const [cancelledNewVersion, setCancelledNewVersion] = useState(false);
 
   const [isCompleted, setIsCompleted] = useState(false);

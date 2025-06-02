@@ -43,7 +43,7 @@ const Statistique = () => {
   useEffect(() => {
     const fetchStats = async () => {
       try {
-        const { data } = await axios.get('/api/stats');
+        const { data } = await axios.get('http://localhost:5000/api/documents/stats');
         setStats(data);
       } catch (err) {
         console.error('Erreur lors de la récupération des statistiques :', err);
