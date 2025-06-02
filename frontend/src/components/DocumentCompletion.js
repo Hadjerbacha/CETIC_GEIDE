@@ -4,6 +4,8 @@ import { Form, Button, Container, Card, Alert } from 'react-bootstrap';
 import axios from 'axios';
 import Navbar from './Navbar';
 import { jwtDecode } from 'jwt-decode';
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
 
 const DocumentCompletion = () => {
   const { id } = useParams();
@@ -28,8 +30,13 @@ const DocumentCompletion = () => {
   const [extension, setExtension] = useState('');
   const [userId, setUserId] = useState(null);
   const [userRole, setUserRole] = useState('');
-
-  
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const [existingDocumentId, setExistingDocumentId] = useState(null);
+  const [documentName, setDocumentName] = useState('');
+const [documentSummary, setDocumentSummary] = useState('');
+const saveDocumentVersion = async (id, file) => {
+  // logique ici
+};
 
   // Modifiez le useEffect pour récupérer le rôle
   useEffect(() => {

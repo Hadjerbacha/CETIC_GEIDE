@@ -285,7 +285,7 @@ const handleStatusChange = async (taskId, newStatus) => {
 
 
       <div className="row m-4">
-  <div className="col-md-3">
+  <div className="col-md-4">
     <div className="card text-white bg-success shadow">
       <div className="card-body">
         <h5 className="card-title">✅ Terminées</h5>
@@ -293,15 +293,7 @@ const handleStatusChange = async (taskId, newStatus) => {
       </div>
     </div>
   </div>
-  <div className="col-md-3">
-    <div className="card text-white bg-primary shadow">
-      <div className="card-body">
-        <h5 className="card-title">🔧 En cours</h5>
-        <p className="card-text fs-4">{stats.in_progress}</p>
-      </div>
-    </div>
-  </div>
-  <div className="col-md-3">
+  <div className="col-md-4">
     <div className="card text-white bg-secondary shadow">
       <div className="card-body">
         <h5 className="card-title">⏳ En attente</h5>
@@ -309,7 +301,7 @@ const handleStatusChange = async (taskId, newStatus) => {
       </div>
     </div>
   </div>
-  <div className="col-md-3">
+  <div className="col-md-4">
     <div className="card text-white bg-danger shadow">
       <div className="card-body">
         <h5 className="card-title">❌ Refusées</h5>
