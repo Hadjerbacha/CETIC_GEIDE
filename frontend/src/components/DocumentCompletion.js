@@ -21,61 +21,101 @@ const DocumentCompletion = () => {
   const [errorMessage, setErrorMessage] = useState(null);
   const [successMessage, setSuccessMessage] = useState(null);
   const [isSaving, setIsSaving] = useState(false);
-
+  const [uploadedFile, setUploadedFile] = useState(null);
   const [isDuplicate, setIsDuplicate] = useState(false);
   const [canAddVersion, setCanAddVersion] = useState(false);
+  const [existingDocumentId, setExistingDocumentId] = useState(null);
   const [differenceNote, setDifferenceNote] = useState('');
-
   const [baseName, setBaseName] = useState('');
+  const [fileName, setFileName] = useState(baseName);
+  // Ensuite, calcule si le nom a changé :
+  const hasChangedName = fileName !== baseName;
   const [extension, setExtension] = useState('');
   const [userId, setUserId] = useState(null);
   const [userRole, setUserRole] = useState('');
-  const [uploadedFile, setUploadedFile] = useState(null);
-  const [existingDocumentId, setExistingDocumentId] = useState(null);
   const [documentName, setDocumentName] = useState('');
 const [documentSummary, setDocumentSummary] = useState('');
-const saveDocumentVersion = async (id, file) => {
-  // logique ici
-};
+  const [cancelledNewVersion, setCancelledNewVersion] = useState(false);
 
-  // Modifiez le useEffect pour récupérer le rôle
+  const [isCompleted, setIsCompleted] = useState(false);
+  const category = docInfo?.category || '';
+
+
+  const [permissions, setPermissions] = useState({
+    consult: true,  // toujours activé
+    modify: true,
+    delete: true,
+    share: true,
+  });
+
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      try {
-        const { id, role } = jwtDecode(token);
-        setUserId(id);
-        setUserRole(role);
-      } catch (e) {
-        console.error('Token invalide:', e);
+    const handleBeforeUnload = (e) => {
+      if (!isCompleted) {
+        e.preventDefault();
+        e.returnValue = '';
       }
-    }
-  }, []);
-
-
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isCompleted]);
 
   useEffect(() => {
-    const fetchDocumentAndMetadata = async () => {
+    const initialize = async () => {
+      if (!id || !token) return;
+
       try {
+        // Récupération des infos utilisateur depuis le token
+        const { id: decodedId, role } = jwtDecode(token);
+        setUserId(decodedId);
+        setUserRole(role);
+
+        // Permissions d'accès
+        const permRes = await axios.get(`http://localhost:5000/api/documents/${id}/my-permissions`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const { can_modify, access_type } = permRes.data;
+        const isAdmin = role === 'admin';
+        setCanAddVersion(isAdmin || can_modify);
+
+        // Gestion des droits selon le type d'accès
+        if (access_type === "private") {
+          setPermissions({
+            consult: true,
+            modify: true,
+            delete: true,
+            share: true,
+          });
+        } else {
+          setPermissions(prev => ({
+            ...prev,
+            modify: false,
+            delete: false,
+            share: false,
+          }));
+        }
+
+        // Récupération du document principal
         const res = await axios.get(`http://localhost:5000/api/documents/${id}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
-
         const doc = res.data;
         setDocInfo(doc);
+        setName(doc.name);
+        setSummary(doc.summary || '');
+        setTags((doc.tags || []).join(', '));
+        setPriority(doc.priority || '');
+
+        // Extraction du nom + extension
         const parts = doc.name.split('.');
         if (parts.length > 1) {
-          setExtension(parts.pop()); // Dernière partie = extension
-          setBaseName(parts.join('.')); // Tout le reste
+          setExtension(parts.pop());
+          setBaseName(parts.join('.'));
         } else {
           setBaseName(doc.name);
           setExtension('');
         }
 
-        setSummary(doc.summary || '');
-        setTags((doc.tags || []).join(', '));
-        setPriority(doc.priority || '');
-
+        // Champs spécifiques par catégorie
         const defaultFields = {
           facture: {
             num_facture: '',
@@ -105,7 +145,6 @@ const saveDocumentVersion = async (id, file) => {
             const metaRes = await axios.get(`http://localhost:5000/api/documents/${id}/metadata`, {
               headers: { Authorization: `Bearer ${token}` }
             });
-
             const merged = { ...defaultFields[doc.category], ...metaRes.data };
             setExtraFields(merged);
           } catch (metaErr) {
@@ -116,7 +155,7 @@ const saveDocumentVersion = async (id, file) => {
           setExtraFields({});
         }
 
-        // Vérifier les doublons
+        // Vérification de doublon
         const resAll = await axios.get(`http://localhost:5000/api/documents`, {
           headers: { Authorization: `Bearer ${token}` }
         });
@@ -126,97 +165,75 @@ const saveDocumentVersion = async (id, file) => {
 
         if (duplicate) {
           setIsDuplicate(true);
-          const isAdmin = userRole === 'admin';
-          const canModify = doc.permissions?.can_modify === true;
-
-          setCanAddVersion(isAdmin || canModify);
+          setCanAddVersion(isAdmin || can_modify);
         }
 
       } catch (error) {
-        console.error('Erreur chargement document :', error);
+        console.error("❌ Erreur lors de l'initialisation :", error);
         setErrorMessage("Erreur lors du chargement du document.");
       }
     };
 
-    if (id && token) fetchDocumentAndMetadata();
+    initialize();
   }, [id, token]);
 
-
-  useEffect(() => {
-    const fetchDocument = async () => {
-      try {
-        const res = await axios.get(`http://localhost:5000/api/documents/${id}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const doc = res.data;
-        setDocInfo(doc);
-        setName(doc.name);
-        setSummary(doc.summary || '');
-        setTags((doc.tags || []).join(', '));
-        setPriority(doc.priority || '');
-      } catch (error) {
-        console.error('Erreur chargement document :', error);
-        setErrorMessage("Erreur lors du chargement du document.");
-      }
-    };
-
-    if (id && token) fetchDocument();
-  }, [id, token]);
-
-  useEffect(() => {
-    if (!docInfo) return;
-    switch (docInfo.category) {
+  const validateCategoryFields = (category, values) => {
+    switch (category) {
       case 'facture':
-        setExtraFields({
-          montant: '',
-          date_facture: '',
-          numero_facture: ''
-        });
-        break;
+        return values.num_facture && values.nom_entreprise && values.montant && values.date_facture;
       case 'cv':
-        setExtraFields({
-          nom_candidat: '',
-          experience: '',
-          domaine: ''
-        });
-        break;
+        return values.num_cv && values.nom_candidat && values.metier && values.lieu && values.date_cv;
+      case 'demande_conge':
+        return values.num_demande && values.date_debut && values.date_fin && values.motif;
       default:
-        setExtraFields({});
-    }
-  }, [docInfo]);
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    const tagArray = tags.split(',').map(t => t.trim()).filter(Boolean);
-
-    try {
-      setIsSaving(true); // On active le mode sauvegarde / succès
-
-      await axios.put(`http://localhost:5000/api/documents/${id}`, {
-        name,
-        summary,
-        tags: tagArray,
-        prio: priority,
-        ...extraFields
-      }, {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      setSuccessMessage("Document enregistré avec succès !");
-
-      // Après 2 secondes on redirige
-      setTimeout(() => {
-        navigate('/Documents');
-      }, 2000);
-
-    } catch (error) {
-      setIsSaving(false);
-      setErrorMessage("Échec de la mise à jour.");
+        return true;
     }
   };
+
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  const tagArray = tags.split(',').map(t => t.trim()).filter(Boolean);
+
+  // Valider avant d'envoyer
+  if (!validateCategoryFields(category, extraFields)) {
+    alert("Veuillez remplir tous les champs obligatoires pour cette catégorie.");
+    return;
+  }
+
+  try {
+    setIsSaving(true);
+
+    const payload = {
+      name,
+      summary,
+      tags: tagArray,
+      prio: priority,
+      is_completed: true, // ✅ Marque comme complété
+      ...extraFields
+    };
+
+    await axios.put(`http://localhost:5000/api/documents/${id}`, payload, {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    setSuccessMessage("Document enregistré avec succès !");
+    setIsCompleted(true);
+
+    setTimeout(() => {
+      navigate('/Documents');
+    }, 2000);
+
+  } catch (error) {
+    setIsSaving(false);
+    setErrorMessage("Échec de la mise à jour.");
+  }
+};
+
+
+
   const renderDocumentViewer = () => {
     if (!docInfo || !docInfo.file_path) return null;
 
@@ -247,6 +264,44 @@ const saveDocumentVersion = async (id, file) => {
     }
   };
 
+  const handleCancel = () => {
+    setIsDuplicate(false); // on désactive le mode "nouvelle version"
+    setCancelledNewVersion(true); // on affiche le message de renommage
+  };
+
+
+  const checkDuplicate = async () => {
+    const res = await axios.get(`/api/documents/check-duplicate?name=${name}`);
+    if (res.data.exists) {
+      setIsDuplicate(true);
+      setExistingDocumentId(res.data.document.id); // ici tu n'as plus besoin de `duplicate`
+    }
+  };
+
+  const handleRename = (e) => {
+    setName(e.target.value);
+  };
+
+  const saveDocumentVersion = async () => {
+    try {
+      const formData = new FormData();
+      formData.append('file', uploadedFile);
+      formData.append('summary', summary);
+      formData.append('tags', tags);
+      formData.append('priority', priority);
+      // etc.
+
+      await axios.post(`http://localhost:5000/api/documents/${existingDocumentId}/versions`, formData, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      alert("Nouvelle version enregistrée avec succès !");
+    } catch (error) {
+      console.error("Erreur lors de l'enregistrement :", error);
+    }
+  };
+
+
   const fetchPermissions = async () => {
     const res = await axios.get(`http://localhost:5000/api/documents/${id}/my-permissions`, {
       headers: { Authorization: `Bearer ${token}` }
@@ -260,49 +315,31 @@ const saveDocumentVersion = async (id, file) => {
 
   console.log('🔍 userRole', userRole);
 
-  // Annule l'action actuelle (retour ou reset selon votre logique)
-const handleCancel = () => {
-  // Exemple : revenir à la page précédente ou fermer la section duplication
-  setIsDuplicate(false);
-  setDifferenceNote('');
-};
 
-// Enregistre comme une nouvelle version
-const handleSaveAsNewVersion = () => {
-  if (!differenceNote.trim()) return;
+  // Enregistre comme une nouvelle version
+  const handleSaveAsNewVersion = () => {
+    if (!differenceNote.trim()) return;
 
-  // Ajoutez ici l’appel à votre fonction backend d'enregistrement
-  // Exemple :
-  const payload = {
-    originalDocumentId: existingDocumentId,
-    newVersionNote: differenceNote,
-    file: uploadedFile,
-    // autres métadonnées nécessaires
+    // Ajoutez ici l’appel à votre fonction backend d'enregistrement
+    // Exemple :
+    const payload = {
+      originalDocumentId: existingDocumentId,
+      newVersionNote: differenceNote,
+      file: uploadedFile,
+      // autres métadonnées nécessaires
+    };
+
+    // Appel à l'API (exemple avec fetch ou axios)
+    saveDocumentVersion(payload)
+      .then(() => {
+        toast.success("Nouvelle version enregistrée avec succès !");
+        navigate("/documents"); // ou autre redirection
+      })
+      .catch((error) => {
+        console.error("Erreur lors de l'enregistrement :", error);
+        toast.error("Échec de l'enregistrement de la nouvelle version.");
+      });
   };
-
-  // Appel à l'API (exemple avec fetch ou axios)
-  saveDocumentVersion(payload)
-    .then(() => {
-      toast.success("Nouvelle version enregistrée avec succès !");
-      navigate("/documents"); // ou autre redirection
-    })
-    .catch((error) => {
-      console.error("Erreur lors de l'enregistrement :", error);
-      toast.error("Échec de l'enregistrement de la nouvelle version.");
-    });
-};
-
-// Propose de renommer le fichier
-const handleRename = () => {
-  // Ici vous pouvez soit :
-  // - afficher une modal de renommage
-  // - ou directement vider le champ pour laisser l’utilisateur en saisir un nouveau
-
-  // Exemple simple : vider le nom pour forcer un nouveau
-  setDocumentName('');
-  toast.info("Veuillez saisir un nouveau nom de document.");
-};
-
 
 
   return (
@@ -316,60 +353,12 @@ const handleRename = () => {
           <div className="col-md-8">
             <Card className="p-4 shadow-sm">
               <h3 className="mb-4">📝 Compléter les informations du document</h3>
-          {isDuplicate && (
-  userRole === "admin" ? (
-    <>
-      <Alert variant="info">
-        ⚠️ Un document portant ce nom existe déjà. Vous pouvez l'enregistrer comme une <strong>nouvelle version</strong>.<br />
-        Merci d’indiquer les différences par rapport à la version précédente.
-      </Alert>
 
-      <Form.Group className="mb-3">
-        <Form.Label>Différences apportées</Form.Label>
-        <Form.Control
-          as="textarea"
-          rows={3}
-          value={differenceNote}
-          onChange={(e) => setDifferenceNote(e.target.value)}
-          placeholder="Précisez les modifications ou ajouts apportés à cette version..."
-          required
-        />
-      </Form.Group>
-
-      <div className="d-flex justify-content-end gap-2">
-        <Button
-          variant="secondary"
-          onClick={handleCancel} // à définir si pas encore fait
-        >
-          Annuler
-        </Button>
-        <Button
-          variant="primary"
-          onClick={handleSaveAsNewVersion} // à définir aussi
-          disabled={!differenceNote.trim()} // pour éviter les validations vides
-        >
-          Enregistrer comme nouvelle version
-        </Button>
-      </div>
-    </>
-  ) : (
-    <>
-      <Alert variant="danger">
-        ❌ Ce nom de document est déjà utilisé et vous ne disposez pas des droits de modification.<br />
-        Veuillez renommer votre fichier pour poursuivre l’enregistrement.
-      </Alert>
-
-      <div className="d-flex justify-content-end">
-        <Button
-          variant="warning"
-          onClick={handleRename} // à définir pour proposer le renommage
-        >
-          Renommer le fichier
-        </Button>
-      </div>
-    </>
-  )
-)}
+              {cancelledNewVersion && (
+                <Alert variant="warning">
+                  ⚠️ Veuillez changer le nom du document pour poursuivre l’enregistrement.
+                </Alert>
+              )}
 
 
               <Form onSubmit={handleSubmit}>
@@ -386,6 +375,60 @@ const handleRename = () => {
                   </div>
                 </Form.Group>
 
+                {isDuplicate && (
+                  userRole === "admin" ? (
+                    <>
+                      <Alert variant="info">
+                        ⚠️ Un document portant ce nom existe déjà. Vous pouvez l'enregistrer comme une <strong>nouvelle version</strong>.<br />
+                        Merci d’indiquer les différences par rapport à la version précédente.
+                      </Alert>
+
+                      <Form.Group className="mb-3">
+                        <Form.Label>Différences apportées</Form.Label>
+                        <Form.Control
+                          as="textarea"
+                          rows={3}
+                          value={differenceNote}
+                          onChange={(e) => setDifferenceNote(e.target.value)}
+                          placeholder="Précisez les modifications ou ajouts apportés à cette version..."
+                          required
+                        />
+                      </Form.Group>
+
+                      <div className="d-flex justify-content-end gap-2">
+                        <Button
+                          variant="secondary"
+                          onClick={handleCancel} // à définir si pas encore fait
+                        >
+                          Annuler
+                        </Button>
+                        <Button
+                          variant="primary"
+                          onClick={handleSaveAsNewVersion} // à définir aussi
+                          disabled={!differenceNote.trim()} // pour éviter les validations vides
+                        >
+                          Enregistrer comme nouvelle version
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <Alert variant="danger">
+                        ❌ Ce nom de document est déjà utilisé et vous ne disposez pas des droits de modification.<br />
+                        Veuillez renommer votre fichier pour poursuivre l’enregistrement.
+                      </Alert>
+
+                      <div className="d-flex justify-content-end">
+                        <Button
+                          variant="warning"
+                          onClick={handleRename} // à définir pour proposer le renommage
+                        >
+                          Renommer le fichier
+                        </Button>
+                      </div>
+                    </>
+                  )
+                )}
 
                 {Object.entries(extraFields).map(([key, value]) => (
                   <Form.Group className="mb-3" key={key}>
@@ -436,29 +479,22 @@ const handleRename = () => {
                   </Form.Select>
                 </Form.Group>
 
-                {isDuplicate && canAddVersion && (
-                  <Form.Group className="mb-3">
-                    <Form.Label>Différences avec la version précédente</Form.Label>
-                    <Form.Control
-                      as="textarea"
-                      rows={3}
-                      value={differenceNote}
-                      onChange={(e) => setDifferenceNote(e.target.value)}
-                      placeholder="Décrivez ce qui change par rapport à la version précédente..."
-                      required
-                    />
-                  </Form.Group>
-                )}
 
                 <div className="d-flex justify-content-end">
                   <Button
                     variant={isSaving ? 'success' : 'primary'}
                     type="submit"
-                    disabled={isSaving}
+                    disabled={
+                      isSaving ||
+                      (isDuplicate && cancelledNewVersion) ||             // bloque si doublon + annulation
+                      (isDuplicate && !hasChangedName && userRole !== "admin") // bloque si doublon + nom non changé + pas admin
+                    }
                     className={isSaving ? 'btn-success-message' : ''}
                   >
                     {isSaving ? '✅ Enregistrement...' : 'Enregistrer'}
                   </Button>
+
+
                 </div>
               </Form>
             </Card>
