@@ -327,51 +327,161 @@ router.get('/search', async (req, res) => {
   }
 });
 
-
-
 router.get('/', auth, async (req, res) => {
   const userId = req.user.id;
-  const isAdmin = req.user.role === 'admin'; // Adapte si nécessaire
+  const isAdmin = req.user.role === 'admin';
+
+  const {
+    filterType,
+    startDate,
+    endDate,
+    searchQuery = '',
+    selectedCategory = '',
+    numero_facture,
+    montant,
+    date_facture,
+    nom_candidat,
+    metier,
+    date_cv,
+    numdemande,
+    dateconge,
+  } = req.query;
 
   try {
-    let result;
+    let baseQuery = `
+      SELECT DISTINCT d.*, dc.is_saved, dc.collection_name,
+        f.numero_facture, f.montant, f.date_facture,
+        cv.nom_candidat, cv.metier, cv.date_cv,
+        dcg.numdemande, dcg.date_debut AS dateconge
+      FROM documents d
+      LEFT JOIN document_collections dc ON dc.document_id = d.id
+      LEFT JOIN factures f ON f.document_id = d.id
+      LEFT JOIN cv ON cv.document_id = d.id
+      LEFT JOIN demande_conge dcg ON dcg.document_id = d.id
+      ${!isAdmin ? 'JOIN document_permissions dp ON dp.document_id = d.id' : ''}
+      WHERE true
+    `;
 
-    if (isAdmin) {
-      // Admin : accès à tous les documents finalisés
-      result = await pool.query(`
-        SELECT DISTINCT d.*, dc.is_saved, dc.collection_name
-        FROM documents d
-        LEFT JOIN document_collections dc ON dc.document_id = d.id
-        WHERE d.is_completed = true
-        ORDER BY d.date DESC;
-      `);
-    } else {
-      // Utilisateur normal : accès aux documents finalisés pour lesquels il a une permission
-      result = await pool.query(
-        `
-        SELECT DISTINCT d.*, dc.is_saved, dc.collection_name
-        FROM documents d
-        JOIN document_permissions dp ON dp.document_id = d.id
-        LEFT JOIN document_collections dc ON dc.document_id = d.id
-        WHERE 
-          (
-            dp.access_type = 'public'
-            OR (dp.user_id = $1 AND dp.access_type = 'custom')
-            OR (dp.user_id = $1 AND dp.access_type = 'read')
-          )
-          AND d.is_completed = true
-        ORDER BY d.date DESC;
-        `,
-        [userId]
-      );
+    const params = [];
+    let paramIndex = 1;
+
+    if (!isAdmin) {
+      baseQuery += `
+        AND (
+          dp.access_type = 'public'
+         OR (dp.user_id = $1 AND dp.access_type IN ('custom', 'read', 'owner'))
+        )
+      `;
+      params.push(userId);
+      paramIndex++;
     }
 
+    baseQuery += ` AND d.is_completed = true`;
+
+    // Filtres généraux
+    if (filterType && filterType !== 'Tous les documents') {
+      baseQuery += ` AND LOWER(SPLIT_PART(d.file_path, '.', -1)) = $${paramIndex}`;
+      params.push(filterType.toLowerCase());
+      paramIndex++;
+    }
+
+    if (startDate) {
+      baseQuery += ` AND d.date >= $${paramIndex}`;
+      params.push(startDate);
+      paramIndex++;
+    }
+
+    if (endDate) {
+      baseQuery += ` AND d.date <= $${paramIndex}`;
+      params.push(endDate);
+      paramIndex++;
+    }
+
+    if (selectedCategory) {
+      baseQuery += ` AND LOWER(d.category) = $${paramIndex}`;
+      params.push(selectedCategory.toLowerCase());
+      paramIndex++;
+    }
+
+    if (searchQuery) {
+      baseQuery += ` AND (
+        LOWER(d.name) LIKE $${paramIndex}
+        OR LOWER(d.text_content) LIKE $${paramIndex}
+        OR LOWER(d.summary) LIKE $${paramIndex}
+        OR LOWER(d.description) LIKE $${paramIndex}
+        OR LOWER(d.folder) LIKE $${paramIndex}
+        OR LOWER(d.author) LIKE $${paramIndex}
+        OR EXISTS (
+          SELECT 1 FROM unnest(d.tags) AS tag WHERE LOWER(tag) LIKE $${paramIndex}
+        )
+      )`;
+      params.push(`%${searchQuery.toLowerCase()}%`);
+      paramIndex++;
+    }
+
+    // Filtres spécifiques pour CV
+    if (selectedCategory === 'cv') {
+      if (nom_candidat) {
+        baseQuery += ` AND LOWER(cv.nom_candidat) ILIKE $${paramIndex}`;
+        params.push(`%${nom_candidat.toLowerCase()}%`);
+        paramIndex++;
+      }
+      if (metier) {
+        baseQuery += ` AND LOWER(cv.metier) ILIKE $${paramIndex}`;
+        params.push(`%${metier.toLowerCase()}%`);
+        paramIndex++;
+      }
+      if (date_cv) {
+        baseQuery += ` AND cv.date_cv = $${paramIndex}`;
+        params.push(date_cv);
+        paramIndex++;
+      }
+    }
+
+    // Filtres spécifiques Facture
+    if (selectedCategory === 'facture') {
+      if (numero_facture) {
+        baseQuery += ` AND f.numero_facture ILIKE $${paramIndex}`;
+        params.push(`%${numero_facture}%`);
+        paramIndex++;
+      }
+      if (montant) {
+        baseQuery += ` AND f.montant = $${paramIndex}`;
+        params.push(montant);
+        paramIndex++;
+      }
+      if (date_facture) {
+        baseQuery += ` AND f.date_facture = $${paramIndex}`;
+        params.push(date_facture);
+        paramIndex++;
+      }
+    }
+
+    // Filtres spécifiques Demande Congé
+    if (selectedCategory === 'demande_conge') {
+      if (numdemande) {
+        baseQuery += ` AND dcg.numdemande ILIKE $${paramIndex}`;
+        params.push(`%${numdemande}%`);
+        paramIndex++;
+      }
+      if (dateconge) {
+        baseQuery += ` AND dcg.date_debut = $${paramIndex}`;
+        params.push(dateconge);
+        paramIndex++;
+      }
+    }
+
+    baseQuery += ` ORDER BY d.date DESC`;
+
+    const result = await pool.query(baseQuery, params);
     res.status(200).json(result.rows);
   } catch (err) {
-    console.error('Erreur:', err.stack);
+    console.error('Erreur dans /documents :', err.stack);
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
+
+
 
 
 router.post('/', auth, upload.single('file'), async (req, res) => {
@@ -885,19 +995,36 @@ router.get('/stats', async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
-
-
 router.get('/:id/versions', auth, async (req, res) => {
   const id = parseInt(req.params.id, 10);
 
+  // Vérification que l'id est un entier valide
+  if (isNaN(id)) {
+    return res.status(400).json({ error: 'ID de document invalide' });
+  }
+
   try {
-    const versions = await pool.query(`
-      SELECT dv.*, d.name AS original_name
-      FROM document_versions dv
-      JOIN documents d ON d.id = dv.document_id
-      WHERE dv.document_id = $1
-      ORDER BY dv.version DESC
+    // Récupération du nom du document de base
+    const result = await pool.query(`
+      SELECT name
+      FROM documents
+      WHERE id = $1
     `, [id]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Document introuvable' });
+    }
+
+    const { name } = result.rows[0];
+
+    // Récupération de toutes les versions avec le même nom, version complète uniquement
+    const versions = await pool.query(`
+      SELECT *
+      FROM documents
+      WHERE name = $1
+      AND is_completed = true
+      ORDER BY version DESC NULLS LAST, created_at DESC
+    `, [name]);
 
     res.status(200).json(versions.rows);
 
@@ -906,6 +1033,8 @@ router.get('/:id/versions', auth, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
+
+
 
 // GET : récupérer un document spécifique par ID
 router.get('/', auth, async (req, res) => {

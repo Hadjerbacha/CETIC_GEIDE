@@ -55,6 +55,26 @@ const DocumentVersion = () => {
   const navigate = useNavigate();
 
   const [userId, setUserId] = useState(null);
+  const [versions, setVersions] = useState([]);
+
+  useEffect(() => {
+    const fetchVersions = async () => {
+      try {
+        const res = await fetch(`http://localhost:5000/api/documents/${id}/versions`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        setVersions(data);
+      } catch (err) {
+        console.error('Erreur récupération des versions', err);
+      }
+    };
+
+    if (id) {
+      fetchVersions();
+    }
+  }, [id]);
+
 
   useEffect(() => {
     const token = localStorage.getItem('token');
@@ -78,7 +98,7 @@ const DocumentVersion = () => {
 
   const fetchDocuments = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/documents/', {
+      const res = await fetch(`http://localhost:5000/api/documents/${id}/versions`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (res.status === 401) throw new Error('Non autorisé');
@@ -127,7 +147,7 @@ const DocumentVersion = () => {
   const handleDelete = async id => {
     if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce document ?')) return;
     try {
-      await fetch(`http://localhost:5000/api/documents/${id}`, {
+      await fetch(`http://localhost:5000/api/documents/${id}\versions`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -292,77 +312,77 @@ const DocumentVersion = () => {
         </Row>
 
 
-
-
-
         <Container className="mt-5 d-flex justify-content-center">
           <Card className="w-100 shadow-sm" style={{ maxWidth: "1000px" }}>
             <Card.Body>
               <Button variant="secondary" size="sm" onClick={handleBack}>
                 ⬅️ Retour
               </Button>
-              <h3 className="text-center mb-4">
-                📂 Liste des documents : {filteredDocuments[0]?.name || 'Nom inconnu'}
-              </h3>
+           <h3 className="text-center mb-4">
+  📄 Versions du document : <strong>{filteredDocuments[0]?.name || 'Nom inconnu'}</strong>
+</h3>
 
-              <Table striped bordered hover responsive>
-                <thead>
-                  <tr>
-                    <th>Document</th>
-                    <th>Date</th>
-                    <th>Catégorie</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredDocuments.length > 0 ? filteredDocuments.map(doc => (
-                    <tr key={doc.id}>
-                      <td>{doc.name} <button
-                        onClick={() => {
-                          setSelectedDoc(doc);  // Facultatif, si tu veux toujours garder ça
-                          navigate(`/docvoir/${doc.id}`); // redirection vers DocVoir avec l’ID du doc
-                          setShowModal(false);
-                        }}
-                        className="p-0 m-0 bg-transparent border-none outline-none hover:opacity-70"
-                        style={{ all: 'unset', cursor: 'pointer' }}
-                      >
-                        📄
-                      </button>
-                      </td>
-                      <td>{doc.date ? new Date(doc.date).toLocaleString() : 'Inconnue'}</td>
-                      <td>{doc.category || 'Non spécifiée'}</td>
-                      <td>
-                        <Button variant="info" size="sm" className="me-2" onClick={() => navigate(`/documents/${doc.id}`)} title="Détails">
-                          <i className="bi bi-list-ul"></i>
-                        </Button>
+<Table striped bordered hover responsive>
+  <thead>
+    <tr>
+      <th>Version</th>
+      <th>Date</th>
+      <th>Catégorie</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {filteredDocuments.length > 0 ? filteredDocuments.map(doc => (
+      <tr key={doc.id}>
+        <td>
+          v{doc.version ?? '1'}
+          <button
+            onClick={() => {
+              setSelectedDoc(doc);
+              navigate(`/docvoir/${doc.id}`);
+              setShowModal(false);
+            }}
+            className="ms-2 p-0 m-0 bg-transparent border-none outline-none hover:opacity-70"
+            style={{ all: 'unset', cursor: 'pointer' }}
+            title="Voir la version"
+          >
+            📄
+          </button>
+        </td>
+        <td>{doc.date ? new Date(doc.date).toLocaleString() : 'Inconnue'}</td>
+        <td>{doc.category || 'Non spécifiée'}</td>
+        <td>
+          <Button variant="info" size="sm" className="me-2" onClick={() => navigate(`/documents/${doc.id}`)} title="Détails">
+            <i className="bi bi-list-ul"></i>
+          </Button>
 
-                        <Button variant="danger" size="sm" className="me-2" onClick={() => handleDelete(doc.id)} title="Supprimer">
-                          <i className="bi bi-trash"></i>
-                        </Button>
+          <Button variant="danger" size="sm" className="me-2" onClick={() => handleDelete(doc.id)} title="Supprimer">
+            <i className="bi bi-trash"></i>
+          </Button>
 
-                        {/* Bouton de partage */}
-                        <Button variant="light" onClick={() => openShareModal(doc)}>
-                          <img src={shareIcon} width="20" alt="Partager" />
+          <Button variant="light" onClick={() => openShareModal(doc)} title="Partager">
+            <img src={shareIcon} width="20" alt="Partager" />
+          </Button>
 
-                        </Button>
-                        <Button
-                          variant="dark"
-                          size="sm"
-                          className="ms-2"
-                          title="Démarrer le workflow"
-                          onClick={() => handleOpenConfirm(doc)}
-                        >
-                          <i className="bi bi-play-fill me-1"></i>
-                        </Button>
+          <Button
+            variant="dark"
+            size="sm"
+            className="ms-2"
+            title="Démarrer le workflow"
+            onClick={() => handleOpenConfirm(doc)}
+          >
+            <i className="bi bi-play-fill me-1"></i>
+          </Button>
+        </td>
+      </tr>
+    )) : (
+      <tr>
+        <td colSpan="4" className="text-center">Aucune version trouvée</td>
+      </tr>
+    )}
+  </tbody>
+</Table>
 
-                      </td>
-
-                    </tr>
-                  )) : (
-                    <tr><td colSpan="4" className="text-center">Aucun document trouvé</td></tr>
-                  )}
-
-                </tbody>
-              </Table>
             </Card.Body>
           </Card>
         </Container>
