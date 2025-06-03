@@ -250,7 +250,7 @@ useEffect(() => {
   const fetchOldVersions = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.get('http://localhost:5000/api/document_versions', {
+      const res = await axios.get('http://localhost:5000/api/documents', {
         headers: { Authorization: `Bearer ${token}` }
       });
       setOldVersions(res.data);
