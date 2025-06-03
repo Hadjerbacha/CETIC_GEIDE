@@ -5,6 +5,9 @@ import axios from 'axios';
 import Navbar from './Navbar';
 import { FaFolderOpen, FaPlus, FaFolderPlus, FaFileUpload } from 'react-icons/fa';
 import { FaCloudUploadAlt } from 'react-icons/fa';
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { FiFileText } from 'react-icons/fi';
 
 const FolderDetailsPage = () => {
   const { id } = useParams();
@@ -37,7 +40,9 @@ const FolderDetailsPage = () => {
   const [documents, setDocuments] = useState([]);
 
   const [folder, setFolder] = useState(null);
-
+const [showTemplateModal, setShowTemplateModal] = useState(false);
+const [templates, setTemplates] = useState([]);
+const [selectedTemplate, setSelectedTemplate] = useState(null);
 useEffect(() => {
   const fetchFolder = async () => {
     try {
@@ -56,8 +61,7 @@ useEffect(() => {
   fetchFolder();
 }, [id, token]);
 
- useEffect(() => {
-  const fetchData = async () => {
+const fetchData = async () => {
     try {
       const folderRes = await axios.get(`http://localhost:5000/api/folders/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -81,9 +85,9 @@ useEffect(() => {
     }
   };
 
+ useEffect(() => {
   fetchData();
 }, [id, token]);
-
   const handleCreateFolder = async (e) => {
     e.preventDefault();
     try {
@@ -277,7 +281,6 @@ useEffect(() => {
                   ))}
                 </ListGroup>
               )}
-
             </Card.Body>
           </Card>
         )}

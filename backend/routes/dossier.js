@@ -104,16 +104,39 @@ router.get('/folders/:id/documents', auth, async (req, res) => {
 });
 
 router.get('/folders/:parentId', async (req, res) => {
-  const parentId = parseInt(req.params.parentId);
+  // Conversion sécurisée avec vérification
+  const parentId = req.params.parentId === 'null' || req.params.parentId === 'undefined' 
+    ? null 
+    : parseInt(req.params.parentId, 10);
+
+  // Validation du résultat
+  if (parentId === null || isNaN(parentId)) {
+    return res.status(400).json({ 
+      error: 'ID parent invalide',
+      received: req.params.parentId,
+      expected: 'Nombre entier ou "null"'
+    });
+  }
+
   try {
-    const folders = await pool.query(
-      'SELECT * FROM folders WHERE parent_id = $1',
-      [parentId]
-    );
-    res.json(folders.rows);
+    const query = parentId === null
+      ? 'SELECT * FROM folders WHERE parent_id IS NULL'
+      : 'SELECT * FROM folders WHERE parent_id = $1';
+    
+    const params = parentId === null ? [] : [parentId];
+    
+    const result = await pool.query(query, params);
+    res.json(result.rows);
   } catch (error) {
-    console.error(error);
-    res.status(500).send('Erreur serveur');
+    console.error('Erreur DB:', {
+      message: error.message,
+      stack: error.stack,
+      query: { parentId }
+    });
+    res.status(500).json({ 
+      error: 'Erreur serveur',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 
