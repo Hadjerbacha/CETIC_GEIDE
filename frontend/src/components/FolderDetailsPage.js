@@ -5,6 +5,9 @@ import axios from 'axios';
 import Navbar from './Navbar';
 import { FaFolderOpen, FaPlus, FaFolderPlus, FaFileUpload } from 'react-icons/fa';
 import { FaCloudUploadAlt } from 'react-icons/fa';
+import { toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import { FiFileText } from 'react-icons/fi';
 
 const FolderDetailsPage = () => {
   const { id } = useParams();
@@ -37,7 +40,9 @@ const FolderDetailsPage = () => {
   const [documents, setDocuments] = useState([]);
 
   const [folder, setFolder] = useState(null);
-
+const [showTemplateModal, setShowTemplateModal] = useState(false);
+const [templates, setTemplates] = useState([]);
+const [selectedTemplate, setSelectedTemplate] = useState(null);
 useEffect(() => {
   const fetchFolder = async () => {
     try {
@@ -56,8 +61,7 @@ useEffect(() => {
   fetchFolder();
 }, [id, token]);
 
- useEffect(() => {
-  const fetchData = async () => {
+const fetchData = async () => {
     try {
       const folderRes = await axios.get(`http://localhost:5000/api/folders/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -81,6 +85,7 @@ useEffect(() => {
     }
   };
 
+ useEffect(() => {
   fetchData();
 }, [id, token]);
 
@@ -209,6 +214,27 @@ useEffect(() => {
     }
   };
 
+const createWorkflow = async () => {
+  try {
+    const res = await axios.post(
+      `http://localhost:5000/api/folders/${id}/create-workflow`,
+      {},
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    
+    toast.success('Workflow créé avec succès!');
+    
+    // Rafraîchissement des données après 1 seconde
+    setTimeout(() => {
+      window.location.reload(); // Rafraîchissement complet de la page
+    }, 1000);
+    
+  } catch (err) {
+    console.error('Erreur création workflow:', err);
+    toast.error(err.response?.data?.error || 'Erreur lors de la création du workflow');
+  }
+};
+
   return (
     <>
       <Navbar />
@@ -277,7 +303,29 @@ useEffect(() => {
                   ))}
                 </ListGroup>
               )}
-
+<Button 
+  variant="primary" 
+  onClick={createWorkflow}
+  className="mt-3"
+  disabled={folder.workflow_id} // Désactive si un workflow existe déjà
+>
+  <FiFileText className="me-2" />
+  {folder.workflow_id ? 'Workflow déjà appliqué' : 'Créer un workflow'}
+</Button>
+{folder.workflow_id && (
+  <div className="mt-4">
+    <h5>Workflow associé</h5>
+    <Alert variant="info">
+      Ce dossier a un workflow associé (ID: {folder.workflow_id})
+    </Alert>
+    <Button 
+      variant="info" 
+      onClick={() => navigate(`/workflowz/${folder.workflow_id}`)}
+    >
+      Voir le workflow
+    </Button>
+  </div>
+)}
             </Card.Body>
           </Card>
         )}
@@ -407,6 +455,7 @@ useEffect(() => {
           </Button>
         </Modal.Footer>
       </Modal>
+
     </>
   );
 };
