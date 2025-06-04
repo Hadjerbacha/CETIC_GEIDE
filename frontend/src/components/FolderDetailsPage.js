@@ -88,6 +88,7 @@ const fetchData = async () => {
  useEffect(() => {
   fetchData();
 }, [id, token]);
+
   const handleCreateFolder = async (e) => {
     e.preventDefault();
     try {
@@ -213,6 +214,27 @@ const fetchData = async () => {
     }
   };
 
+const createWorkflow = async () => {
+  try {
+    const res = await axios.post(
+      `http://localhost:5000/api/folders/${id}/create-workflow`,
+      {},
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    
+    toast.success('Workflow créé avec succès!');
+    
+    // Rafraîchissement des données après 1 seconde
+    setTimeout(() => {
+      window.location.reload(); // Rafraîchissement complet de la page
+    }, 1000);
+    
+  } catch (err) {
+    console.error('Erreur création workflow:', err);
+    toast.error(err.response?.data?.error || 'Erreur lors de la création du workflow');
+  }
+};
+
   return (
     <>
       <Navbar />
@@ -281,6 +303,29 @@ const fetchData = async () => {
                   ))}
                 </ListGroup>
               )}
+<Button 
+  variant="primary" 
+  onClick={createWorkflow}
+  className="mt-3"
+  disabled={folder.workflow_id} // Désactive si un workflow existe déjà
+>
+  <FiFileText className="me-2" />
+  {folder.workflow_id ? 'Workflow déjà appliqué' : 'Créer un workflow'}
+</Button>
+{folder.workflow_id && (
+  <div className="mt-4">
+    <h5>Workflow associé</h5>
+    <Alert variant="info">
+      Ce dossier a un workflow associé (ID: {folder.workflow_id})
+    </Alert>
+    <Button 
+      variant="info" 
+      onClick={() => navigate(`/workflowz/${folder.workflow_id}`)}
+    >
+      Voir le workflow
+    </Button>
+  </div>
+)}
             </Card.Body>
           </Card>
         )}
@@ -410,6 +455,7 @@ const fetchData = async () => {
           </Button>
         </Modal.Footer>
       </Modal>
+
     </>
   );
 };
