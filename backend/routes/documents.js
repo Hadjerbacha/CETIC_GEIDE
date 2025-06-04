@@ -11,6 +11,8 @@ const router = express.Router();
 const axios = require('axios');
 const NLP_SERVICE_URL = 'http://localhost:5001/classify';
 const NLP_TIMEOUT = 3000; // 3 secondes timeout
+
+
 // PostgreSQL Pool configuration
 const pool = new Pool({
   user: process.env.PG_USER || 'postgres',
@@ -351,8 +353,10 @@ router.get('/', auth, async (req, res) => {
     let baseQuery = `
       SELECT DISTINCT d.*, dc.is_saved, dc.collection_name,
         f.numero_facture, f.montant, f.date_facture,
-        cv.nom_candidat, cv.metier, cv.date_cv,
-        dcg.numdemande, dcg.date_debut AS dateconge
+        cv.nom_candidat AS nom_candidat,
+        cv.metier AS metier,
+        cv.date_cv AS date_cv,
+        dcg.num_demande, dcg.date_debut AS dateconge
       FROM documents d
       LEFT JOIN document_collections dc ON dc.document_id = d.id
       LEFT JOIN factures f ON f.document_id = d.id
@@ -369,7 +373,7 @@ router.get('/', auth, async (req, res) => {
       baseQuery += `
         AND (
           dp.access_type = 'public'
-         OR (dp.user_id = $1 AND dp.access_type IN ('custom', 'read', 'owner'))
+          OR (dp.user_id = $1 AND dp.access_type IN ('custom', 'read', 'owner'))
         )
       `;
       params.push(userId);
@@ -378,7 +382,6 @@ router.get('/', auth, async (req, res) => {
 
     baseQuery += ` AND d.is_completed = true`;
 
-    // Filtres généraux
     if (filterType && filterType !== 'Tous les documents') {
       baseQuery += ` AND LOWER(SPLIT_PART(d.file_path, '.', -1)) = $${paramIndex}`;
       params.push(filterType.toLowerCase());
@@ -474,15 +477,38 @@ router.get('/', auth, async (req, res) => {
     baseQuery += ` ORDER BY d.date DESC`;
 
     const result = await pool.query(baseQuery, params);
-    res.status(200).json(result.rows);
+
+    // 🔁 Organisation des résultats avec regroupement des métadonnées
+    const documents = result.rows.map((doc) => {
+      const {
+        numero_facture, montant, date_facture,
+        nom_candidat, metier, date_cv,
+        numdemande, dateconge,
+        ...baseDoc
+      } = doc;
+
+      let metadata = {};
+
+      if (doc.category === 'facture') {
+        metadata = { numero_facture, montant, date_facture };
+      } else if (doc.category === 'cv') {
+        metadata = { nom_candidat, metier, date_cv };
+      } else if (doc.category === 'demande_conge') {
+        metadata = { numdemande, dateconge };
+      }
+
+      return {
+        ...baseDoc,
+        metadata,
+      };
+    });
+
+    res.status(200).json(documents);
   } catch (err) {
     console.error('Erreur dans /documents :', err.stack);
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
-
-
-
 
 router.post('/', auth, upload.single('file'), async (req, res) => {
   let {
@@ -529,18 +555,19 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
       const result = await Tesseract.recognize(fullPath, 'eng');
       extractedText = result.data.text;
     } else if (mimeType.startsWith('video/')) {
-      try {
-        extractedText = await extractFrameAndOcr(fullPath);
-        if (!extractedText.trim()) {
-          extractedText = '[Vidéo sans texte détecté]';
-        }
-      } catch (err) {
-        console.warn('⚠️ OCR sur vidéo échoué:', err);
-        extractedText = '[Vidéo non analysée]';
-      }
-    } else {
-      extractedText = '[Fichier non analysable]';
+  try {
+    extractedText = await transcribeAudio(fullPath);
+    if (!extractedText.trim()) {
+      extractedText = '[Vidéo sans transcription détectée]';
     }
+  } catch (err) {
+    console.warn('⚠️ Transcription Whisper échouée:', err);
+    extractedText = '[Vidéo non transcrite]';
+  }
+}
+
+// Après avoir extrait le texte de la vidéo
+console.log('Texte extrait de la vidéo :', extractedText);
 
     const finalCategory = await classifyText(extractedText);
 
