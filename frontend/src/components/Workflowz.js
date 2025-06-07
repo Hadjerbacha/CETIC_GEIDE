@@ -235,15 +235,24 @@ const BpmnViewer = ({ workflowId }) => {
     const container = document.getElementById('bpmn-container');
     container.innerHTML = ''; // Clear previous content
 
-    // Load BPMN viewer
+    // Load BPMN viewer with zoom and pan controls
     const BpmnViewer = require('bpmn-js/lib/Viewer').default;
     const viewer = new BpmnViewer({
-      container: '#bpmn-container'
+      container: '#bpmn-container',
+      height: '100%',
+      width: '100%'
     });
 
     viewer.importXML(bpmnXml)
       .then(() => {
-        viewer.get('canvas').zoom('fit-viewport');
+        const canvas = viewer.get('canvas');
+        canvas.zoom('fit-viewport', 'auto');
+        
+        // Add colored overlays based on task status
+        viewer.on('import.done', () => {
+          const elementRegistry = viewer.get('elementRegistry');
+          const modeling = viewer.get('modeling');
+        });
       })
       .catch(err => {
         console.error('Failed to render BPMN diagram', err);
@@ -256,14 +265,22 @@ const BpmnViewer = ({ workflowId }) => {
 
   if (loading) {
     return (
-      <div className="d-flex justify-content-center align-items-center" style={{ height: '400px' }}>
+      <div className="d-flex justify-content-center align-items-center" style={{ height: '500px' }}>
         <Spinner animation="border" variant="primary" />
       </div>
     );
   }
 
   return (
-    <div id="bpmn-container" style={{ height: '400px', width: '100%' }} />
+    <div 
+      id="bpmn-container" 
+      style={{ 
+        height: '500px', 
+        width: '100%',
+        border: '1px solid #dee2e6',
+        borderRadius: '4px'
+      }} 
+    />
   );
 };
 

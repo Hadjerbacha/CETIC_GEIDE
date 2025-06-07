@@ -125,30 +125,34 @@ router.get('/:id/bpmn', async (req, res) => {
 
   try {
     const result = await pool.query(
-      'SELECT * FROM tasks WHERE workflow_id = $1 ORDER BY due_date ASC',
+      `SELECT t.*, u.role as user_role 
+       FROM tasks t
+       LEFT JOIN unnest(t.assigned_to) WITH ORDINALITY AS a(user_id, ord) ON true
+       LEFT JOIN users u ON u.id = a.user_id
+       WHERE t.workflow_id = $1 
+       ORDER BY t.due_date ASC`,
       [id]
     );
 
     const tasks = result.rows;
-
     if (tasks.length === 0) {
       return res.status(404).json({ error: 'Aucune tâche trouvée pour ce workflow.' });
     }
 
+    // Positionnement des éléments
     let currentX = 200;
-const taskPositions = [];
+    const taskPositions = [];
+    const gatewayPositions = [];
+    const verticalSpacing = 150;
+    const horizontalSpacing = 250; // Augmenté pour plus d'espace
 
-tasks.forEach((task, index) => {
-  taskPositions.push(currentX);
-  // Si c'est une tâche de validation, prévoir un espace pour la gateway (ex: +150)
-  if (task.type === 'validation') {
-    currentX += 250; // +100 pour la tâche +150 pour la gateway
-  } else {
-    currentX += 120; // distance normale
-  }
-});
+    // Calcul des positions
+    tasks.forEach((task, index) => {
+      taskPositions.push(currentX);
+      currentX += horizontalSpacing;
+    });
 
-
+    // XML de base
     let bpmnXml = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                   xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
@@ -161,53 +165,50 @@ tasks.forEach((task, index) => {
   <bpmn:process id="workflow_${id}" isExecutable="true">
     <bpmn:startEvent id="StartEvent_1" name="Début"/>`;
 
-    // Ajouter les tâches
+    // Ajout des tâches avec rôle utilisateur
     tasks.forEach(task => {
       const taskTitle = escapeXml(task.title);
-      bpmnXml += `\n    <bpmn:task id="Task_${task.id}" name="${taskTitle}"/>`;
+      const roleInfo = task.user_role ? ` (${task.user_role})` : '';
+      bpmnXml += `\n    <bpmn:task id="Task_${task.id}" name="${taskTitle}${roleInfo}"/>`;
     });
 
-    bpmnXml += `\n    <bpmn:endEvent id="EndEvent_1" name="Fin"/>`;
+    // Ajout des éléments de fin
+    bpmnXml += `\n    <bpmn:task id="Task_Notify_Reject" name="Notifier le créateur de refus"/>`;
+    bpmnXml += `\n    <bpmn:endEvent id="EndEvent_Reject" name="Fin (rejet)"/>`;
+    bpmnXml += `\n    <bpmn:endEvent id="EndEvent_Success" name="Fin (succès)"/>`;
 
-    // Ajouter les XOR gateways pour les tâches conditionnelles
+    // Ajout des gateways XOR après chaque tâche
     tasks.forEach((task, index) => {
-      if (task.type === 'validation') {
-        const gatewayId = `Gateway_${task.id}`;
-        
-        // Ajouter le gateway XOR
-        bpmnXml += `\n    <bpmn:exclusiveGateway id="${gatewayId}" name="Décision ${index + 1}"/>`;
-        
-        // Ajouter les séquences flows conditionnels
-        bpmnXml += `\n    <bpmn:sequenceFlow id="flow_${task.id}_approved" sourceRef="${gatewayId}" targetRef="Task_${task.id}">
+      const gatewayId = `Gateway_${task.id}`;
+      bpmnXml += `\n    <bpmn:exclusiveGateway id="${gatewayId}" name="accept?"/>`;
+      
+      // Flux d'approbation
+      const nextTarget = index < tasks.length - 1 
+        ? `Task_${tasks[index + 1].id}` 
+        : 'EndEvent_Success';
+      
+      bpmnXml += `\n    <bpmn:sequenceFlow id="flow_${task.id}_approved" sourceRef="${gatewayId}" targetRef="${nextTarget}">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">\${approved == true}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>`;
-        
-        bpmnXml += `\n    <bpmn:sequenceFlow id="flow_${task.id}_rejected" sourceRef="${gatewayId}" targetRef="EndEvent_1">
+      
+      // Flux de rejet
+      bpmnXml += `\n    <bpmn:sequenceFlow id="flow_${task.id}_rejected" sourceRef="${gatewayId}" targetRef="Task_Notify_Reject">
       <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">\${approved == false}</bpmn:conditionExpression>
     </bpmn:sequenceFlow>`;
-      }
     });
 
-    // Flux de séquence logique
-    bpmnXml += `\n    <bpmn:sequenceFlow id="flow_start" sourceRef="StartEvent_1" targetRef="Task_${tasks[0].id}"/>`;
-    
-    for (let i = 0; i < tasks.length - 1; i++) {
-      const currentTask = tasks[i];
-      const nextTask = tasks[i + 1];
-      
-      if (currentTask.type === 'validation') {
-        // Pour les tâches de validation, le flux va vers le gateway
-        bpmnXml += `\n    <bpmn:sequenceFlow id="flow_${i}" sourceRef="Task_${currentTask.id}" targetRef="Gateway_${currentTask.id}"/>`;
-      } else {
-        // Pour les tâches normales, flux direct vers la suivante
-        bpmnXml += `\n    <bpmn:sequenceFlow id="flow_${i}" sourceRef="Task_${currentTask.id}" targetRef="Task_${nextTask.id}"/>`;
-      }
-    }
-    
-    // Dernier flux (sans condition)
-    bpmnXml += `\n    <bpmn:sequenceFlow id="flow_end" sourceRef="Task_${tasks[tasks.length - 1].id}" targetRef="EndEvent_1"/>`;
+    // Flux de notification vers fin rejet
+    bpmnXml += `\n    <bpmn:sequenceFlow id="flow_notify_end" sourceRef="Task_Notify_Reject" targetRef="EndEvent_Reject"/>`;
 
-    // BPMN Diagram
+    // Flux de démarrage
+    bpmnXml += `\n    <bpmn:sequenceFlow id="flow_start" sourceRef="StartEvent_1" targetRef="Task_${tasks[0].id}"/>`;
+
+    // Flux entre tâches et leurs gateways
+    tasks.forEach((task, index) => {
+      bpmnXml += `\n    <bpmn:sequenceFlow id="flow_task_${task.id}_to_gateway" sourceRef="Task_${task.id}" targetRef="Gateway_${task.id}"/>`;
+    });
+
+    // Partie diagramme
     bpmnXml += `
   </bpmn:process>
 
@@ -217,120 +218,99 @@ tasks.forEach((task, index) => {
         <dc:Bounds x="100" y="100" width="36" height="36"/>
       </bpmndi:BPMNShape>`;
 
-    // Positionnement des éléments
+    // Positionnement des tâches
     tasks.forEach((task, i) => {
       const x = taskPositions[i];
       bpmnXml += `
       <bpmndi:BPMNShape id="Task_${task.id}_di" bpmnElement="Task_${task.id}">
-        <dc:Bounds x="${x}" y="90" width="100" height="80"/>
+        <dc:Bounds x="${x}" y="100" width="150" height="80"/> <!-- Largeur augmentée -->
       </bpmndi:BPMNShape>`;
       
-      // Ajouter le gateway si c'est une tâche de validation
-      if (task.type === 'validation') {
-        const gatewayX = x + 150;
-        bpmnXml += `
+      // Gateway après chaque tâche
+      const gatewayX = x + 175;
+      gatewayPositions.push({ x: gatewayX, taskId: task.id });
+      bpmnXml += `
       <bpmndi:BPMNShape id="Gateway_${task.id}_di" bpmnElement="Gateway_${task.id}" isMarkerVisible="true">
-        <dc:Bounds x="${gatewayX}" y="105" width="50" height="50"/>
+        <dc:Bounds x="${gatewayX}" y="115" width="50" height="50"/>
       </bpmndi:BPMNShape>`;
-      }
     });
 
-    const endX = currentX;
-
+    // Notification et fins
+    const notifyX = currentX - 150;
     bpmnXml += `
-      <bpmndi:BPMNShape id="EndEvent_1_di" bpmnElement="EndEvent_1">
-        <dc:Bounds x="${endX}" y="100" width="36" height="36"/>
+      <bpmndi:BPMNShape id="Task_Notify_Reject_di" bpmnElement="Task_Notify_Reject">
+        <dc:Bounds x="${notifyX}" y="250" width="150" height="80"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_Reject_di" bpmnElement="EndEvent_Reject">
+        <dc:Bounds x="${notifyX + 75}" y="350" width="36" height="36"/>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EndEvent_Success_di" bpmnElement="EndEvent_Success">
+        <dc:Bounds x="${currentX}" y="100" width="36" height="36"/>
       </bpmndi:BPMNShape>`;
 
-    // Connexions
+    // Connexions avec des flèches plus longues
     bpmnXml += `
       <bpmndi:BPMNEdge id="flow_start_edge" bpmnElement="flow_start">
         <di:waypoint x="136" y="118"/>
-        <di:waypoint x="${taskPositions[0]}" y="130"/>
+        <di:waypoint x="${taskPositions[0]}" y="140"/>
       </bpmndi:BPMNEdge>`;
 
-    for (let i = 0; i < tasks.length - 1; i++) {
-      const currentTask = tasks[i];
-      const nextTask = tasks[i + 1];
-      
-      if (currentTask.type === 'validation') {
-        // Flèche de la tâche vers le gateway
-        const sourceX = taskPositions[i] + 100;
-        const gatewayX = taskPositions[i] + 150;
-        bpmnXml += `
-      <bpmndi:BPMNEdge id="flow_${i}_edge" bpmnElement="flow_${i}">
-        <di:waypoint x="${sourceX}" y="130"/>
-        <di:waypoint x="${gatewayX}" y="130"/>
+    // Connexions tâches -> gateways
+    tasks.forEach((task, i) => {
+      const taskX = taskPositions[i] + 150;
+      const gatewayX = taskPositions[i] + 175;
+      bpmnXml += `
+      <bpmndi:BPMNEdge id="flow_task_${task.id}_edge" bpmnElement="flow_task_${task.id}_to_gateway">
+        <di:waypoint x="${taskX}" y="140"/>
+        <di:waypoint x="${gatewayX}" y="140"/>
       </bpmndi:BPMNEdge>`;
-        
-        // Flèches du gateway vers les options
+    });
+
+    // Connexions gateways -> suites avec des flèches plus longues
+    tasks.forEach((task, i) => {
+      const gatewayX = taskPositions[i] + 200;
+      
+      // Approbation -> tâche suivante ou fin succès
+      if (i < tasks.length - 1) {
+        const nextTaskX = taskPositions[i+1];
         bpmnXml += `
-      <bpmndi:BPMNEdge id="flow_${i}_approved_edge" bpmnElement="flow_${currentTask.id}_approved">
-        <di:waypoint x="${gatewayX + 50}" y="130"/>
-        <di:waypoint x="${taskPositions[i + 1]}" y="130"/>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="flow_${i}_rejected_edge" bpmnElement="flow_${currentTask.id}_rejected">
-        <di:waypoint x="${gatewayX + 25}" y="155"/>
-        <di:waypoint x="${endX}" y="155"/>
-        <di:waypoint x="${endX}" y="118"/>
+      <bpmndi:BPMNEdge id="flow_${task.id}_approved_edge" bpmnElement="flow_${task.id}_approved">
+        <di:waypoint x="${gatewayX}" y="140"/>
+        <di:waypoint x="${nextTaskX}" y="140"/>
       </bpmndi:BPMNEdge>`;
       } else {
-        // Flèche normale entre tâches
-        const sourceX = taskPositions[i] + 100;
-        const targetX = taskPositions[i + 1];
+        // Dernière tâche -> fin succès
         bpmnXml += `
-      <bpmndi:BPMNEdge id="flow_${i}_edge" bpmnElement="flow_${i}">
-        <di:waypoint x="${sourceX}" y="130"/>
-        <di:waypoint x="${targetX}" y="130"/>
+      <bpmndi:BPMNEdge id="flow_${task.id}_approved_edge" bpmnElement="flow_${task.id}_approved">
+        <di:waypoint x="${gatewayX}" y="140"/>
+        <di:waypoint x="${currentX}" y="118"/>
       </bpmndi:BPMNEdge>`;
       }
-    }
+      
+      // Rejet -> notification (flèche plus longue et courbée)
+      bpmnXml += `
+      <bpmndi:BPMNEdge id="flow_${task.id}_rejected_edge" bpmnElement="flow_${task.id}_rejected">
+        <di:waypoint x="${gatewayX}" y="165"/>
+        <di:waypoint x="${gatewayX}" y="220"/>
+        <di:waypoint x="${notifyX + 75}" y="220"/>
+        <di:waypoint x="${notifyX + 75}" y="250"/>
+      </bpmndi:BPMNEdge>`;
+    });
+
+    // Notification -> fin rejet
+    bpmnXml += `
+      <bpmndi:BPMNEdge id="flow_notify_end_edge" bpmnElement="flow_notify_end">
+        <di:waypoint x="${notifyX + 75}" y="330"/>
+        <di:waypoint x="${notifyX + 75}" y="350"/>
+      </bpmndi:BPMNEdge>`;
 
     bpmnXml += `
-      <bpmndi:BPMNEdge id="flow_end_edge" bpmnElement="flow_end">
-        <di:waypoint x="${taskPositions[taskPositions.length - 1] + 100}" y="130"/>
-        <di:waypoint x="${endX}" y="118"/>
-      </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>
 </bpmn:definitions>`;
 
     res.set('Content-Type', 'application/xml');
     res.send(bpmnXml);
-
-    // Dans la route /:id/bpmn
-tasks.forEach((task, index) => {
-  // Modifier la partie des gateways comme ceci :
-if (task.type === 'validation' || task.status === 'cancelled') {
-  const gatewayId = `Gateway_${task.id}`;
-  
-  // Ajouter le gateway XOR
-  bpmnXml += `\n    <bpmn:exclusiveGateway id="${gatewayId}" name="Décision ${index + 1}"/>`;
-  
-  // Flux pour approbation (si validation)
-  if (task.type === 'validation') {
-    bpmnXml += `\n    <bpmn:sequenceFlow id="flow_${task.id}_approved" sourceRef="${gatewayId}" targetRef="Task_${task.id}">
-      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">\${approved == true}</bpmn:conditionExpression>
-    </bpmn:sequenceFlow>`;
-  }
-  
-  // Flux pour annulation
-  bpmnXml += `\n    <bpmn:sequenceFlow id="flow_${task.id}_cancelled" sourceRef="${gatewayId}" targetRef="Task_Reassign_${task.id}">
-    <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">\${status == 'cancelled'}</bpmn:conditionExpression>
-  </bpmn:sequenceFlow>`;
-  
-  // Flux par défaut (si ni approuvé ni annulé)
-  bpmnXml += `\n    <bpmn:sequenceFlow id="flow_${task.id}_default" sourceRef="${gatewayId}" targetRef="EndEvent_1">
-    <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">\${approved == false &amp;&amp; status != 'cancelled'}</bpmn:conditionExpression>
-  </bpmn:sequenceFlow>`;
-  
-  // Ajouter une tâche de réassignation
-  bpmnXml += `\n    <bpmn:task id="Task_Reassign_${task.id}" name="Réassigner ${escapeXml(task.title)}"/>`;
-  
-  // Flux de la tâche de réassignation vers la tâche originale
-  bpmnXml += `\n    <bpmn:sequenceFlow id="flow_reassign_${task.id}" sourceRef="Task_Reassign_${task.id}" targetRef="Task_${task.id}"/>`;
-}
-});
 
   } catch (err) {
     console.error(err);
@@ -1148,7 +1128,7 @@ router.post('/:id/generate-from-template', authMiddleware, async (req, res) => {
         { 
           title: "Signature des parties",
           description: "Obtenir les signatures des deux parties",
-          type: "operation",
+          type: "validation",
           priority: "high",
           role: "responsable commercial",
           order: 2,
@@ -1158,7 +1138,7 @@ router.post('/:id/generate-from-template', authMiddleware, async (req, res) => {
         { 
           title: "Archivage du contrat",
           description: "Archiver le contrat signé dans le système",
-          type: "operation",
+          type: "validation",
           priority: "medium",
           role: "admin",
           order: 3,
@@ -1193,7 +1173,7 @@ router.post('/:id/generate-from-template', authMiddleware, async (req, res) => {
         { 
           title: "Enregistrement comptable",
           description: "Enregistrer la facture dans le système comptable",
-          type: "operation",
+          type: "validation",
           priority: "medium",
           role: "comptable",
           order: 3,
@@ -1209,7 +1189,7 @@ router.post('/:id/generate-from-template', authMiddleware, async (req, res) => {
         { 
           title: "Vérification des droits",
           description: "Vérifier les droits à congé disponibles",
-          type: "operation",
+          type: "validation",
           priority: "low",
           role: "gestionnaire RH",
           order: 1,
@@ -1228,7 +1208,7 @@ router.post('/:id/generate-from-template', authMiddleware, async (req, res) => {
         { 
           title: "Notification au service RH",
           description: "Notification finale au service RH",
-          type: "operation",
+          type: "validation",
           priority: "low",
           role: "gestionnaire RH",
           order: 3,

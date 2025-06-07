@@ -352,7 +352,7 @@ router.get('/', auth, async (req, res) => {
       SELECT DISTINCT d.*, dc.is_saved, dc.collection_name,
         f.numero_facture, f.montant, f.date_facture,
         cv.nom_candidat, cv.metier, cv.date_cv,
-        dcg.numdemande, dcg.date_debut AS dateconge
+        dcg.num_demande, dcg.date_debut AS dateconge
       FROM documents d
       LEFT JOIN document_collections dc ON dc.document_id = d.id
       LEFT JOIN factures f ON f.document_id = d.id
@@ -460,7 +460,7 @@ router.get('/', auth, async (req, res) => {
     // Filtres spécifiques Demande Congé
     if (selectedCategory === 'demande_conge') {
       if (numdemande) {
-        baseQuery += ` AND dcg.numdemande ILIKE $${paramIndex}`;
+        baseQuery += ` AND dcg.num_demande ILIKE $${paramIndex}`;
         params.push(`%${numdemande}%`);
         paramIndex++;
       }

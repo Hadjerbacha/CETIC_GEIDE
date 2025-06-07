@@ -306,7 +306,13 @@ router.post('/:folderId/create-workflow', auth, async (req, res) => {
         name: 'Workflow Facture',
         description: 'Traitement des factures',
         steps: [
-          { title: 'Vérification comptable', description: 'Vérification des montants', type: 'validation' },
+          { title: 'Vérification comptable',
+            description: 'Vérification des montants',
+            type: 'validation',
+            priority: "high",
+            role: "juriste",
+            order: 1,
+            durationDays: 2 },
           { title: 'Approbation paiement', description: 'Validation paiement', type: 'validation' },
           { title: 'Enregistrement', description: 'Enregistrement comptable', type: 'operation' }
         ]
