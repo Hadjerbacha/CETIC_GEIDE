@@ -37,15 +37,52 @@ const priorityColors = {
 };
 
 // Composant de statistiques amélioré
-const StatsPanel = ({ workflow, steps }) => {
+const StatsPanel = ({ workflow, steps, onStatusUpdate }) => {
+  const token = localStorage.getItem('token');
   const completedSteps = steps.filter(s => s.status === 'completed').length;
+  const hasRejected = steps.some(s => s.status === 'rejected');
   const completionPercentage = steps.length ? Math.round((completedSteps / steps.length) * 100) : 0;
-  
+
   const startDate = workflow.created_at ? parseISO(workflow.created_at) : null;
   const endDate = workflow.completed_at ? parseISO(workflow.completed_at) : null;
   const duration = startDate && endDate ? 
     `${Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24))} jours` : 
     'En cours';
+
+  // ✅ Appel API automatique quand les statuts changent
+  useEffect(() => {
+    const updateWorkflowStatus = async () => {
+      let newStatus = null;
+
+      if (hasRejected) {
+        newStatus = 'rejected';
+      } else if (completedSteps === steps.length) {
+        newStatus = 'completed';
+      }
+
+      if (newStatus && newStatus !== workflow.status) {
+        try {
+          const res = await axios.patch(`/api/workflows/${workflow.id}/force-status`, {
+            status: newStatus,
+          }, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+
+          console.log('Statut du workflow mis à jour:', res.data.workflowStatus);
+          if (onStatusUpdate) onStatusUpdate(newStatus); // pour rafraîchir dans le parent si nécessaire
+        } catch (err) {
+          console.error('Erreur lors de la mise à jour du workflow:', err);
+        }
+      }
+    };
+
+    if (steps.length > 0) {
+      updateWorkflowStatus();
+    }
+  }, [steps]); // Déclenché si steps change
 
   return (
     <Card className="mb-4">
@@ -384,16 +421,13 @@ export default function WorkflowPage() {
 const completeStep = async (step) => {
   try {
     const response = await axios.patch(
-      `http://localhost:5000/api/tasks/${step.id}/status`,
-      { status: 'completed' }, // Corps de la requête
+      `http://localhost:5000/api/workflows/${step.id}/status`,
+      { status: 'completed' },
       { headers: { Authorization: `Bearer ${token}` } }
     );
-    
-    console.log('Réponse du serveur:', response.data); // Debug
     toast.success('Statut mis à jour !');
     fetchAll();
   } catch (err) {
-    console.error('Erreur:', err.response?.data || err.message);
     toast.error('Échec de la mise à jour');
   }
 };

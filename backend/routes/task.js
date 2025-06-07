@@ -125,14 +125,14 @@ router.get('/:id/bpmn', async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT t.*, u.role as user_role 
-       FROM tasks t
-       LEFT JOIN unnest(t.assigned_to) WITH ORDINALITY AS a(user_id, ord) ON true
-       LEFT JOIN users u ON u.id = a.user_id
-       WHERE t.workflow_id = $1 
-       ORDER BY t.due_date ASC`,
-      [id]
-    );
+  `SELECT t.*, u.role as user_role, t.depends_on
+   FROM tasks t
+   LEFT JOIN unnest(t.assigned_to) WITH ORDINALITY AS a(user_id, ord) ON true
+   LEFT JOIN users u ON u.id = a.user_id
+   WHERE t.workflow_id = $1 
+   ORDER BY t.task_order ASC, t.due_date ASC, t.id ASC`,
+  [id]
+);
 
     const tasks = result.rows;
     if (tasks.length === 0) {
@@ -631,103 +631,111 @@ router.post("/:id/generate-tasks", authMiddleware, async (req, res) => {
     }
   });
 
+  router.patch('/:id/force-status', authMiddleware, async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  const allowed = ['completed', 'rejected'];
+  if (!allowed.includes(status)) {
+    return res.status(400).json({ error: 'Statut non autorisé.' });
+  }
+
+  try {
+    const result = await pool.query(
+      `UPDATE workflow SET status = $1 WHERE id = $2 RETURNING *`,
+      [status, id]
+    );
+    res.json({ workflowStatus: result.rows[0].status });
+  } catch (err) {
+    console.error('Erreur mise à jour status workflow:', err);
+    res.status(500).json({ error: 'Erreur serveur', details: err.message });
+  }
+});
+
+
   // Fonction pour mettre à jour le statut du workflow en fonction des tâches
 async function updateWorkflowStatus(workflowId) {
   try {
-    // Récupérer toutes les tâches du workflow
+    console.log('⏳ Mise à jour du statut du workflow ID:', workflowId);
+
     const tasksRes = await pool.query(
       'SELECT status FROM tasks WHERE workflow_id = $1',
       [workflowId]
     );
 
     const tasks = tasksRes.rows;
-    if (tasks.length === 0) return;
+    console.log('🧩 Statuts des tâches:', tasks);
 
-    // Vérifier les statuts
+    if (tasks.length === 0) {
+      console.log('❌ Aucune tâche trouvée pour ce workflow');
+      return;
+    }
+
     const hasRejected = tasks.some(task => task.status === 'rejected');
     const allCompleted = tasks.every(task => task.status === 'completed');
 
     let newStatus = null;
-    
+
     if (hasRejected) {
       newStatus = 'rejected';
     } else if (allCompleted) {
       newStatus = 'completed';
     }
 
-    // Mettre à jour le workflow si nécessaire
     if (newStatus) {
-      await pool.query(
+      const updateRes = await pool.query(
         'UPDATE workflow SET status = $1 WHERE id = $2',
         [newStatus, workflowId]
       );
+      console.log(`✅ Workflow mis à jour vers "${newStatus}". Lignes affectées:`, updateRes.rowCount);
+    } else {
+      console.log('📌 Aucune mise à jour nécessaire du workflow.');
     }
 
     return newStatus;
+
   } catch (err) {
-    console.error('Erreur lors de la mise à jour du statut du workflow:', err);
+    console.error('💥 Erreur dans updateWorkflowStatus:', err);
     throw err;
   }
 }
 
+
   // Route pour mettre à jour le statut d'un workflow
+// Route pour mettre à jour le statut d'une tâche et ajuster le workflow
 router.patch('/:id/status', authMiddleware, async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
 
-  const allowedStatuses = ['pending', 'completed', 'in_progress', 'blocked', 'cancelled', 'rejected'];
-  if (!allowedStatuses.includes(status)) {
-    return res.status(400).json({ error: 'Statut invalide' });
-  }
-
   try {
-    const taskId = parseInt(id);
-    const statusText = String(status);
-
-    // 1. Mettre à jour la tâche
-    const result = await pool.query(
-      `UPDATE tasks 
-       SET status = $1::varchar(50),  
-           completed_at = CASE WHEN $1 = 'completed' THEN NOW() ELSE completed_at END
-       WHERE id = $2
-       RETURNING *`,
-      [statusText, taskId]
-    );
+    const result = await pool.query(`
+      UPDATE tasks
+      SET status = $1,
+          completed_at = CASE WHEN $1 = 'completed' THEN NOW() ELSE completed_at END,
+          rejected_at = CASE WHEN $1 = 'rejected' THEN NOW() ELSE rejected_at END
+      WHERE id = $2
+      RETURNING *`, [status, id]);
 
     if (result.rowCount === 0) {
       return res.status(404).json({ error: 'Tâche non trouvée' });
     }
 
-    const updatedTask = result.rows[0];
-    const workflowId = updatedTask.workflow_id;
+    const workflowId = result.rows[0].workflow_id;
+    const workflowStatus = await updateWorkflowStatus(workflowId); // ta fonction JS
 
-    // 2. Débloquer les tâches suivantes si la tâche est terminée
-    if (status === 'completed') {
-      await pool.query(
-        `UPDATE tasks 
-         SET status = 'pending'
-         WHERE depends_on = $1 AND status = 'blocked'`,
-        [taskId]
-      );
-    }
-
-    // 3. Mettre à jour le statut du workflow en fonction de toutes les tâches
-    const workflowStatus = await updateWorkflowStatus(workflowId);
-
-    res.json({ 
-      updatedTask, 
-      workflowStatus: workflowStatus || 'unchanged' 
+    res.status(200).json({
+      message: 'Tâche mise à jour avec succès',
+      task: result.rows[0],
+      workflowStatus: workflowStatus || 'unchanged'
     });
 
   } catch (err) {
-    console.error('Erreur SQL:', err);
-    res.status(500).json({ 
-      error: 'Erreur serveur',
-      details: err.message,
-      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
-    });
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
+
+
 
 
 router.get('/document/:documentId', authMiddleware, async (req, res) => {
@@ -1261,7 +1269,31 @@ router.post('/:id/generate-from-template', authMiddleware, async (req, res) => {
     const taskMap = {}; 
     const today = new Date();
     
-    const sortedTemplates = templates[documentType].tasks.sort((a, b) => a.order - b.order);
+    function sortTasksWithDependencies(tasks) {
+  const sorted = [];
+  const visited = new Set();
+
+  const taskMap = new Map(tasks.map(t => [t.order, t]));
+
+  function visit(task) {
+    if (visited.has(task.order)) return;
+    if (task.depends_on) {
+      const depTask = taskMap.get(task.depends_on);
+      if (depTask) visit(depTask);
+    }
+    visited.add(task.order);
+    sorted.push(task);
+  }
+
+  for (const task of tasks) {
+    visit(task);
+  }
+
+  return sorted;
+}
+
+const sortedTemplates = sortTasksWithDependencies(templates[documentType].tasks);
+
     
     for (const taskTemplate of sortedTemplates) {
       const dueDate = new Date(today);

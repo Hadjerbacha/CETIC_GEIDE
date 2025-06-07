@@ -307,7 +307,7 @@ const workflowTemplates = {
       { 
         title: 'Enregistrement', 
         description: 'Enregistrement comptable', 
-        type: 'operation',
+        type: 'validation',
         role: 'comptable',
         order: 3,
         durationDays: 1,
@@ -347,7 +347,7 @@ const workflowTemplates = {
       }
     ]
   },
-  conge: {
+  demande_conge: {
     name: 'Workflow Congé',
     description: 'Gestion des demandes de congé',
     tasks: [
@@ -381,10 +381,38 @@ const workflowTemplates = {
   }
 };
 
+// Ajouter cette fonction utilitaire au début du fichier (après les imports)
+async function sendTaskNotification(userId, senderId, message, taskId) {
+  try {
+    await pool.query(
+      `INSERT INTO notifications (
+        user_id, 
+        sender_id, 
+        message, 
+        type, 
+        related_task_id,
+        is_read
+      ) VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        userId,
+        senderId,
+        message,
+        'task',
+        taskId,
+        false
+      ]
+    );
+  } catch (err) {
+    console.error('Erreur lors de l\'envoi de notification:', err);
+  }
+}
+
 // Modifiez la route pour créer le workflow sur demande
+// Modifier la fonction de création de workflow dans dossier.js
 router.post('/:folderId/create-workflow', auth, async (req, res) => {
   const folderId = parseInt(req.params.folderId, 10);
   const userId = req.user.id;
+  const today = new Date();
 
   try {
     // 1. Vérifier que le dossier existe et récupérer son nom
@@ -405,11 +433,18 @@ router.post('/:folderId/create-workflow', auth, async (req, res) => {
 
     const template = workflowTemplates[templateId];
 
-    // 2. Créer le workflow
+    // 2. Créer le workflow avec la date actuelle
     const workflowRes = await pool.query(
-      `INSERT INTO workflow (name, description, created_by, folder_id, status)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [template.name, template.description, userId, folderId, 'pending']
+      `INSERT INTO workflow (name, description, created_by, folder_id, status, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+      [
+        template.name,
+        template.description,
+        userId, // created_by
+        folderId,
+        'pending',
+        today // created_at
+      ]
     );
     const workflow = workflowRes.rows[0];
 
@@ -417,39 +452,64 @@ router.post('/:folderId/create-workflow', auth, async (req, res) => {
     const taskMap = {};
     const insertedTasks = [];
 
+    // Tri des tâches avec dépendances
     const sortedTasks = template.tasks.sort((a, b) => a.order - b.order);
 
     for (const taskDef of sortedTasks) {
+      // Calcul de la date d'échéance future
+      const dueDate = new Date(today);
+      dueDate.setDate(dueDate.getDate() + (taskDef.durationDays || 1));
+
+      // Trouver un utilisateur avec le rôle requis
       const userRes = await pool.query(
         `SELECT id FROM users WHERE role = $1 LIMIT 1`,
         [taskDef.role]
       );
       const assignedTo = userRes.rows[0]?.id || null;
 
+      // Déterminer le statut initial
+      let initialStatus = 'pending';
+      if (taskDef.depends_on) {
+        initialStatus = 'blocked';
+      }
+
       const taskRes = await pool.query(
         `INSERT INTO tasks (
           title, description, type, workflow_id, status, assigned_to,
-          task_order, depends_on, duration_days
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING *`,
+          task_order, depends_on, duration_days, due_date, created_by, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
         [
           taskDef.title,
           taskDef.description,
           taskDef.type,
           workflow.id,
-          taskDef.order === 1 ? 'pending' : 'blocked',
+          initialStatus,
           assignedTo ? [assignedTo] : null,
           taskDef.order,
-          null,
-          taskDef.durationDays
+          null, // sera mis à jour après
+          taskDef.durationDays,
+          dueDate,
+          userId,
+          today
         ]
       );
 
       const inserted = taskRes.rows[0];
       taskMap[taskDef.order] = inserted.id;
       insertedTasks.push({ ...inserted, tempDependsOn: taskDef.depends_on || null });
+
+      // Envoyer une notification si la tâche est assignée et n'est pas bloquée
+      if (assignedTo && initialStatus !== 'blocked') {
+        await sendTaskNotification(
+          assignedTo,
+          userId,
+          `Une nouvelle tâche vous a été assignée: "${taskDef.title}"`,
+          inserted.id
+        );
+      }
     }
 
-    // 4. Mise à jour des dépendances
+    // 4. Mise à jour des dépendances avec les IDs réels
     for (const task of insertedTasks) {
       if (task.tempDependsOn) {
         const dependsOnTaskId = taskMap[task.tempDependsOn];
@@ -471,68 +531,25 @@ router.post('/:folderId/create-workflow', auth, async (req, res) => {
     res.status(201).json({
       message: 'Workflow créé avec succès',
       workflowId: workflow.id,
-      tasks: template.tasks
+      tasks: template.tasks.map(t => ({
+        title: t.title,
+        dueDate: new Date(today.getTime() + (t.durationDays * 24 * 60 * 60 * 1000)),
+        status: t.depends_on ? 'blocked' : 'pending',
+        assignedRole: t.role
+      }))
     });
 
   } catch (err) {
     console.error('Erreur création workflow:', err.stack);
-    res.status(500).json({ error: 'Erreur serveur', details: err.message });
+    res.status(500).json({ 
+      error: 'Erreur serveur', 
+      details: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
   }
 });
 
 
-router.post('/tasks/:taskId/complete', auth, async (req, res) => {
-  const taskId = req.params.taskId;
-  const userId = req.user.id;
-
-  try {
-    // 1. Vérifier que la tâche existe et est assignée à l'utilisateur
-    const taskRes = await pool.query(
-      `SELECT * FROM tasks WHERE id = $1 AND assigned_to = $2`,
-      [taskId, userId]
-    );
-    
-    if (taskRes.rowCount === 0) {
-      return res.status(404).json({ error: 'Tâche non trouvée ou non autorisée' });
-    }
-
-    const task = taskRes.rows[0];
-
-    // 2. Marquer la tâche comme terminée
-    await pool.query(
-      `UPDATE tasks SET status = 'completed', completed_at = NOW() WHERE id = $1`,
-      [taskId]
-    );
-
-    // 3. Trouver et débloquer les tâches suivantes qui dépendent de celle-ci
-    await pool.query(
-      `UPDATE tasks 
-       SET status = 'pending' 
-       WHERE depends_on = $1 AND workflow_id = $2`,
-      [task.order, task.workflow_id]
-    );
-
-    // 4. Vérifier si toutes les tâches sont terminées pour marquer le workflow comme complet
-    const pendingTasksRes = await pool.query(
-      `SELECT COUNT(*) FROM tasks 
-       WHERE workflow_id = $1 AND status != 'completed'`,
-      [task.workflow_id]
-    );
-
-    if (pendingTasksRes.rows[0].count === '0') {
-      await pool.query(
-        `UPDATE workflow SET status = 'completed' WHERE id = $1`,
-        [task.workflow_id]
-      );
-    }
-
-    res.status(200).json({ message: 'Tâche terminée avec succès' });
-
-  } catch (err) {
-    console.error('Erreur lors de la complétion de la tâche:', err.stack);
-    res.status(500).json({ error: 'Erreur serveur', details: err.message });
-  }
-});
 // Initialisation des tables
 initializeDatabase();
 
