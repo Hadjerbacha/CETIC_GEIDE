@@ -389,78 +389,82 @@ const Doc = () => {
     }, {})
   );
 
-const filteredDocuments = latestDocs.filter((doc) => {
-  const docName = doc.name || '';
-  const docFilePath = doc.file_path || '';
-  const docDate = doc.date ? new Date(doc.date) : null;
-  const docContent = doc.text_content || '';
-  const docCategory = doc.category || '';
-  const docSummary = doc.summary || '';
-  const docDescription = doc.description || '';
-  const docTags = Array.isArray(doc.tags) ? doc.tags : [];
-  const docFolder = doc.folder || '';
-  const docAuthor = doc.author || '';
+  const filteredDocuments = latestDocs.filter((doc) => {
+    const docName = doc.name || '';
+    const docFilePath = doc.file_path || '';
+    const docDate = doc.date ? new Date(doc.date) : null;
+    const docContent = doc.text_content || '';
+    const docCategory = doc.category || '';
+    const docSummary = doc.summary || '';
+    const docDescription = doc.description || '';
+    const docTags = Array.isArray(doc.tags) ? doc.tags : [];
+    const docFolder = doc.folder || '';
+    const docAuthor = doc.author || '';
 
-  const fileExtension = docFilePath.split('.').pop().toLowerCase();
+    const fileExtension = docFilePath.split('.').pop().toLowerCase();
 
-  // Filtrage général par type (extension)
-  const matchesType =
-    filterType === 'Tous les documents' ||
-    fileExtension === filterType.toLowerCase();
+    // Filtrage général par type (extension)
+    const matchesType =
+      filterType === 'Tous les documents' ||
+      fileExtension === filterType.toLowerCase();
 
-  // Filtrage général par date
-  const matchesDate =
-    (!startDate || (docDate && docDate >= new Date(startDate))) &&
-    (!endDate || (docDate && docDate <= new Date(endDate)));
+    // Filtrage général par date
+    const matchesDate =
+      (!startDate || (docDate && docDate >= new Date(startDate))) &&
+      (!endDate || (docDate && docDate <= new Date(endDate)));
 
-  // Recherche globale simple ou avancée (sur contenu, résumé, description, etc.)
-  const searchLower = searchQuery.toLowerCase();
-  const matchesSearch = useAdvancedFilter
-    ? (
-      docContent.toLowerCase().includes(searchLower) ||
-      docSummary.toLowerCase().includes(searchLower) ||
-      docDescription.toLowerCase().includes(searchLower) ||
-      docFolder.toLowerCase().includes(searchLower) ||
-      docAuthor.toLowerCase().includes(searchLower) ||
-      docTags.some(tag => tag.toLowerCase().includes(searchLower))
-    )
-    : docName.toLowerCase().includes(searchLower);
+    // Recherche globale simple ou avancée (sur contenu, résumé, description, etc.)
+    const searchLower = searchQuery.toLowerCase();
+    const matchesSearch = useAdvancedFilter
+      ? (
+        docContent.toLowerCase().includes(searchLower) ||
+        docSummary.toLowerCase().includes(searchLower) ||
+        docDescription.toLowerCase().includes(searchLower) ||
+        docFolder.toLowerCase().includes(searchLower) ||
+        docAuthor.toLowerCase().includes(searchLower) ||
+        docTags.some(tag => tag.toLowerCase().includes(searchLower))
+      )
+      : docName.toLowerCase().includes(searchLower);
 
-  // Vérification de la catégorie sélectionnée
-  const matchesCategory =
-    !selectedCategory || selectedCategory === '' ||
-    (docCategory && docCategory.toLowerCase() === selectedCategory.toLowerCase());
+    // Vérification de la catégorie sélectionnée
+    const matchesCategory =
+      !selectedCategory || selectedCategory === '' ||
+      (docCategory && docCategory.toLowerCase() === selectedCategory.toLowerCase());
 
-  // Filtrage avancé spécifique aux catégories métier
-  const matchesAdvancedCategory = (() => {
-    if (selectedCategory === 'facture') {
-      const numeroMatch = !searchFilters.numero_facture || (doc.numero_facture && doc.numero_facture.includes(searchFilters.numero_facture));
-      const montantMatch = !searchFilters.montant || (doc.montant && Number(doc.montant) === Number(searchFilters.montant));
-      const dateFactureMatch = !searchFilters.date_facture || (doc.date_facture && new Date(doc.date_facture).toISOString().split('T')[0] === searchFilters.date_facture);
-      return numeroMatch && montantMatch && dateFactureMatch;
-    }
 
-    if (selectedCategory === 'cv') {
-      // Assure-toi que doc a bien les champs spécifiques au CV
-      const nomMatch = !searchFilters.nom_candidat || (doc.nom_candidat && doc.nom_candidat.toLowerCase().includes(searchFilters.nom_candidat.toLowerCase()));
-      const metierMatch = !searchFilters.metier || (doc.metier && doc.metier.toLowerCase().includes(searchFilters.metier.toLowerCase()));
-      const dateCvMatch = !searchFilters.date_cv || (doc.date_cv && new Date(doc.date_cv).toISOString().split('T')[0] === searchFilters.date_cv);
-      return nomMatch && metierMatch && dateCvMatch;
-    }
+    console.log("nom_candidat ➡️", doc.metadata?.nom_candidat);
 
-    if (selectedCategory === 'demande_conge') {
-      const numDemandeMatch = !searchFilters.numdemande || (doc.numdemande && doc.numdemande.includes(searchFilters.numdemande));
-      const dateCongeMatch = !searchFilters.dateconge || (doc.dateconge && new Date(doc.dateconge).toISOString().split('T')[0] === searchFilters.dateconge);
-      return numDemandeMatch && dateCongeMatch;
-    }
+    // Filtrage avancé spécifique aux catégories métier
+    const matchesAdvancedCategory = (() => {
+      if (selectedCategory === 'facture') {
+        const numeroMatch = !searchFilters.numero_facture || (doc.numero_facture && doc.numero_facture.includes(searchFilters.numero_facture));
+        const montantMatch = !searchFilters.montant || (doc.montant && Number(doc.montant) === Number(searchFilters.montant));
+        const dateFactureMatch = !searchFilters.date_facture || (doc.date_facture && new Date(doc.date_facture).toISOString().split('T')[0] === searchFilters.date_facture);
+        return numeroMatch && montantMatch && dateFactureMatch;
+      }
 
-    // Si aucune catégorie spécifique, on passe
-    return true;
-  })();
+      if (selectedCategory === 'cv') {
+        // Assure-toi que doc a bien les champs spécifiques au CV
+        const nomMatch = !searchFilters.nom_candidat || (doc.nom_candidat && doc.nom_candidat.toLowerCase().includes(searchFilters.nom_candidat.toLowerCase()));
+        const metierMatch = !searchFilters.metier || (doc.metier && doc.metier.toLowerCase().includes(searchFilters.metier.toLowerCase()));
+        const dateCvMatch = !searchFilters.date_cv || (doc.date_cv && new Date(doc.date_cv).toISOString().split('T')[0] === searchFilters.date_cv);
+        return nomMatch && metierMatch && dateCvMatch;
+      }
 
-  // Résultat final, tous les filtres doivent passer
-  return matchesType && matchesDate && matchesSearch && matchesCategory && matchesAdvancedCategory;
-});
+      if (selectedCategory === 'demande_conge') {
+        const numDemandeMatch = !searchFilters.numdemande || (doc.numdemande && doc.numdemande.includes(searchFilters.numdemande));
+        const dateCongeMatch = !searchFilters.dateconge || (doc.dateconge && new Date(doc.dateconge).toISOString().split('T')[0] === searchFilters.dateconge);
+        return numDemandeMatch && dateCongeMatch;
+      }
+
+      // Si aucune catégorie spécifique, on passe
+      return true;
+    })();
+
+    // Résultat final, tous les filtres doivent passer
+    return matchesType && matchesDate && matchesSearch && matchesCategory && matchesAdvancedCategory;
+  });
+
 
 
   const handleOpenConfirm = async (doc) => {
