@@ -702,7 +702,6 @@ async function updateWorkflowStatus(workflowId) {
 
 
   // Route pour mettre à jour le statut d'un workflow
-// Route pour mettre à jour le statut d'une tâche et ajuster le workflow
 router.patch('/:id/status', authMiddleware, async (req, res) => {
   const { id } = req.params;
   const { status } = req.body;
@@ -1245,8 +1244,8 @@ router.post('/:id/generate-from-template', authMiddleware, async (req, res) => {
     // 2. Mettre à jour les infos du workflow avec le template
     await pool.query(
       'UPDATE workflow SET name = $1, description = $2 WHERE id = $3',
-      [
-        templates[documentType].workflowName,
+       [
+        `${templates[documentType].workflowName} #${id}`, // Ajout de l'ID du workflow au nom
         templates[documentType].workflowDescription,
         id
       ]

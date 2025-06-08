@@ -427,26 +427,39 @@ router.post('/:folderId/create-workflow', auth, async (req, res) => {
     const folder = folderRes.rows[0];
     const templateId = getTemplateByFolderName(folder.name);
 
-    if (!templateId) {
-      return res.status(400).json({ error: 'Aucun template correspondant au nom du dossier' });
-    }
+if (!templateId || !workflowTemplates[templateId]) {
+  return res.status(400).json({ 
+    error: 'Aucun template valide trouvé pour ce nom de dossier',
+    folderName: folder.name
+  });
+}
 
-    const template = workflowTemplates[templateId];
+const template = workflowTemplates[templateId];
 
-    // 2. Créer le workflow avec la date actuelle
-    const workflowRes = await pool.query(
-      `INSERT INTO workflow (name, description, created_by, folder_id, status, created_at)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [
-        template.name,
-        template.description,
-        userId, // created_by
-        folderId,
-        'pending',
-        today // created_at
-      ]
-    );
-    const workflow = workflowRes.rows[0];
+// 2. Créer le workflow avec un nom temporaire
+const workflowRes = await pool.query(
+  `INSERT INTO workflow (name, description, created_by, folder_id, status, created_at)
+   VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+  [
+    'temp', // nom temporaire
+    template.description,
+    userId,
+    folderId,
+    'pending',
+    today
+  ]
+);
+
+const workflow = workflowRes.rows[0];
+const workflowId = workflow.id;
+
+// Mettre à jour le nom avec ID
+const newName = `${template.name} #${workflowId}`;
+await pool.query(
+  `UPDATE workflow SET name = $1 WHERE id = $2`,
+  [newName, workflowId]
+);
+
 
     // 3. Créer les tâches avec assignation automatique + dépendances
     const taskMap = {};
