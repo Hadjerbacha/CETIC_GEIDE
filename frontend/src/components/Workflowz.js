@@ -48,7 +48,7 @@ const StatsPanel = ({ workflow, steps, onStatusUpdate }) => {
   const duration = startDate && endDate ? 
     `${Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24))} jours` : 
     'En cours';
-
+ 
   // ✅ Appel API automatique quand les statuts changent
   useEffect(() => {
     const updateWorkflowStatus = async () => {
