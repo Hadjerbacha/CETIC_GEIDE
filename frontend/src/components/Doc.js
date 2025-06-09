@@ -1260,19 +1260,19 @@ const handleArchive = async (docId) => {
   }}
 >
   <i className="bi bi-play-fill me-1"></i>
-  {/* Archiver */}
+</Button>
+{/* Archiver */}
                                 {userRole === 'admin' && (
                                   <Button
                                     variant="secondary"
                                     size="sm"
-                                    className="me-2"
+                                    className="ms-2"
                                     onClick={() => handleArchive(doc.id)}
                                     title="Archiver le document"
                                   >
                                     <i className="bi bi-archive"></i>
                                   </Button>
                                 )}
-</Button>
                               </td>
 
                             </tr>
