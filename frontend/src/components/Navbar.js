@@ -1,53 +1,49 @@
 import React, { useState, useEffect } from 'react';
 import * as FaIcons from 'react-icons/fa';
 import * as AiIcons from 'react-icons/ai';
+import * as HiIcons from 'react-icons/hi';
 import { Link, useNavigate } from 'react-router-dom';
 import '../style/Navbar.css';
 import { IconContext } from 'react-icons';
 import { jwtDecode } from 'jwt-decode';
-import Dropdown from 'react-bootstrap/Dropdown';
+import { Dropdown, Avatar, Badge } from 'antd';
 import axios from 'axios';
-import OverlayTrigger from 'react-bootstrap/OverlayTrigger';
-import Tooltip from 'react-bootstrap/Tooltip';
-
+import { motion } from 'framer-motion';
 
 const Navbar = () => {
   const [sidebar, setSidebar] = useState(false);
   const [users, setUsers] = useState([]);
   const [userId, setUserId] = useState("");
   const [currentUser, setCurrentUser] = useState(null);
-  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0); // Nouvel état pour compter les notifications non lues
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const navigate = useNavigate();
 
   const showSidebar = () => setSidebar(!sidebar);
 
-  // Dans Navbar.js
-const handleLogout = async () => {
-  try {
-    await axios.post('http://localhost:5000/api/auth/logout', {}, {
-      headers: {
-        Authorization: `Bearer ${localStorage.getItem('token')}`
-      }
-    });
-    localStorage.removeItem("token");
-    navigate('/');
-  } catch (err) {
-    console.error("Erreur lors de la déconnexion:", err);
-    localStorage.removeItem("token");
-    navigate('/');
-  }
-};
+  const handleLogout = async () => {
+    try {
+      await axios.post('http://localhost:5000/api/auth/logout', {}, {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      localStorage.removeItem("token");
+      navigate('/');
+    } catch (err) {
+      console.error("Erreur lors de la déconnexion:", err);
+      localStorage.removeItem("token");
+      navigate('/');
+    }
+  };
 
-  // Décoder JWT pour récupérer userId
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
       const decoded = jwtDecode(token);
-      setUserId(decoded.id); // ici tu fixes le problème
+      setUserId(decoded.id);
     }
   }, []);
 
-  // Récupérer la liste des utilisateurs
   useEffect(() => {
     fetch('http://localhost:5000/api/auth/users')
       .then(res => res.json())
@@ -55,7 +51,6 @@ const handleLogout = async () => {
       .catch(err => console.error('Erreur chargement utilisateurs :', err));
   }, []);
 
-  // Associer userId au user courant
   useEffect(() => {
     if (userId && users.length > 0) {
       const found = users.find(u => u.id === userId);
@@ -65,17 +60,15 @@ const handleLogout = async () => {
 
   useEffect(() => {
     if (currentUser) {
-      // Récupérer les notifications non lues
       axios.get(`http://localhost:5000/api/notifications/${currentUser.id}`)
         .then(res => {
           const unreadCount = res.data.filter(notification => !notification.is_read).length;
-          setUnreadNotificationsCount(unreadCount); // Mettre à jour le nombre de notifications non lues
+          setUnreadNotificationsCount(unreadCount);
         })
         .catch(err => console.error("Erreur notifications :", err));
     }
   }, [currentUser]);
 
-  // Menu selon rôle
   const sidebarItems = [
     {
       title: 'Accueil',
@@ -90,34 +83,31 @@ const handleLogout = async () => {
     {
       title: 'Documents',
       path: '/documents',
-      icon: <FaIcons.FaPlus />,
+      icon: <HiIcons.HiDocumentAdd />,
     },
-     {
-      title: 'Folders',
+    {
+      title: 'Dossiers',
       path: '/folder',
-      icon: <FaIcons.FaFolderOpen />,
+      icon: <HiIcons.HiFolderOpen />,
     },
-    /*{
-      title: 'Workflows',
-      path: '/workflow',
-      icon: <FaIcons.FaClipboardList />,
-    },*/
     {
       title: 'Mes tâches',
       path: '/mes-taches',
-      icon: <FaIcons.FaUserCheck />,
+      icon: <FaIcons.FaTasks />,
     },
     {
       title: 'Notifications',
       path: '/notif',
       icon: (
+        <Badge count={unreadNotificationsCount} offset={[-5, 5]}>
           <FaIcons.FaBell />
+        </Badge>
       )
     },
     {
       title: 'Tableau de bord',
       path: '/Statistique',
-      icon: <FaIcons.FaChartBar />,
+      icon: <FaIcons.FaChartLine />,
     },
     {
       title: 'Journal d\'activité',
@@ -141,103 +131,153 @@ const handleLogout = async () => {
     },
   ];
 
+  const userMenu = (
+    <div className="user-dropdown-menu">
+      <div className="user-info">
+        <Avatar 
+          size={40} 
+          style={{ 
+            backgroundColor: '#174193',
+            color: '#fff',
+            fontWeight: 'bold'
+          }}
+        >
+          {currentUser?.name?.charAt(0)}{currentUser?.prenom?.charAt(0)}
+        </Avatar>
+        <div className="user-details">
+          <span className="user-name">{currentUser?.name} {currentUser?.prenom}</span>
+          <span className="user-role">{currentUser?.role}</span>
+        </div>
+      </div>
+      <div className="dropdown-divider"></div>
+      <Link to="/profile" className="dropdown-item">
+        <FaIcons.FaUser /> Mon profil
+      </Link>
+      <Link to="/settings" className="dropdown-item">
+        <FaIcons.FaCog /> Paramètres
+      </Link>
+      <Link to="/reclamation" className="dropdown-item">
+        <FaIcons.FaQuestionCircle /> Aide
+      </Link>
+      <div className="dropdown-divider"></div>
+      <button onClick={handleLogout} className="dropdown-item logout">
+        <FaIcons.FaSignOutAlt /> Déconnexion
+      </button>
+    </div>
+  );
+
   return (
-    <IconContext.Provider value={{ color: '#000' }}>
-      <div className="navbar">
-        <div className="navbar-content">
-          <Link to="#" className="menu-bars">
+    <>
+    <IconContext.Provider value={{ color: '#174193' }}>
+      <header className="modern-navbar">
+        <div className="navbar-container">
+          <motion.div 
+            whileHover={{ scale: 1.05 }}
+            className="menu-toggle"
+          >
             <FaIcons.FaBars onClick={showSidebar} />
-          </Link>
+          </motion.div>
 
+          
 
-
-          <Link to="/accueil" style={{ marginLeft: 'auto', marginRight: 'auto' }}>
-  <img
-    src="/11.png"
-    alt="Logo"
-    width="100"
-    height="50"
-    className="logo-hover"
-    style={{ cursor: 'pointer' }}
-  />
-</Link>
-
-<OverlayTrigger
-  placement="bottom"
-  overlay={<Tooltip id="tooltip-bottom">Voir notifications</Tooltip>}
+          <div className="navbar-right">
+           <motion.div 
+  whileHover={{ scale: 1.05 }}
+  className="notification-icon"
+  style={{
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    margin: 0,
+    padding: '6px 20px',
+    backgroundColor: '#1890ff',
+    borderRadius: '30px',
+    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.15)',
+    cursor: 'pointer',
+    minWidth: '170px' // pour donner plus de largeur
+  }}
 >
   <Link
     to="/notif"
     style={{
-      position: 'relative',
-      marginRight: '5px',
-      marginLeft: '-10px',
-      display: 'inline-block',
+      color: '#fff',
+      textDecoration: 'none',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '10px' // espace entre l'icône et le texte
     }}
   >
-    <FaIcons.FaBell size={20} color="#174193" />
-    {unreadNotificationsCount > 0 && (
-      <span
-        style={{
-          position: 'absolute',
-          top: '-5px',
-          right: '-10px',
-          backgroundColor: 'red',
-          color: 'white',
-          borderRadius: '50%',
-          padding: '2px 6px',
-          fontSize: '12px',
-          zIndex: 10,
-        }}
-      >
-        {unreadNotificationsCount}
-      </span>
-    )}
+    <Badge count={unreadNotificationsCount} offset={[-5, 5]}>
+      <FaIcons.FaBell size={22} style={{ color: '#fff' }} />
+    </Badge>
+    <h6 style={{ color: '#fff', margin: 0 }}>Notifications</h6>
   </Link>
-</OverlayTrigger>
+</motion.div>
 
-          {currentUser ? (
-            <Dropdown>
-              <Dropdown.Toggle variant="light" id="dropdown-basic" className="text-success fw-bold">
-                {currentUser.name} {currentUser.prenom}
-              </Dropdown.Toggle>
 
-              <Dropdown.Menu>
-                <Dropdown.Item href="/reclamation">Aide</Dropdown.Item>
-                <Dropdown.Divider />
-                <Dropdown.Item onClick={handleLogout} className="text-danger">
-                  Déconnexion
-                </Dropdown.Item>
-              </Dropdown.Menu>
+            <Dropdown overlay={userMenu} trigger={['click']}>
+              <div className="user-avatar">
+                <Avatar 
+                  size={40} 
+                  style={{ 
+                    backgroundColor: '#174193',
+                    color: '#fff',
+                    fontWeight: 'bold',
+                    cursor: 'pointer'
+                  }}
+                >
+                  {currentUser?.name?.charAt(0)}{currentUser?.prenom?.charAt(0)}
+                </Avatar>
+                <span className="user-name-short">
+                  {currentUser?.name} {currentUser?.prenom}
+                </span>
+                <FaIcons.FaChevronDown className="dropdown-arrow" />
+              </div>
             </Dropdown>
-          ) : (
-            <div className="text-danger">Aucun utilisateur connecté</div>
-          )}
+          </div>
         </div>
-      </div>
+      </header>
 
+      <motion.nav 
+        initial={{ x: -300 }}
+        animate={{ x: sidebar ? 0 : -300 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+        className="modern-sidebar"
+      >
+        <div className="sidebar-header">
+          <motion.div 
+            whileHover={{ rotate: 90 }}
+            className="close-btn"
+            onClick={showSidebar}
+          >
+            <AiIcons.AiOutlineClose />
+          </motion.div>
+        </div>
 
-      <nav className={sidebar ? 'nav-menu active' : 'nav-menu'} style={{ zIndex: 200 }}>
-        <ul className="nav-menu-items shine-hover" onClick={showSidebar}>
-          <li className="navbar-toggle">
-            <Link to="#" className="menu-bars shine-hover" >
-              <AiIcons.AiOutlineClose />
-            </Link>
-          </li>
-
+        <ul className="sidebar-items">
           {sidebarItems
             .filter(Boolean)
             .map((item, index) => (
-              <li key={index} className="nav-text">
+              <motion.li 
+                key={index}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="nav-item"
+              >
                 <Link to={item.path}>
-                  {item.icon}
-                  <span className="ms-2">{item.title}</span>
+                  <span className="nav-icon">{item.icon}</span>
+                  <span className="nav-title">{item.title}</span>
                 </Link>
-              </li>
+              </motion.li>
             ))}
         </ul>
-      </nav>
+      </motion.nav>
     </IconContext.Provider>
+    <br/>
+    <br/>
+    <br/>
+    <br/>
+    </>
   );
 };
 

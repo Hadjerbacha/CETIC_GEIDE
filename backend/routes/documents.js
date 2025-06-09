@@ -352,6 +352,7 @@ router.get('/', auth, async (req, res) => {
     let baseQuery = `
       SELECT DISTINCT d.*, dc.is_saved, dc.collection_name,
         f.numero_facture, f.montant, f.date_facture,
+        cv.nom_candidat, cv.metier, cv.date_cv,
         cv.nom_candidat AS nom_candidat,
         cv.metier AS metier,
         cv.date_cv AS date_cv,
@@ -462,7 +463,7 @@ router.get('/', auth, async (req, res) => {
     // Filtres spécifiques Demande Congé
     if (selectedCategory === 'demande_conge') {
       if (numdemande) {
-        baseQuery += ` AND dcg.numdemande ILIKE $${paramIndex}`;
+        baseQuery += ` AND dcg.num_demande ILIKE $${paramIndex}`;
         params.push(`%${numdemande}%`);
         paramIndex++;
       }

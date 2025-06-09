@@ -37,15 +37,52 @@ const priorityColors = {
 };
 
 // Composant de statistiques amélioré
-const StatsPanel = ({ workflow, steps }) => {
+const StatsPanel = ({ workflow, steps, onStatusUpdate }) => {
+  const token = localStorage.getItem('token');
   const completedSteps = steps.filter(s => s.status === 'completed').length;
+  const hasRejected = steps.some(s => s.status === 'rejected');
   const completionPercentage = steps.length ? Math.round((completedSteps / steps.length) * 100) : 0;
-  
+
   const startDate = workflow.created_at ? parseISO(workflow.created_at) : null;
   const endDate = workflow.completed_at ? parseISO(workflow.completed_at) : null;
   const duration = startDate && endDate ? 
     `${Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24))} jours` : 
     'En cours';
+ 
+  // ✅ Appel API automatique quand les statuts changent
+  useEffect(() => {
+    const updateWorkflowStatus = async () => {
+      let newStatus = null;
+
+      if (hasRejected) {
+        newStatus = 'rejected';
+      } else if (completedSteps === steps.length) {
+        newStatus = 'completed';
+      }
+
+      if (newStatus && newStatus !== workflow.status) {
+        try {
+          const res = await axios.patch(`/api/workflows/${workflow.id}/force-status`, {
+            status: newStatus,
+          }, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+
+          console.log('Statut du workflow mis à jour:', res.data.workflowStatus);
+          if (onStatusUpdate) onStatusUpdate(newStatus); // pour rafraîchir dans le parent si nécessaire
+        } catch (err) {
+          console.error('Erreur lors de la mise à jour du workflow:', err);
+        }
+      }
+    };
+
+    if (steps.length > 0) {
+      updateWorkflowStatus();
+    }
+  }, [steps]); // Déclenché si steps change
 
   return (
     <Card className="mb-4">
@@ -235,15 +272,24 @@ const BpmnViewer = ({ workflowId }) => {
     const container = document.getElementById('bpmn-container');
     container.innerHTML = ''; // Clear previous content
 
-    // Load BPMN viewer
+    // Load BPMN viewer with zoom and pan controls
     const BpmnViewer = require('bpmn-js/lib/Viewer').default;
     const viewer = new BpmnViewer({
-      container: '#bpmn-container'
+      container: '#bpmn-container',
+      height: '100%',
+      width: '100%'
     });
 
     viewer.importXML(bpmnXml)
       .then(() => {
-        viewer.get('canvas').zoom('fit-viewport');
+        const canvas = viewer.get('canvas');
+        canvas.zoom('fit-viewport', 'auto');
+        
+        // Add colored overlays based on task status
+        viewer.on('import.done', () => {
+          const elementRegistry = viewer.get('elementRegistry');
+          const modeling = viewer.get('modeling');
+        });
       })
       .catch(err => {
         console.error('Failed to render BPMN diagram', err);
@@ -256,14 +302,22 @@ const BpmnViewer = ({ workflowId }) => {
 
   if (loading) {
     return (
-      <div className="d-flex justify-content-center align-items-center" style={{ height: '400px' }}>
+      <div className="d-flex justify-content-center align-items-center" style={{ height: '500px' }}>
         <Spinner animation="border" variant="primary" />
       </div>
     );
   }
 
   return (
-    <div id="bpmn-container" style={{ height: '400px', width: '100%' }} />
+    <div 
+      id="bpmn-container" 
+      style={{ 
+        height: '500px', 
+        width: '100%',
+        border: '1px solid #dee2e6',
+        borderRadius: '4px'
+      }} 
+    />
   );
 };
 
@@ -367,16 +421,13 @@ export default function WorkflowPage() {
 const completeStep = async (step) => {
   try {
     const response = await axios.patch(
-      `http://localhost:5000/api/tasks/${step.id}/status`,
-      { status: 'completed' }, // Corps de la requête
+      `http://localhost:5000/api/workflows/${step.id}/status`,
+      { status: 'completed' },
       { headers: { Authorization: `Bearer ${token}` } }
     );
-    
-    console.log('Réponse du serveur:', response.data); // Debug
     toast.success('Statut mis à jour !');
     fetchAll();
   } catch (err) {
-    console.error('Erreur:', err.response?.data || err.message);
     toast.error('Échec de la mise à jour');
   }
 };

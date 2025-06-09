@@ -281,14 +281,145 @@ const getTemplateByFolderName = (folderName) => {
   return null;
 };
 
+// Templates détaillés avec rôles et dépendances
+const workflowTemplates = {
+  facture: {
+    name: 'Workflow Facture',
+    description: 'Traitement des factures',
+    tasks: [
+      { 
+        title: 'Vérification comptable',
+        description: 'Vérification des montants',
+        type: 'validation',
+        role: 'comptable',
+        order: 1,
+        durationDays: 2
+      },
+      { 
+        title: 'Approbation paiement', 
+        description: 'Validation paiement', 
+        type: 'validation',
+        role: 'directeur financier',
+        order: 2,
+        durationDays: 2,
+        depends_on: 1
+      },
+      { 
+        title: 'Enregistrement', 
+        description: 'Enregistrement comptable', 
+        type: 'validation',
+        role: 'comptable',
+        order: 3,
+        durationDays: 1,
+        depends_on: 2
+      }
+    ]
+  },
+  contrat: {
+    name: 'Workflow Contrat',
+    description: 'Gestion des contrats',
+    tasks: [
+      { 
+        title: 'Vérification légale', 
+        description: 'Validation par le service juridique', 
+        type: 'validation',
+        role: 'juriste',
+        order: 1,
+        durationDays: 2
+      },
+      { 
+        title: 'Signature', 
+        description: 'Signature par les parties', 
+        type: 'operation',
+        role: 'responsable commercial',
+        order: 2,
+        durationDays: 3,
+        depends_on: 1
+      },
+      { 
+        title: 'Archivage', 
+        description: 'Enregistrement du contrat', 
+        type: 'operation',
+        role: 'admin',
+        order: 3,
+        durationDays: 1,
+        depends_on: 2
+      }
+    ]
+  },
+  demande_conge: {
+    name: 'Workflow Congé',
+    description: 'Gestion des demandes de congé',
+    tasks: [
+      { 
+        title: 'Vérification droits', 
+        description: 'Vérification par les RH', 
+        type: 'validation',
+        role: 'gestionnaire RH',
+        order: 1,
+        durationDays: 1
+      },
+      { 
+        title: 'Validation manager', 
+        description: 'Approbation par le manager', 
+        type: 'validation',
+        role: 'manager',
+        order: 2,
+        durationDays: 3,
+        depends_on: 1
+      },
+      { 
+        title: 'Notification RH', 
+        description: 'Notification finale', 
+        type: 'operation',
+        role: 'gestionnaire RH',
+        order: 3,
+        durationDays: 1,
+        depends_on: 2
+      }
+    ]
+  }
+};
+
+// Ajouter cette fonction utilitaire au début du fichier (après les imports)
+async function sendTaskNotification(userId, senderId, message, taskId) {
+  try {
+    await pool.query(
+      `INSERT INTO notifications (
+        user_id, 
+        sender_id, 
+        message, 
+        type, 
+        related_task_id,
+        is_read
+      ) VALUES ($1, $2, $3, $4, $5, $6)`,
+      [
+        userId,
+        senderId,
+        message,
+        'task',
+        taskId,
+        false
+      ]
+    );
+  } catch (err) {
+    console.error('Erreur lors de l\'envoi de notification:', err);
+  }
+}
+
 // Modifiez la route pour créer le workflow sur demande
+// Modifier la fonction de création de workflow dans dossier.js
 router.post('/:folderId/create-workflow', auth, async (req, res) => {
   const folderId = parseInt(req.params.folderId, 10);
   const userId = req.user.id;
+  const today = new Date();
 
   try {
     // 1. Vérifier que le dossier existe et récupérer son nom
-    const folderRes = await pool.query('SELECT * FROM folders WHERE id = $1 AND user_id = $2', [folderId, userId]);
+    const folderRes = await pool.query(
+      'SELECT * FROM folders WHERE id = $1 AND user_id = $2',
+      [folderId, userId]
+    );
     if (folderRes.rowCount === 0) {
       return res.status(404).json({ error: 'Dossier non trouvé' });
     }
@@ -296,58 +427,112 @@ router.post('/:folderId/create-workflow', auth, async (req, res) => {
     const folder = folderRes.rows[0];
     const templateId = getTemplateByFolderName(folder.name);
 
-    if (!templateId) {
-      return res.status(400).json({ error: 'Aucun template correspondant au nom du dossier' });
+if (!templateId || !workflowTemplates[templateId]) {
+  return res.status(400).json({ 
+    error: 'Aucun template valide trouvé pour ce nom de dossier',
+    folderName: folder.name
+  });
+}
+
+const template = workflowTemplates[templateId];
+
+// 2. Créer le workflow avec un nom temporaire
+const workflowRes = await pool.query(
+  `INSERT INTO workflow (name, description, created_by, folder_id, status, created_at)
+   VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+  [
+    'temp', // nom temporaire
+    template.description,
+    userId,
+    folderId,
+    'pending',
+    today
+  ]
+);
+
+const workflow = workflowRes.rows[0];
+const workflowId = workflow.id;
+
+// Mettre à jour le nom avec ID
+const newName = `${template.name} #${workflowId}`;
+await pool.query(
+  `UPDATE workflow SET name = $1 WHERE id = $2`,
+  [newName, workflowId]
+);
+
+
+    // 3. Créer les tâches avec assignation automatique + dépendances
+    const taskMap = {};
+    const insertedTasks = [];
+
+    // Tri des tâches avec dépendances
+    const sortedTasks = template.tasks.sort((a, b) => a.order - b.order);
+
+    for (const taskDef of sortedTasks) {
+      // Calcul de la date d'échéance future
+      const dueDate = new Date(today);
+      dueDate.setDate(dueDate.getDate() + (taskDef.durationDays || 1));
+
+      // Trouver un utilisateur avec le rôle requis
+      const userRes = await pool.query(
+        `SELECT id FROM users WHERE role = $1 LIMIT 1`,
+        [taskDef.role]
+      );
+      const assignedTo = userRes.rows[0]?.id || null;
+
+      // Déterminer le statut initial
+      let initialStatus = 'pending';
+      if (taskDef.depends_on) {
+        initialStatus = 'blocked';
+      }
+
+      const taskRes = await pool.query(
+        `INSERT INTO tasks (
+          title, description, type, workflow_id, status, assigned_to,
+          task_order, depends_on, duration_days, due_date, created_by, created_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+        [
+          taskDef.title,
+          taskDef.description,
+          taskDef.type,
+          workflow.id,
+          initialStatus,
+          assignedTo ? [assignedTo] : null,
+          taskDef.order,
+          null, // sera mis à jour après
+          taskDef.durationDays,
+          dueDate,
+          userId,
+          today
+        ]
+      );
+
+      const inserted = taskRes.rows[0];
+      taskMap[taskDef.order] = inserted.id;
+      insertedTasks.push({ ...inserted, tempDependsOn: taskDef.depends_on || null });
+
+      // Envoyer une notification si la tâche est assignée et n'est pas bloquée
+      if (assignedTo && initialStatus !== 'blocked') {
+        await sendTaskNotification(
+          assignedTo,
+          userId,
+          `Une nouvelle tâche vous a été assignée: "${taskDef.title}"`,
+          inserted.id
+        );
+      }
     }
 
-    // 2. Récupérer le template
-    const templates = {
-      facture: {
-        name: 'Workflow Facture',
-        description: 'Traitement des factures',
-        steps: [
-          { title: 'Vérification comptable', description: 'Vérification des montants', type: 'validation' },
-          { title: 'Approbation paiement', description: 'Validation paiement', type: 'validation' },
-          { title: 'Enregistrement', description: 'Enregistrement comptable', type: 'operation' }
-        ]
-      },
-      contrat: {
-        name: 'Workflow Contrat',
-        description: 'Gestion des contrats',
-        steps: [
-          { title: 'Vérification légale', description: 'Validation par le service juridique', type: 'validation' },
-          { title: 'Signature', description: 'Signature par les parties', type: 'operation' },
-          { title: 'Archivage', description: 'Enregistrement du contrat', type: 'operation' }
-        ]
-      },
-      conge: {
-        name: 'Workflow Congé',
-        description: 'Gestion des demandes de congé',
-        steps: [
-          { title: 'Vérification droits', description: 'Vérification par les RH', type: 'validation' },
-          { title: 'Validation manager', description: 'Approbation par le manager', type: 'validation' },
-          { title: 'Notification RH', description: 'Notification finale', type: 'operation' }
-        ]
+    // 4. Mise à jour des dépendances avec les IDs réels
+    for (const task of insertedTasks) {
+      if (task.tempDependsOn) {
+        const dependsOnTaskId = taskMap[task.tempDependsOn];
+        if (dependsOnTaskId) {
+          await pool.query(
+            `UPDATE tasks SET depends_on = $1 WHERE id = $2`,
+            [dependsOnTaskId, task.id]
+          );
+        }
       }
-    };
-
-    const template = templates[templateId];
-
-    // 3. Créer le workflow
-    const workflowRes = await pool.query(
-      `INSERT INTO workflow (name, description, created_by, folder_id, status)
-       VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [template.name, template.description, userId, folderId, 'pending']
-    );
-    const workflow = workflowRes.rows[0];
-
-    // 4. Créer les tâches
-    for (const step of template.steps) {
-      await pool.query(
-        `INSERT INTO tasks (title, description, type, workflow_id, status)
-         VALUES ($1, $2, $3, $4, $5)`,
-        [step.title, step.description, step.type, workflow.id, 'pending']
-      );
     }
 
     // 5. Lier le workflow au dossier
@@ -356,16 +541,28 @@ router.post('/:folderId/create-workflow', auth, async (req, res) => {
       [workflow.id, folderId]
     );
 
-    res.status(201).json({ 
+    res.status(201).json({
       message: 'Workflow créé avec succès',
-      workflowId: workflow.id
+      workflowId: workflow.id,
+      tasks: template.tasks.map(t => ({
+        title: t.title,
+        dueDate: new Date(today.getTime() + (t.durationDays * 24 * 60 * 60 * 1000)),
+        status: t.depends_on ? 'blocked' : 'pending',
+        assignedRole: t.role
+      }))
     });
 
   } catch (err) {
     console.error('Erreur création workflow:', err.stack);
-    res.status(500).json({ error: 'Erreur serveur' });
+    res.status(500).json({ 
+      error: 'Erreur serveur', 
+      details: err.message,
+      stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
   }
 });
+
+
 // Initialisation des tables
 initializeDatabase();
 
