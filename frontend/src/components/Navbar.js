@@ -180,14 +180,16 @@ const Navbar = () => {
 
 
           <div className="navbar-logo">
+            <Link to="/accueil"style={{ marginLeft: '-400px' }}>
   <img 
-    src="/logo4.png" // Remplace par le chemin réel de ton logo
+    src="/logo4.png" 
     alt="CETIC Logo" 
     style={{
       height: '60px',
-      marginLeft: '-400px'
+      cursor: 'pointer'
     }}
   />
+</Link>
 </div>
 
 
