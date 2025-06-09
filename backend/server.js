@@ -59,6 +59,9 @@ app.use('/api/summarize', summarizeRoute);
 app.use('/api/activities', activityRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/folders', folderRoutes);
+app.use('/api/stats', statsRoutes);
+
+
 // Lancement du serveur
 app.listen(PORT, () => console.log(`🚀 Serveur lancé sur le port ${PORT}`));
 
