@@ -228,7 +228,8 @@ const handleStatusChange = async (taskId, newStatus) => {
       .catch(err => console.error("Erreur récupération workflows", err));
   }, []); 
   
-  const getWorkflowName = (id) => {
+const getWorkflowName = (id) => {
+  if (!Array.isArray(workflows)) return '---';
   const wf = workflows.find(w => w.id === id);
   return wf ? wf.name : '---';
 };

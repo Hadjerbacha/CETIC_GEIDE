@@ -232,18 +232,24 @@ const Statistique = () => {
                       fill: COLORS[index % COLORS.length]
                     }))}
                   >
+                    <br/>
                     <PolarAngleAxis 
                       type="number" 
                       domain={[0, 100]} 
                       angleAxisId={0} 
                       tick={{ fill: '#6c757d' }}
                     />
+                    <br/>
                     <RadialBar
                       background
                       dataKey="value"
                       cornerRadius={10}
                     />
+                    <br/>
+                    <br/>
                     <Legend />
+                    <br/>
+                    <br/>
                     <Tooltip 
                       contentStyle={{
                         background: '#ffffff',
@@ -252,6 +258,7 @@ const Statistique = () => {
                         boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
                       }}
                     />
+                    <br/>
                   </RadialBarChart>
                 </ResponsiveContainer>
               </div>
@@ -360,39 +367,6 @@ const Statistique = () => {
                       fillOpacity={0.2}
                     />
                   </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </Card.Body>
-          </Card>
-        </Col>
-        
-        <Col lg={12}>
-          <Card className="chart-card">
-            <Card.Body>
-              <Card.Title>Documents by Priority</Card.Title>
-              <div style={{ height: '300px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart cx="50%" cy="50%" outerRadius="80%" data={docStats.byPriority}>
-                    <PolarGrid />
-                    <PolarAngleAxis dataKey="name" tick={{ fill: '#6c757d' }} />
-                    <PolarRadiusAxis angle={30} tick={{ fill: '#6c757d' }} />
-                    <Radar 
-                      name="Documents" 
-                      dataKey="value" 
-                      stroke={COLORS[4]} 
-                      fill={COLORS[4]} 
-                      fillOpacity={0.6} 
-                    />
-                    <Legend />
-                    <Tooltip 
-                      contentStyle={{
-                        background: '#ffffff',
-                        border: 'none',
-                        borderRadius: '8px',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
-                      }}
-                    />
-                  </RadarChart>
                 </ResponsiveContainer>
               </div>
             </Card.Body>
