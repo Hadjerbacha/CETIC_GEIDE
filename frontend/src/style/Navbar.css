@@ -10,6 +10,7 @@
   left: 0;
   right: 0;
   z-index: 1000;
+  overflow-y: auto; 
 }
 
 .navbar-container {
@@ -130,24 +131,50 @@
   box-shadow: 4px 0 12px rgba(0, 0, 0, 0.08);
   padding: 1rem 0;
   z-index: 999;
+  display: flex;
+  flex-direction: column;
 }
 
 .sidebar-header {
   display: flex;
   justify-content: flex-end;
   padding: 0 1.5rem 1.5rem;
-}
-
-.close-btn {
-  font-size: 1.5rem;
-  color: #174193;
-  cursor: pointer;
+  flex-shrink: 0; /* Empêche le header de rétrécir */
 }
 
 .sidebar-items {
   list-style: none;
   padding: 0;
   margin: 0;
+  overflow-y: auto; /* Active le scroll */
+  flex-grow: 1; /* Prend tout l'espace disponible */
+  padding-bottom: 20px; /* Espace en bas pour éviter que le dernier élément soit collé */
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+
+.sidebar-items::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+.sidebar-items::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 10px;
+}
+
+.sidebar-items::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 10px;
+}
+
+.sidebar-items::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+.close-btn {
+  font-size: 1.5rem;
+  color: #174193;
+  cursor: pointer;
 }
 
 .nav-item {

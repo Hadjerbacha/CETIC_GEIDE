@@ -178,7 +178,20 @@ const Navbar = () => {
             <FaIcons.FaBars onClick={showSidebar} />
           </motion.div>
 
-          
+
+          <div className="navbar-logo">
+            <Link to="/accueil"style={{ marginLeft: '-400px' }}>
+  <img 
+    src="/logo4.png" 
+    alt="CETIC Logo" 
+    style={{
+      height: '60px',
+      cursor: 'pointer'
+    }}
+  />
+</Link>
+</div>
+
 
           <div className="navbar-right">
            <motion.div 
@@ -239,39 +252,39 @@ const Navbar = () => {
       </header>
 
       <motion.nav 
-        initial={{ x: -300 }}
-        animate={{ x: sidebar ? 0 : -300 }}
-        transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-        className="modern-sidebar"
-      >
-        <div className="sidebar-header">
-          <motion.div 
-            whileHover={{ rotate: 90 }}
-            className="close-btn"
-            onClick={showSidebar}
-          >
-            <AiIcons.AiOutlineClose />
-          </motion.div>
-        </div>
+  initial={{ x: -300 }}
+  animate={{ x: sidebar ? 0 : -300 }}
+  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+  className="modern-sidebar"
+>
+  <div className="sidebar-header">
+    <motion.div 
+      whileHover={{ rotate: 90 }}
+      className="close-btn"
+      onClick={showSidebar}
+    >
+      <AiIcons.AiOutlineClose />
+    </motion.div>
+  </div>
 
-        <ul className="sidebar-items">
-          {sidebarItems
-            .filter(Boolean)
-            .map((item, index) => (
-              <motion.li 
-                key={index}
-                whileHover={{ scale: 1.05 }}
-                whileTap={{ scale: 0.95 }}
-                className="nav-item"
-              >
-                <Link to={item.path}>
-                  <span className="nav-icon">{item.icon}</span>
-                  <span className="nav-title">{item.title}</span>
-                </Link>
-              </motion.li>
-            ))}
-        </ul>
-      </motion.nav>
+  <ul className="sidebar-items">
+    {sidebarItems
+      .filter(Boolean)
+      .map((item, index) => (
+        <motion.li 
+          key={index}
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          className="nav-item"
+        >
+          <Link to={item.path}>
+            <span className="nav-icon">{item.icon}</span>
+            <span className="nav-title">{item.title}</span>
+          </Link>
+        </motion.li>
+      ))}
+  </ul>
+</motion.nav>
     </IconContext.Provider>
     <br/>
     <br/>
