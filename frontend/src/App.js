@@ -36,6 +36,7 @@ import DocumentCompletion from './components/DocumentCompletion';
 import FolderUploadPage from './components/FolderUploadPage';
 import FolderDetailsPage from './components/FolderDetailsPage';
 import DocArchive from './components/DocArchive';
+import Messagerie from './components/Messagerie';
 
 
 
@@ -80,6 +81,7 @@ function App() {
           <Route path="/folders/upload" element={<ProtectedRoute element={<FolderUploadPage />} />} />
            <Route path="/folder/:id" element={<ProtectedRoute element={<FolderDetailsPage  />} />} />
            <Route path="/archives" element={<ProtectedRoute  element={<DocArchive/>} />}/>
+           <Route path="/Messagerie" element={<ProtectedRoute  element={<Messagerie/>} />}/>
         </Routes>
       </Container>
     </Router>

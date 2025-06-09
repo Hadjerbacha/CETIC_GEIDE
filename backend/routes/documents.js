@@ -1462,7 +1462,28 @@ router.post('/check-duplicate', async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
+router.post('/messages', auth, async (req, res) => {
+  const userId = req.user.id;
+  const { content, recipient_id, group_id } = req.body;
 
+  try {
+    if (!content || (!recipient_id && !group_id)) {
+      return res.status(400).json({ message: 'Contenu et destinataire requis' });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO messages (sender_id, recipient_id, group_id, content, sent_at)
+       VALUES ($1, $2, $3, $4, NOW())
+       RETURNING *`,
+      [userId, recipient_id || null, group_id || null, content]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    console.error('Erreur lors de l\'envoi du message :', err);
+    res.status(500).json({ message: 'Erreur serveur lors de l\'envoi du message' });
+  }
+});
 
 
 // Initialisation des tables

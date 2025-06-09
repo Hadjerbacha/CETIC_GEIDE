@@ -19,6 +19,8 @@ const summarizeRoute = require('./routes/summarize');
 const chatRoutes = require('./routes/chat');
 const { router: activityRoutes, logActivity } = require('./routes/activite');
 const folderRoutes = require('./routes/dossier');
+const messageRoutes = require('./routes/messages');
+
 
 
 
@@ -44,6 +46,7 @@ app.use('/api', statsRoutes);
 
 
 // Routes
+app.use('/api/messages', messageRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/documents", docsRoutes);
 app.use("/api/tasks", tasksRoutes);
