@@ -124,9 +124,14 @@ const handleLogout = async () => {
       path: '/activites',
       icon: <FaIcons.FaHistory />,
     },
-    {
+    currentUser?.role === 'admin' && {
       title: 'Archive',
-      path: currentUser?.role === 'admin' ? '/archive' : '/archive',
+      path: '/archive',
+      icon: <FaIcons.FaArchive />,
+    },
+    currentUser?.role === 'admin' && {
+      title: 'Archive Documents',
+      path: '/archives',
       icon: <FaIcons.FaArchive />,
     },
     currentUser?.role === 'admin' && {

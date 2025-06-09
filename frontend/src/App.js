@@ -35,6 +35,7 @@ import Activite from './components/historique';
 import DocumentCompletion from './components/DocumentCompletion';
 import FolderUploadPage from './components/FolderUploadPage';
 import FolderDetailsPage from './components/FolderDetailsPage';
+import DocArchive from './components/DocArchive';
 
 
 
@@ -78,6 +79,7 @@ function App() {
           <Route path="/document/:id/complete" element={<ProtectedRoute element={<DocumentCompletion />} />} />
           <Route path="/folders/upload" element={<ProtectedRoute element={<FolderUploadPage />} />} />
            <Route path="/folder/:id" element={<ProtectedRoute element={<FolderDetailsPage  />} />} />
+           <Route path="/archives" element={<ProtectedRoute  element={<DocArchive/>} />}/>
         </Routes>
       </Container>
     </Router>
