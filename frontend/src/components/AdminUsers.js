@@ -165,11 +165,39 @@ const AdminUsers = () => {
                     padding: 0.25rem 0.5rem;
                     font-size: 0.875rem;
                 }
+					.modern-tabs .nav-link {
+  color: #495057;
+  font-weight: 500;
+  border-radius: 10px;
+  transition: all 0.3s ease;
+  background-color: transparent;
+  margin: 0 4px;
+  padding: 0.75rem 1.2rem;
+}
+
+.modern-tabs .nav-link.active {
+  background-color: #0d6efd;
+  color: white !important;
+  box-shadow: 0 4px 12px rgba(13, 110, 253, 0.3);
+}
+
+.modern-tabs .nav-link:hover {
+  background-color: #e9f0fe;
+  color: #0d6efd;
+}
+
                 `}
             </style>
 
             <Container fluid className="py-4">
-                <Tabs defaultActiveKey="users" id="admin-tabs" className="custom-tabs mb-4">
+                <Tabs
+  defaultActiveKey="users"
+  id="admin-tabs"
+  className="nav nav-pills nav-fill modern-tabs mb-4 shadow-sm rounded-3 bg-white"
+  mountOnEnter
+  unmountOnExit
+>
+
                     <Tab eventKey="users" title="Gestion des Utilisateurs">
                         <div className="d-flex justify-content-between align-items-center mb-4">
                             <h2 className="mb-0">Utilisateurs</h2>

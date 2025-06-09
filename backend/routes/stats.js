@@ -11,6 +11,8 @@ router.get('/global', async (req, res) => {
       tasks, 
       workflows, 
       invoices,
+      leaveRequests,
+      cv,
       folders
     ] = await Promise.all([
       pool.query('SELECT COUNT(*) FROM users'),
@@ -18,6 +20,8 @@ router.get('/global', async (req, res) => {
       pool.query('SELECT COUNT(*) FROM tasks'),
       pool.query('SELECT COUNT(*) FROM workflow'),
       pool.query('SELECT COUNT(*) FROM factures'),
+      pool.query('SELECT COUNT(*) FROM demande_conges'),
+      pool.query('SELECT COUNT(*) FROM cv'),
       pool.query('SELECT COUNT(*) FROM folders')
     ]);
 
@@ -27,6 +31,8 @@ router.get('/global', async (req, res) => {
       totalTasks: parseInt(tasks.rows[0].count),
       totalWorkflows: parseInt(workflows.rows[0].count),
       totalInvoices: parseInt(invoices.rows[0].count),
+      totalLeaveRequests: parseInt(leaveRequests.rows[0].count),
+      totalCVs: parseInt(cv.rows[0].count),
       totalFolders: parseInt(folders.rows[0].count)
     });
   } catch (error) {
@@ -38,10 +44,8 @@ router.get('/global', async (req, res) => {
 // Task statistics
 router.get('/tasks', async (req, res) => {
   try {
-    const [byStatus, byPriority, byType, completion] = await Promise.all([
+    const [byStatus, completion] = await Promise.all([
       pool.query('SELECT status AS name, COUNT(*)::int AS value FROM tasks GROUP BY status'),
-      pool.query('SELECT priority AS name, COUNT(*)::int AS value FROM tasks GROUP BY priority'),
-      pool.query('SELECT type AS name, COUNT(*)::int AS value FROM tasks GROUP BY type'),
       pool.query(`
         SELECT 
           ROUND(100.0 * SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) / COUNT(*), 1) AS rate 
@@ -51,8 +55,6 @@ router.get('/tasks', async (req, res) => {
 
     res.json({
       byStatus: byStatus.rows,
-      byPriority: byPriority.rows,
-      byType: byType.rows,
       completionRate: parseFloat(completion.rows[0].rate)
     });
   } catch (error) {
@@ -118,14 +120,12 @@ router.get('/users', async (req, res) => {
 // Workflow statistics
 router.get('/workflows', async (req, res) => {
   try {
-    const [byStatus, byPriority] = await Promise.all([
-      pool.query('SELECT status AS name, COUNT(*)::int AS value FROM workflow GROUP BY status'),
-      pool.query('SELECT priorite AS name, COUNT(*)::int AS value FROM workflow GROUP BY priorite')
+    const [byStatus] = await Promise.all([
+      pool.query('SELECT status AS name, COUNT(*)::int AS value FROM workflow GROUP BY status')
     ]);
 
     res.json({
-      byStatus: byStatus.rows,
-      byPriority: byPriority.rows
+      byStatus: byStatus.rows
     });
   } catch (error) {
     console.error('Error /stats/workflows:', error.stack);

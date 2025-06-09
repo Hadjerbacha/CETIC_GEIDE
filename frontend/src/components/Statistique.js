@@ -8,7 +8,8 @@ import {
   Alert,
   Badge,
   Tab,
-  Tabs
+  Tabs,
+  ProgressBar
 } from 'react-bootstrap';
 import axios from 'axios';
 import { 
@@ -31,7 +32,9 @@ import {
   Radar,
   PolarGrid,
   PolarAngleAxis,
-  PolarRadiusAxis
+  PolarRadiusAxis,
+  RadialBarChart,
+  RadialBar
 } from 'recharts';
 import Navbar from './Navbar';
 import '../style/Statistique.css';
@@ -47,9 +50,9 @@ const Statistique = () => {
   const [activeTab, setActiveTab] = useState('global');
 
   const COLORS = [
-    '#0088FE', '#00C49F', '#FFBB28', '#FF8042', 
-    '#8884D8', '#82CA9D', '#FFC658', '#A4DE6C',
-    '#D0ED57', '#FFA8A8', '#A28DFF', '#6C5B7B'
+    '#3f51b5', '#2196f3', '#00bcd4', '#4caf50', 
+    '#8bc34a', '#ffc107', '#ff9800', '#ff5722',
+    '#e91e63', '#9c27b0', '#673ab7', '#607d8b'
   ];
 
   useEffect(() => {
@@ -92,6 +95,8 @@ const Statistique = () => {
       { name: 'Tasks', value: globalStats.totalTasks, color: COLORS[2] },
       { name: 'Workflows', value: globalStats.totalWorkflows, color: COLORS[3] },
       { name: 'Invoices', value: globalStats.totalInvoices, color: COLORS[4] },
+      { name: 'Leave Requests', value: globalStats.totalLeaveRequests, color: COLORS[6] },
+      { name: 'CVs', value: globalStats.totalCVs, color: COLORS[7] },
       { name: 'Folders', value: globalStats.totalFolders, color: COLORS[5] }
     ];
   };
@@ -115,13 +120,14 @@ const Statistique = () => {
   const StatsSummary = () => (
     <Row className="g-4 mb-4">
       {formatGlobalStats().map((item, index) => (
-        <Col key={index} xs={6} md={4} lg={2}>
-          <Card className="h-100 shadow-sm stats-card">
-            <Card.Body className="text-center">
-              <Badge bg="light" className="mb-2" style={{ color: item.color }}>
-                {item.name}
-              </Badge>
-              <h3 className="fw-bold">{item.value}</h3>
+        <Col key={index} xs={6} md={4} lg={3} xl={2}>
+          <Card className="h-100 stats-card-hover">
+            <Card.Body className="text-center py-3">
+              <div className="stats-icon mb-2" style={{ backgroundColor: `${item.color}20` }}>
+                <i className="bi bi-collection" style={{ color: item.color }}></i>
+              </div>
+              <h5 className="text-muted mb-1">{item.name}</h5>
+              <h3 className="fw-bold mb-0" style={{ color: item.color }}>{item.value}</h3>
             </Card.Body>
           </Card>
         </Col>
@@ -135,18 +141,27 @@ const Statistique = () => {
       
       <Row className="g-4 mb-4">
         <Col lg={8}>
-          <Card className="shadow-sm h-100">
+          <Card className="h-100 chart-card">
             <Card.Body>
-              <Card.Title>Global Activity</Card.Title>
+              <Card.Title className="d-flex justify-content-between align-items-center">
+                <span>Global Activity</span>
+                <Badge bg="light" className="text-primary">Last 6 months</Badge>
+              </Card.Title>
               <div style={{ height: '400px' }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={formatGlobalStats()}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Legend />
-                    <Bar dataKey="value" fill="#8884d8" radius={[4, 4, 0, 0]}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                    <XAxis dataKey="name" tick={{ fill: '#6c757d' }} />
+                    <YAxis tick={{ fill: '#6c757d' }} />
+                    <Tooltip 
+                      contentStyle={{
+                        background: '#ffffff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                      }}
+                    />
+                    <Bar dataKey="value" radius={[6, 6, 0, 0]}>
                       {formatGlobalStats().map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
@@ -159,7 +174,7 @@ const Statistique = () => {
         </Col>
         
         <Col lg={4}>
-          <Card className="shadow-sm h-100">
+          <Card className="h-100 chart-card">
             <Card.Body>
               <Card.Title>Global Distribution</Card.Title>
               <div style={{ height: '400px' }}>
@@ -180,7 +195,14 @@ const Statistique = () => {
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip />
+                    <Tooltip 
+                      contentStyle={{
+                        background: '#ffffff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                      }}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -196,86 +218,79 @@ const Statistique = () => {
     
     return (
       <Row className="g-4">
-        <Col lg={4}>
-          <Card className="shadow-sm h-100">
+        <Col lg={6}>
+          <Card className="h-100 chart-card">
             <Card.Body>
               <Card.Title>Tasks by Status</Card.Title>
               <div style={{ height: '300px' }}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <PieChart>
-                    <Pie
-                      data={taskStats.byStatus}
-                      cx="50%"
-                      cy="50%"
-                      outerRadius={100}
-                      innerRadius={50}
-                      fill="#8884d8"
+                  <RadialBarChart 
+                    innerRadius="20%" 
+                    outerRadius="100%" 
+                    data={taskStats.byStatus.map((item, index) => ({
+                      ...item,
+                      fill: COLORS[index % COLORS.length]
+                    }))}
+                  >
+                    <PolarAngleAxis 
+                      type="number" 
+                      domain={[0, 100]} 
+                      angleAxisId={0} 
+                      tick={{ fill: '#6c757d' }}
+                    />
+                    <RadialBar
+                      background
                       dataKey="value"
-                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                    >
-                      {taskStats.byStatus.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
+                      cornerRadius={10}
+                    />
+                    <Legend />
+                    <Tooltip 
+                      contentStyle={{
+                        background: '#ffffff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                      }}
+                    />
+                  </RadialBarChart>
                 </ResponsiveContainer>
               </div>
             </Card.Body>
           </Card>
         </Col>
         
-        <Col lg={4}>
-          <Card className="shadow-sm h-100">
-            <Card.Body>
-              <Card.Title>Tasks by Priority</Card.Title>
-              <div style={{ height: '300px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart cx="50%" cy="50%" outerRadius="80%" data={taskStats.byPriority}>
-                    <PolarGrid />
-                    <PolarAngleAxis dataKey="name" />
-                    <PolarRadiusAxis />
-                    <Radar name="Tasks" dataKey="value" stroke="#8884d8" fill="#8884d8" fillOpacity={0.6} />
-                    <Tooltip />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </div>
-            </Card.Body>
-          </Card>
-        </Col>
-        
-        <Col lg={4}>
-          <Card className="shadow-sm h-100">
-            <Card.Body>
-              <Card.Title>Tasks by Type</Card.Title>
-              <div style={{ height: '300px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={taskStats.byType}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="value" fill="#8884d8">
-                      {taskStats.byType.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </Card.Body>
-          </Card>
-        </Col>
-        
-        <Col lg={12}>
-          <Card className="shadow-sm">
+        <Col lg={6}>
+          <Card className="h-100 chart-card">
             <Card.Body>
               <Card.Title>Task Completion</Card.Title>
-              <div className="text-center py-3">
-                <div className="progress-circle" style={{ '--progress': taskStats.completionRate }}>
-                  <span>{taskStats.completionRate}%</span>
+              <div className="d-flex flex-column align-items-center justify-content-center" style={{ height: '300px' }}>
+                <div className="position-relative" style={{ width: '200px', height: '200px' }}>
+                  <svg viewBox="0 0 36 36" className="circular-chart">
+                    <path
+                      className="circle-bg"
+                      d="M18 2.0845
+                        a 15.9155 15.9155 0 0 1 0 31.831
+                        a 15.9155 15.9155 0 0 1 0 -31.831"
+                    />
+                    <path
+                      className="circle-fill"
+                      strokeDasharray={`${taskStats.completionRate}, 100`}
+                      d="M18 2.0845
+                        a 15.9155 15.9155 0 0 1 0 31.831
+                        a 15.9155 15.9155 0 0 1 0 -31.831"
+                      style={{ stroke: COLORS[3] }}
+                    />
+                    <text x="18" y="20" className="percentage">{taskStats.completionRate}%</text>
+                    <text x="18" y="25" className="label">Completed</text>
+                  </svg>
                 </div>
-                <p className="mt-3">Overall completion rate</p>
+                <div className="w-75 mt-4">
+                  <ProgressBar now={taskStats.completionRate} 
+                    variant="success" 
+                    className="progress-lg"
+                    label={`${taskStats.completionRate}%`} 
+                  />
+                </div>
               </div>
             </Card.Body>
           </Card>
@@ -290,17 +305,24 @@ const Statistique = () => {
     return (
       <Row className="g-4">
         <Col lg={6}>
-          <Card className="shadow-sm h-100">
+          <Card className="h-100 chart-card">
             <Card.Body>
               <Card.Title>Documents by Category</Card.Title>
               <div style={{ height: '300px' }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={docStats.byCategory}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="value" fill="#8884d8">
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="name" tick={{ fill: '#6c757d' }} />
+                    <YAxis tick={{ fill: '#6c757d' }} />
+                    <Tooltip 
+                      contentStyle={{
+                        background: '#ffffff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                      }}
+                    />
+                    <Bar dataKey="value" radius={[6, 6, 0, 0]}>
                       {docStats.byCategory.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
@@ -313,18 +335,64 @@ const Statistique = () => {
         </Col>
         
         <Col lg={6}>
-          <Card className="shadow-sm h-100">
+          <Card className="h-100 chart-card">
             <Card.Body>
               <Card.Title>Document Activity</Card.Title>
               <div style={{ height: '300px' }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={docStats.versions}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <Tooltip />
-                    <Area type="monotone" dataKey="count" stroke="#8884d8" fill="#8884d8" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="month" tick={{ fill: '#6c757d' }} />
+                    <YAxis tick={{ fill: '#6c757d' }} />
+                    <Tooltip 
+                      contentStyle={{
+                        background: '#ffffff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                      }}
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="count" 
+                      stroke={COLORS[1]} 
+                      fill={COLORS[1]} 
+                      fillOpacity={0.2}
+                    />
                   </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </Card.Body>
+          </Card>
+        </Col>
+        
+        <Col lg={12}>
+          <Card className="chart-card">
+            <Card.Body>
+              <Card.Title>Documents by Priority</Card.Title>
+              <div style={{ height: '300px' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart cx="50%" cy="50%" outerRadius="80%" data={docStats.byPriority}>
+                    <PolarGrid />
+                    <PolarAngleAxis dataKey="name" tick={{ fill: '#6c757d' }} />
+                    <PolarRadiusAxis angle={30} tick={{ fill: '#6c757d' }} />
+                    <Radar 
+                      name="Documents" 
+                      dataKey="value" 
+                      stroke={COLORS[4]} 
+                      fill={COLORS[4]} 
+                      fillOpacity={0.6} 
+                    />
+                    <Legend />
+                    <Tooltip 
+                      contentStyle={{
+                        background: '#ffffff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                      }}
+                    />
+                  </RadarChart>
                 </ResponsiveContainer>
               </div>
             </Card.Body>
@@ -340,7 +408,7 @@ const Statistique = () => {
     return (
       <Row className="g-4">
         <Col lg={6}>
-          <Card className="shadow-sm h-100">
+          <Card className="h-100 chart-card">
             <Card.Body>
               <Card.Title>Users by Role</Card.Title>
               <div style={{ height: '300px' }}>
@@ -360,7 +428,14 @@ const Statistique = () => {
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
-                    <Tooltip />
+                    <Tooltip 
+                      contentStyle={{
+                        background: '#ffffff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                      }}
+                    />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -369,17 +444,31 @@ const Statistique = () => {
         </Col>
         
         <Col lg={6}>
-          <Card className="shadow-sm h-100">
+          <Card className="h-100 chart-card">
             <Card.Body>
               <Card.Title>User Activity</Card.Title>
               <div style={{ height: '300px' }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={userStats.activity}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip />
-                    <Line type="monotone" dataKey="activeUsers" stroke="#8884d8" />
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="date" tick={{ fill: '#6c757d' }} />
+                    <YAxis tick={{ fill: '#6c757d' }} />
+                    <Tooltip 
+                      contentStyle={{
+                        background: '#ffffff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                      }}
+                    />
+                    <Line 
+                      type="monotone" 
+                      dataKey="activeUsers" 
+                      stroke={COLORS[0]} 
+                      strokeWidth={2}
+                      dot={{ r: 4 }}
+                      activeDot={{ r: 6 }}
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -395,42 +484,30 @@ const Statistique = () => {
     
     return (
       <Row className="g-4">
-        <Col lg={6}>
-          <Card className="shadow-sm h-100">
+        <Col lg={12}>
+          <Card className="chart-card">
             <Card.Body>
               <Card.Title>Workflows by Status</Card.Title>
-              <div style={{ height: '300px' }}>
+              <div style={{ height: '400px' }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={workflowStats.byStatus}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="value" fill="#8884d8">
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                    <XAxis dataKey="name" tick={{ fill: '#6c757d' }} />
+                    <YAxis tick={{ fill: '#6c757d' }} />
+                    <Tooltip 
+                      contentStyle={{
+                        background: '#ffffff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                      }}
+                    />
+                    <Bar dataKey="value" radius={[6, 6, 0, 0]}>
                       {workflowStats.byStatus.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Bar>
                   </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </Card.Body>
-          </Card>
-        </Col>
-        
-        <Col lg={6}>
-          <Card className="shadow-sm h-100">
-            <Card.Body>
-              <Card.Title>Workflow Steps</Card.Title>
-              <div style={{ height: '300px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadarChart cx="50%" cy="50%" outerRadius="80%" data={workflowStats.steps}>
-                    <PolarGrid />
-                    <PolarAngleAxis dataKey="name" />
-                    <PolarRadiusAxis />
-                    <Radar name="Steps" dataKey="count" stroke="#8884d8" fill="#8884d8" fillOpacity={0.6} />
-                    <Tooltip />
-                  </RadarChart>
                 </ResponsiveContainer>
               </div>
             </Card.Body>
@@ -443,32 +520,55 @@ const Statistique = () => {
   return (
     <>
       <Navbar />
-      <Container fluid className="my-4">
+      <Container fluid className="stat-container">
         {loading ? (
           <LoadingIndicator />
         ) : error ? (
           <ErrorMessage />
         ) : (
           <>
+            
             <Tabs
-              activeKey={activeTab}
-              onSelect={(k) => setActiveTab(k)}
-              className="mb-4"
-              fill
-            >
-              <Tab eventKey="global" title="Global View">
+  activeKey={activeTab}
+  onSelect={(k) => setActiveTab(k)}
+  className="nav nav-pills nav-fill modern-tabs mb-4 shadow-sm rounded-3 bg-white"
+  mountOnEnter
+  unmountOnExit
+>
+
+              <Tab eventKey="global" title={
+                <span className="d-flex align-items-center">
+                  <i className="bi bi-globe me-2"></i> Global
+                </span>
+              }>
                 {renderGlobalStats()}
               </Tab>
-              <Tab eventKey="tasks" title="Tasks">
+              <Tab eventKey="tasks" title={
+                <span className="d-flex align-items-center">
+                  <i className="bi bi-list-task me-2"></i> Tasks
+                </span>
+              }>
                 {renderTaskStats()}
               </Tab>
-              <Tab eventKey="documents" title="Documents">
+              <Tab eventKey="documents" title={
+                <span className="d-flex align-items-center">
+                  <i className="bi bi-file-earmark-text me-2"></i> Documents
+                </span>
+              }>
                 {renderDocStats()}
               </Tab>
-              <Tab eventKey="users" title="Users">
+              <Tab eventKey="users" title={
+                <span className="d-flex align-items-center">
+                  <i className="bi bi-people me-2"></i> Users
+                </span>
+              }>
                 {renderUserStats()}
               </Tab>
-              <Tab eventKey="workflows" title="Workflows">
+              <Tab eventKey="workflows" title={
+                <span className="d-flex align-items-center">
+                  <i className="bi bi-diagram-3 me-2"></i> Workflows
+                </span>
+              }>
                 {renderWorkflowStats()}
               </Tab>
             </Tabs>

@@ -1,182 +1,179 @@
-.navbar {
-  width: 100vw; /* 100% de la largeur de la fenêtre */
+.modern-navbar {
+  background-color: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
   height: 80px;
   display: flex;
-  justify-content: flex-start;
-  background-color: #f7f7f7;
-  box-sizing: border-box; /* évite que padding déborde */
-  padding: 0 20px; /* Ajoutez du padding pour le contenu */
+  align-items: center;
+  padding: 0 2rem;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
 }
 
-.navbar-content {
-  width: 100vw;
+.navbar-container {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-right: 1%;
+  width: 100%;
 }
-  
-  .menu-bars {
-    margin-left: 2rem;
-    font-size: 2rem;
-    background: none;
-  }
-  
-  .nav-menu {
-    background-color: #f7f7f7;
-    width: 250px;
-    height: 100vh;
-    display: flex;
-    justify-content: center;
-    position: fixed;
-    top: 0;
-    left: -100%;
-    transition: 850ms;
-  }
-  
-  .nav-menu.active {
-    left: 0;
-    transition: 350ms;
-  }
-  
-  .nav-text a {
-    display: block; /* Permet de prendre toute la largeur */
-    width: 100%;
-    padding: 10px 16px;
-    border-radius: 8px;
-    transition: background-color 0.3s ease;
-    color: #000;
-    text-decoration: none;
-  }
-  
-  .nav-text a:hover {
-    background-color: #174193;
-    color : #fff
-  }
-  
-  .nav-menu-items {
-    width: 100%;
-  }
-  
-  .navbar-toggle {
-    background-color: #f7f7f7;
-    width: 100%;
-    height: 80px;
-    display: flex;
-    justify-content: flex-start;
-    align-items: center;
-  }
-  
-  span {
-    margin-left: 16px;
-  }
-  
-  .user-dropdown {
-    position: relative;
-    display: inline-block;
-    margin-right: 20px; /* Ajoutez la marge souhaitée entre le bouton et les autres éléments */
-  }
-  
-  .user-dropdown .dropdown-content {
-    display: none;
-    position: absolute;
-    background-color: #fff;
-    min-width: 160px;
-    box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
-    z-index: 1;
-    right: 0;
-  }
-  
-  .user-dropdown:hover .dropdown-content {
-    display: block;
-  }
-  
-  .user-dropdown .dropdown-content Button {
-    padding: 12px 16px;
-    text-decoration: none;
-    display: block;
-    color: #000;
-  }
-  
-  .user-dropdown .dropdown-content Button:hover {
-    background-color: #f2f2f2;
-  }
-  
-  .user-name {
-    color: rgb(0, 0, 0);
-    margin-right: 10px;
-  
-  }
-  .nav-text {
-    margin-top: 10px; /* Ajoutez la marge souhaitée */
-  }
-  
-  .user-item {
-    margin-top: 10px; 
-    position : absolute;
-    display: block;/* Ajoutez la marge souhaitée */
-  }
-  .dropdown-icon {
-    font-size: 20px;
-    color: white;
-    transform: translateY(-2px);
-  }
-  
-  .user-icon {
-    position: relative;
-    left: 30%;
-    top: 15%;
-    font-size: 5em;
-    margin-right: 10px; 
-    display: block;
-    color: #283aae;
-  }
-  .user-titre {
-    text-decoration: none; 
-    color: #283aae;
-    font-weight: bold;
-    font-size: 1.5em;
-    display: relative;
-    left: 2%;
-    top: 30%;
-    align-items: center;
-  }
-  .sidebar{
-    position: absolute;
-    display: block;
-    top: 35%; 
-  }
-  .logo-hover {
-    transition: transform 0.3s ease;
-  }
-  
-  .logo-hover:hover {
-    transform: scale(1.1);
-  }
 
-  .shine-hover {
-    position: relative;
-    overflow: hidden;
-  }
-  
-  .shine-hover::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -75%;
-    width: 50%;
-    height: 100%;
-    background: linear-gradient(
-      120deg,
-      rgba(255, 255, 255, 0.1) 0%,
-      rgba(255, 255, 255, 0.5) 50%,
-      rgba(255, 255, 255, 0.1) 100%
-    );
-    transform: skewX(-20deg);
-  }
-  
-  .shine-hover:hover::before {
-    left: 125%;
-    transition: left 0.7s ease-in-out;
-  }
-  
+.menu-toggle {
+  font-size: 1.5rem;
+  color: #174193;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.logo-container {
+  display: flex;
+  align-items: center;
+}
+
+.logo-hover {
+  transition: transform 0.3s ease;
+}
+
+.navbar-right {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.notification-icon {
+  cursor: pointer;
+  color: #174193;
+  font-size: 1.2rem;
+  position: relative;
+  transition: color 0.3s ease;
+}
+
+.user-avatar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+
+.user-name-short {
+  font-weight: 600;
+  color: #174193;
+}
+
+.dropdown-arrow {
+  font-size: 0.8rem;
+  color: #174193;
+  transition: transform 0.3s ease;
+}
+
+.user-dropdown-menu {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  padding: 1rem 0;
+  min-width: 220px;
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  padding: 0 1rem 1rem;
+  gap: 0.75rem;
+}
+
+.user-details {
+  display: flex;
+  flex-direction: column;
+}
+
+.user-name {
+  font-weight: 600;
+}
+
+.user-role {
+  font-size: 0.8rem;
+  color: #666;
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: #f0f0f0;
+  margin: 0.5rem 0;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 1rem;
+  color: #333;
+  transition: all 0.2s ease;
+  gap: 0.75rem;
+}
+
+.dropdown-item:hover {
+  background: #f5f5f5;
+  color: #174193;
+}
+
+.dropdown-item.logout {
+  color: #ff4d4f;
+}
+
+.modern-sidebar {
+  background: white;
+  width: 280px;
+  height: 100vh;
+  position: fixed;
+  top: 0;
+  left: 0;
+  box-shadow: 4px 0 12px rgba(0, 0, 0, 0.08);
+  padding: 1rem 0;
+  z-index: 999;
+}
+
+.sidebar-header {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0 1.5rem 1.5rem;
+}
+
+.close-btn {
+  font-size: 1.5rem;
+  color: #174193;
+  cursor: pointer;
+}
+
+.sidebar-items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.nav-item {
+  margin: 0.5rem 0;
+}
+
+.nav-item a {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem 1.5rem;
+  color: #333;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.nav-item:hover a {
+  background: rgba(23, 65, 147, 0.1);
+  color: #174193;
+}
+
+.nav-icon {
+  margin-right: 1rem;
+  font-size: 1.1rem;
+}
+
+.nav-title {
+  font-size: 0.95rem;
+  font-weight: 500;
+}
