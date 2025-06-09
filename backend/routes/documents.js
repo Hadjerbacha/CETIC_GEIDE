@@ -46,20 +46,34 @@ const upload = multer({
 
 
 // Modifiez la fonction classifyText
-const classifyText = async (text) => {
-  const defaultCategories = ["contrat", "facture", "demande_conge", "cv"];
+// Modifiez la fonction classifyText pour gérer les médias
+const classifyText = async (text, filePath) => {
+  // Extraire l'extension du fichier
+  const fileExtension = filePath.split('.').pop().toLowerCase();
 
-  const truncatedText = text.substring(0, 5000);
+  // Catégorisation basée sur l'extension
+  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp'];
+  const videoExtensions = ['mp4', 'avi', 'mkv', 'mov', 'webm', 'flv'];
+
+  if (imageExtensions.includes(fileExtension)) {
+    return 'photo';
+  }
+  if (videoExtensions.includes(fileExtension)) {
+    return 'video';
+  }
+
+  // Si ce n'est pas un média, utiliser le NLP pour classification
+  const defaultCategories = ["contrat", "facture", "demande_conge", "cv", "autre"];
 
   try {
     const response = await axios.post(
       'http://127.0.0.1:5001/classify',
       {
-        text: truncatedText,
+        text: text.substring(0, 5000),
         categories: defaultCategories
       },
       {
-        timeout: 10000, // max 10 secondes
+        timeout: 30000,
         headers: {
           'Content-Type': 'application/json',
           'Accept': 'application/json'
@@ -67,14 +81,13 @@ const classifyText = async (text) => {
       }
     );
 
-    return response.data?.category || null;
-
+    return response.data?.category || 'autre';
   } catch (error) {
     console.error('Erreur NLP (ou timeout dépassé) :', error.message);
-
-    // 🔁 Fallback simple basé sur des mots-clés
+    
+    // Fallback basé sur des mots-clés
     const lowerText = text.toLowerCase();
-
+    
     if (lowerText.includes('contrat') || lowerText.includes('agreement') || lowerText.includes('signature')) {
       return 'contrat';
     }
@@ -88,7 +101,7 @@ const classifyText = async (text) => {
       return 'cv';
     }
 
-    return 'autre'; // Fallback final si rien ne correspond
+    return 'autre';
   }
 };
 
@@ -570,7 +583,7 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
 // Après avoir extrait le texte de la vidéo
 console.log('Texte extrait de la vidéo :', extractedText);
 
-    const finalCategory = await classifyText(extractedText);
+  const finalCategory = await classifyText(extractedText, req.file.originalname);
 
     const existing = await pool.query(
       'SELECT * FROM documents WHERE name = $1 ORDER BY version DESC NULLS LAST LIMIT 1',

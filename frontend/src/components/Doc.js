@@ -56,7 +56,7 @@ const Doc = () => {
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [existingWorkflow, setExistingWorkflow] = useState(null);
-  const categories = ['Contrat', 'Mémoire', 'Article', 'Rapport', 'facture', 'cv', 'demande_conge'];
+  const categories = ['Contrat', 'Mémoire', 'Article', 'Rapport', 'facture', 'cv', 'demande_conge', 'photo', 'video'];
   const [selectedCategory, setSelectedCategory] = useState('');
   const [categoryClickCount, setCategoryClickCount] = useState(0);
   const [summary, setSummary] = useState('');
@@ -388,6 +388,16 @@ const Doc = () => {
       return acc;
     }, {})
   );
+const isMediaFile = (doc) => {
+  const extension = doc.file_path?.split('.').pop().toLowerCase() || '';
+  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp'];
+  const videoExtensions = ['mp4', 'avi', 'mkv', 'mov', 'webm'];
+  
+  return {
+    isPhoto: imageExtensions.includes(extension),
+    isVideo: videoExtensions.includes(extension)
+  };
+};
 
   const filteredDocuments = latestDocs.filter((doc) => {
     const docName = doc.name || '';
@@ -430,7 +440,6 @@ const Doc = () => {
     const matchesCategory =
       !selectedCategory || selectedCategory === '' ||
       (docCategory && docCategory.toLowerCase() === selectedCategory.toLowerCase());
-
 
     console.log("nom_candidat ➡️", doc.metadata?.nom_candidat);
 
@@ -1203,27 +1212,41 @@ const Doc = () => {
 
                                 {/* Créer un workflow */}
                                 <Button
-                                  variant="dark"
-                                  size="sm"
-                                  className="ms-2"
-                                  onClick={() => {
-                                    if (userRole === 'admin' || doc.owner_id === userId) {
-                                      handleOpenConfirm(doc);
-                                    }
-                                  }}
-                                  disabled={!(userRole === 'admin' || doc.owner_id === userId)}
-                                  title={
-                                    userRole === 'admin' || doc.owner_id === userId
-                                      ? 'Créer un workflow'
-                                      : 'Non autorisé à créer un workflow'
-                                  }
-                                  style={{
-                                    opacity: userRole === 'admin' || doc.owner_id === userId ? 1 : 0.15,
-                                    pointerEvents: userRole === 'admin' || doc.owner_id === userId ? 'auto' : 'none'
-                                  }}
-                                >
-                                  <i className="bi bi-play-fill me-1"></i>
-                                </Button>
+  variant="dark"
+  size="sm"
+  className="ms-2"
+  onClick={() => {
+    if (userRole === 'admin' || doc.owner_id === userId) {
+      handleOpenConfirm(doc);
+    }
+  }}
+  disabled={
+    !(userRole === 'admin' || doc.owner_id === userId) || 
+    isMediaFile(doc).isPhoto || 
+    isMediaFile(doc).isVideo
+  }
+  title={
+    isMediaFile(doc).isPhoto || isMediaFile(doc).isVideo 
+      ? 'Workflow non disponible pour les médias' 
+      : userRole === 'admin' || doc.owner_id === userId
+        ? 'Créer un workflow'
+        : 'Non autorisé à créer un workflow'
+  }
+  style={{
+    opacity: (userRole === 'admin' || doc.owner_id === userId) && 
+             !isMediaFile(doc).isPhoto && 
+             !isMediaFile(doc).isVideo 
+      ? 1 
+      : 0.15,
+    pointerEvents: (userRole === 'admin' || doc.owner_id === userId) && 
+                  !isMediaFile(doc).isPhoto && 
+                  !isMediaFile(doc).isVideo 
+      ? 'auto' 
+      : 'none'
+  }}
+>
+  <i className="bi bi-play-fill me-1"></i>
+</Button>
                               </td>
 
                             </tr>
