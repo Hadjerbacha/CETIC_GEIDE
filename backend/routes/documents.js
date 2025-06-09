@@ -105,7 +105,6 @@ const classifyText = async (text, filePath) => {
   }
 };
 
-;
 router.get('/:id/my-permissions', auth, async (req, res) => {
   const documentId = req.params.id;
   const userId = req.user.id;
@@ -727,7 +726,6 @@ console.log('Texte extrait de la vidéo :', extractedText);
   }
 });
 
-
 router.get('/latest', auth, async (req, res) => {
   const userId = req.user.id;
   const isAdmin = req.user.role === 'admin';
@@ -740,6 +738,7 @@ router.get('/latest', auth, async (req, res) => {
         SELECT DISTINCT ON (name) d.*
         FROM documents d
         WHERE d.is_completed = true
+        AND d.is_archived = false
         ORDER BY name, version DESC
       `);
     } else {
@@ -751,6 +750,7 @@ router.get('/latest', auth, async (req, res) => {
           dp.user_id = $1
           AND dp.can_read = true
           AND d.is_completed = true
+          AND d.is_archived = false
         ORDER BY d.name, d.version DESC
       `, [userId]);
     }
@@ -761,9 +761,118 @@ router.get('/latest', auth, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
+router.get('/archive', auth, async (req, res) => {
+  const userId = req.user.id;
+  const isAdmin = req.user.role === 'admin';
+
+  try {
+    let result;
+
+    if (isAdmin) {
+      // Tous les documents archivés complétés (toutes les versions)
+      result = await pool.query(`
+        SELECT d.*
+        FROM documents d
+        WHERE d.is_completed = true
+        AND d.is_archived = true
+        ORDER BY d.name, d.version DESC
+      `);
+    } else {
+      // Uniquement les documents archivés visibles par l'utilisateur
+      result = await pool.query(`
+        SELECT d.*
+        FROM documents d
+        JOIN document_permissions dp ON dp.document_id = d.id
+        WHERE dp.user_id = $1
+        AND dp.can_read = true
+        AND d.is_completed = true
+        AND d.is_archived = true
+        ORDER BY d.name, d.version DESC
+      `, [userId]);
+    }
+
+    res.status(200).json(result.rows);
+  } catch (err) {
+    console.error('Erreur récupération archives :', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+// Archive un document (admin uniquement)
+router.put('/:id/archive', auth, async (req, res) => {
+  const { id } = req.params;
+  const userRole = req.user.role;
+
+  if (userRole !== 'admin') {
+    return res.status(403).json({ message: 'Accès interdit. Seul un administrateur peut archiver.' });
+  }
+
+  try {
+    await pool.query(
+      'UPDATE documents SET is_archived = true WHERE id = $1',
+      [id]
+    );
+    res.status(200).json({ message: 'Document archivé avec succès.' });
+  } catch (error) {
+    console.error('Erreur lors de l’archivage :', error);
+    res.status(500).json({ error: 'Erreur serveur lors de l’archivage.' });
+  }
+});
+
+// routes/documents.js
+router.put('/:id/affiche', auth, async (req, res) => {
+  const docId = req.params.id;
+  const isArchived = req.body.is_archived; // doit être true ou false
+
+  try {
+    const result = await pool.query(
+      'UPDATE documents SET is_archived = $1 WHERE id = $2 RETURNING *',
+      [isArchived, docId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ message: 'Document introuvable' });
+    }
+
+    res.json({ message: isArchived ? 'Document archivé' : 'Document désarchivé', document: result.rows[0] });
+  } catch (err) {
+    console.error('Erreur SQL :', err);
+    res.status(500).json({ message: 'Erreur lors de la mise à jour de l’archivage' });
+  }
+});
 
 
+router.get('/archived', auth, async (req, res) => {
+  const userId = req.user.id;
+  const isAdmin = req.user.role === 'admin';
 
+  try {
+    let result;
+
+    if (isAdmin) {
+      result = await pool.query(`
+        SELECT * FROM documents
+        WHERE is_archived = true
+        ORDER BY date DESC
+      `);
+    } else {
+      result = await pool.query(`
+        SELECT d.*
+        FROM documents d
+        JOIN document_permissions dp ON dp.document_id = d.id
+        WHERE dp.user_id = $1
+        AND dp.can_read = true
+        AND d.is_archived = true
+        ORDER BY d.date DESC
+      `, [userId]);
+    }
+
+    res.status(200).json(result.rows);
+  } catch (err) {
+    console.error('Erreur récupération des documents archivés :', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
 
 //complete upload
 router.put('/:id', auth, async (req, res) => {

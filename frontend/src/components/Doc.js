@@ -157,8 +157,6 @@ const Doc = () => {
     }
   }, []);
 
-
-
   const openShareModal = (doc) => {
     setDocToShare(doc);
     setShareAccessType(doc.access || 'private');
@@ -194,8 +192,6 @@ const Doc = () => {
     fetchUsers();
     fetchGroups();
   }, [token]);
-
-
 
   const fetchUsers = async () => {
     try {
@@ -474,8 +470,6 @@ const isMediaFile = (doc) => {
     return matchesType && matchesDate && matchesSearch && matchesCategory && matchesAdvancedCategory;
   });
 
-
-
   const handleOpenConfirm = async (doc) => {
     setModalDoc(doc);
     setAutoWfName(`WF_${doc.name}`);
@@ -587,7 +581,6 @@ const isMediaFile = (doc) => {
     }
   };
 
-
   const handleUpdatePermissions = async () => {
     try {
       const payload = {
@@ -683,7 +676,6 @@ const isMediaFile = (doc) => {
     }
   };
 
-
   const handleFolderUpload = async () => {
     const formData = new FormData();
 
@@ -713,7 +705,29 @@ const isMediaFile = (doc) => {
     }
   };
 
+const handleArchive = async (docId) => {
+  try {
+    const response = await fetch(`http://localhost:5000/api/documents/${docId}/archive`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`, // Très important !
+      },
+    });
 
+    const data = await response.json(); // On lit la réponse pour voir le message
+
+    if (!response.ok) {
+      console.error('Erreur API:', data);
+      throw new Error(data.message || 'Erreur lors de l’archivage');
+    }
+
+    alert('Document archivé avec succès ✅');
+  } catch (error) {
+    console.error('Erreur frontend:', error);
+    alert('Une erreur est survenue ❌');
+  }
+};
 
 
   return (
@@ -1246,6 +1260,18 @@ const isMediaFile = (doc) => {
   }}
 >
   <i className="bi bi-play-fill me-1"></i>
+  {/* Archiver */}
+                                {userRole === 'admin' && (
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="me-2"
+                                    onClick={() => handleArchive(doc.id)}
+                                    title="Archiver le document"
+                                  >
+                                    <i className="bi bi-archive"></i>
+                                  </Button>
+                                )}
 </Button>
                               </td>
 
