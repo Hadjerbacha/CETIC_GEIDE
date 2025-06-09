@@ -1219,7 +1219,7 @@ const handleArchive = async (docId) => {
                                 <Button
                                   variant="dark"
                                   size="sm"
-                                  className="ms-2"
+                                  className="me-2"
                                   onClick={() => {
                                     if (userRole === 'admin' || doc.owner_id === userId) {
                                       handleOpenConfirm(doc);
