@@ -15,15 +15,21 @@ function transcribeAudio(filePath) {
 
     pythonProcess.stderr.on("data", (data) => {
       console.error(`Erreur Python: ${data}`);
+      reject(data.toString());
     });
 
     pythonProcess.on("close", (code) => {
       if (code === 0) {
-        // Récupérer uniquement la transcription
-        const transcription = output.split("Transcription :")[1]?.trim();
-        resolve(transcription);
+        try {
+          // Le script Python devrait maintenant renvoyer du JSON
+          const result = JSON.parse(output);
+          resolve(result.text || "");
+        } catch (e) {
+          console.error("Erreur parsing sortie Python:", e);
+          reject("Format de sortie invalide");
+        }
       } else {
-        reject("Erreur de transcription.");
+        reject(`Processus Python terminé avec code ${code}`);
       }
     });
   });

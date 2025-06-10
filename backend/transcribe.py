@@ -1,7 +1,7 @@
-# transcribe.py
 import sys
 import whisper
+import json
 
 model = whisper.load_model("base")
 result = model.transcribe(sys.argv[1])
-print(result["text"])
+print(json.dumps({"text": result["text"]}))
