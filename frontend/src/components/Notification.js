@@ -3,7 +3,7 @@ import axios from 'axios';
 import { Card, Button, ButtonGroup, Badge } from 'react-bootstrap';
 import { jwtDecode } from 'jwt-decode';
 import Navbar from './Navbar';
-import '../style/Notif.css'; // Nous créerons ce fichier CSS
+import '../style/Notif.css';
 
 const NotificationsPage = () => {
   const [reminders, setReminders] = useState([]);
@@ -13,7 +13,7 @@ const NotificationsPage = () => {
   const [userRole, setUserRole] = useState("");
   const [currentUser, setCurrentUser] = useState(null);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
-  const [activeTab, setActiveTab] = useState('notifications'); // Pour la navigation par onglets
+  const [activeTab, setActiveTab] = useState('notifications');
 
   const handleDecision = async (id, decision, userId, senderId) => {
     try {
@@ -30,8 +30,8 @@ const NotificationsPage = () => {
           message: `Votre demande d'accés au document ${id} a été approuvée.`,
           type: 'info',
           document_id: id,
-          decision : true ,
-          is_read : true
+          decision: true,
+          is_read: true
         });
       }
     } catch (error) {
@@ -100,23 +100,18 @@ const NotificationsPage = () => {
   };
 
   const markAsRead = async (notificationId) => {
-  try {
-    const response = await axios.put(`http://localhost:5000/api/notifications/read/${notificationId}`);
-
-    // Ici, tu mets à jour l'état local des notifications pour qu'elles soient actualisées
-    setNotifications((prevNotifications) =>
-      prevNotifications.map((notif) =>
-        notif.id === notificationId ? { ...notif, is_read: true } : notif
-      )
-    );
-    
-    console.log(`Notification ${notificationId} marquée comme lue`);
-  } catch (error) {
-    console.error("Erreur lors du marquage comme lue :", error);
-  }
-};
-
-
+    try {
+      await axios.put(`http://localhost:5000/api/notifications/read/${notificationId}`);
+      setNotifications(prevNotifications =>
+        prevNotifications.map(notif =>
+          notif.id === notificationId ? { ...notif, is_read: true } : notif
+        )
+      );
+      setUnreadNotificationsCount(prev => prev - 1);
+    } catch (error) {
+      console.error("Erreur lors du marquage comme lue :", error);
+    }
+  };
 
   useEffect(() => {
     fetch('http://localhost:5000/api/auth/users')
@@ -143,166 +138,160 @@ const NotificationsPage = () => {
     }
   }, [currentUser]);
 
+  const getUserName = (userId) => {
+    const user = users.find(u => u.id === userId);
+    return user ? `${user.prenom} ${user.name}` : 'Utilisateur inconnu';
+  };
+
   return (
     <>
-    <Navbar />
-    <div className="notifications-container">
-      <div className="notifications-header">
-        <div className="tabs">
-          <button 
-            className={`tab-btn ${activeTab === 'notifications' ? 'active' : ''}`}
-            onClick={() => setActiveTab('notifications')}
-          >
-            Système
-            {unreadNotificationsCount > 0 && (
-              <Badge pill bg="danger" className="ms-2">
-                {unreadNotificationsCount}
-              </Badge>
-            )}
-          </button>
-          <button 
-            className={`tab-btn ${activeTab === 'reminders' ? 'active' : ''}`}
-            onClick={() => setActiveTab('reminders')}
-          >
-            Rappels
-          </button>
+      <Navbar />
+      <div className="notifications-container">
+        <div className="notifications-header">
+          <div className="tabs">
+            <button 
+              className={`tab-btn ${activeTab === 'notifications' ? 'active' : ''}`}
+              onClick={() => setActiveTab('notifications')}
+            >
+              Système
+              {unreadNotificationsCount > 0 && (
+                <Badge pill bg="danger" className="ms-2">
+                  {unreadNotificationsCount}
+                </Badge>
+              )}
+            </button>
+            <button 
+              className={`tab-btn ${activeTab === 'reminders' ? 'active' : ''}`}
+              onClick={() => setActiveTab('reminders')}
+            >
+              Rappels
+            </button>
+          </div>
         </div>
-      </div>
 
-      {activeTab === 'notifications' && (
-        <div className="notifications-section">
-          {notifications.length === 0 ? (
-            <div className="empty-state">
-              <i className="bi bi-bell-slash"></i>
-              <p>Aucune notification système</p>
-            </div>
-          ) : (
-            notifications.map(notif => (
-              <Card key={notif.id} className={`notification-card ${!notif.is_read ? 'unread' : ''}`}>
-                <Card.Body>
-                  <div className="notification-content">
-                    <div className="notification-icon">
-                      {notif.type === 'task' ? (
-                        <i className="bi bi-clipboard-check"></i>
-                      ) : (
-                        <i className="bi bi-info-circle"></i>
-                      )}
-                    </div>
-                    <div className="notification-details">
-                      <Card.Title>{notif.type === 'task' ? 'Tâche' : 'Information'}</Card.Title>
-                      <Card.Text>{notif.message}</Card.Text>
-                      <div className="notification-meta">
-                        <small>{new Date(notif.created_at).toLocaleString()}</small>
-                        {currentUser?.role === 'admin' && (
-                          <>
-                            <small>Envoyée par: {notif.sender_id || 'N/A'}</small>
-                            <small>Document: {notif.document_id || 'N/A'}</small>
-                          </>
+        {activeTab === 'notifications' && (
+          <div className="notifications-section">
+            {notifications.length === 0 ? (
+              <div className="empty-state">
+                <i className="bi bi-bell-slash"></i>
+                <p>Aucune notification système</p>
+              </div>
+            ) : (
+              notifications.map(notif => (
+                <Card key={notif.id} className={`notification-card ${!notif.is_read ? 'unread' : ''}`}>
+                  <Card.Body>
+                    <div className="notification-content">
+                      <div className="notification-icon">
+                        {notif.type === 'task' ? (
+                          <i className="bi bi-clipboard-check"></i>
+                        ) : (
+                          <i className="bi bi-info-circle"></i>
                         )}
                       </div>
-                    </div>
-                    <div className="notification-actions">
-                      {notif.type === 'task' && notif.related_task_id && (
-                        <Button
-                          variant="outline-primary"
-                          size="sm"
-                          className="action-btn"
-                          href={`/details_taches/${notif.related_task_id}`}
-                        >
-                          <i className="bi bi-eye"></i>
-                        </Button>
-                      )}
-                      {!notif.is_read && (
-                        <Button
-                          variant="outline-success"
-                          size="sm"
-                          className="action-btn"
-                          onClick={() => markAsRead(notif.id)}
-                        >
-                          <i className="bi bi-check2"></i>
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                  {currentUser?.role === 'admin' && (
-                    <div className="admin-actions">
-                      <ButtonGroup>
-                        <Button
-                          variant="success"
-                          size="sm"
-                          onClick={() =>
-                            handleDecision(
-                              notif.document_id,
-                              true,
-                              notif.sender_id,
-                              currentUser?.id
-                            )
-                          }
-                        >
-                          <i className="bi bi-check-lg"></i> Approuver
-                        </Button>
-                        <Button
-                          variant="danger"
-                          size="sm"
-                          onClick={() =>
-                            handleDecision(
-                              notif.document_id,
-                              false,
-                              notif.user_id,
-                              currentUser?.id
-                            )
-                          }
-                        >
-                          <i className="bi bi-x-lg"></i> Refuser
-                        </Button>
-                      </ButtonGroup>
-                    </div>
-                  )}
-                </Card.Body>
-              </Card>
-            ))
-          )}
-        </div>
-      )}
-
-      {activeTab === 'reminders' && (
-        <div className="reminders-section">
-          {reminders.length === 0 ? (
-            <div className="empty-state">
-              <i className="bi bi-calendar-x"></i>
-              <p>Aucun rappel de tâche à venir</p>
-            </div>
-          ) : (
-            reminders.map(reminder => (
-              <Card key={reminder.id} className="reminder-card">
-                <Card.Body>
-                  <div className="reminder-content">
-                    <div className="reminder-icon">
-                      <i className="bi bi-alarm"></i>
-                    </div>
-                    <div className="reminder-details">
-                      <Card.Title>{reminder.title}</Card.Title>
-                      <Card.Text>{reminder.message}</Card.Text>
-                      <div className="reminder-meta">
-                        <small>Échéance: {new Date(reminder.deadline).toLocaleDateString()}</small>
+                      <div className="notification-details">
+                        <Card.Title>{notif.type === 'task' ? 'Tâche' : 'Information'}</Card.Title>
+                        <Card.Text>{notif.message}</Card.Text>
+                        <div className="notification-meta">
+                          <small>{new Date(notif.created_at).toLocaleString()}</small>
+                          {currentUser?.role === 'admin' && notif.sender_id && (
+                            <small>Envoyée par: {getUserName(notif.sender_id)}</small>
+                          )}
+                        </div>
                       </div>
+                      <div className="notification-actions">
+  {notif.type === 'task' && notif.related_task_id &&  (
+    <Button
+      variant="outline-primary"
+      size="sm"
+      className="action-btn"
+      href={`/details_taches/${notif.related_task_id}`}
+      title="Voir la tâche"
+    >
+      <i className="bi bi-eye"></i>
+    </Button>
+  )}
+  {!notif.is_read  && (
+    <Button
+      variant="outline-success"
+      size="sm"
+      className="action-btn"
+      onClick={() => markAsRead(notif.id)}
+      title="Marquer comme lu"
+    >
+      <i className="bi bi-check2"></i>
+    </Button>
+  )}
+  {currentUser?.role === 'admin' && (
+    <>
+      <Button
+        variant="outline-success"
+        size="sm"
+        className="action-btn"
+        onClick={() => handleDecision(notif.document_id, true, notif.user_id, currentUser?.id)}
+        title="Approuver"
+      >
+        <i className="bi bi-check-lg"></i>
+      </Button>
+      <Button
+        variant="outline-danger"
+        size="sm"
+        className="action-btn"
+        onClick={() => handleDecision(notif.document_id, false, notif.user_id, currentUser?.id)}
+        title="Refuser"
+      >
+        <i className="bi bi-x-lg"></i>
+      </Button>
+    </>
+  )}
+  
+</div>
                     </div>
-                    <Button
-                      variant="outline-primary"
-                      size="sm"
-                      className="action-btn"
-                      href={`/details_taches/${reminder.id}`}
-                    >
-                      <i className="bi bi-eye"></i>
-                    </Button>
-                  </div>
-                </Card.Body>
-              </Card>
-            ))
-          )}
-        </div>
-      )}
-    </div>
+                  </Card.Body>
+                </Card>
+              ))
+            )}
+          </div>
+        )}
+
+        {activeTab === 'reminders' && (
+          <div className="reminders-section">
+            {reminders.length === 0 ? (
+              <div className="empty-state">
+                <i className="bi bi-calendar-x"></i>
+                <p>Aucun rappel de tâche à venir</p>
+              </div>
+            ) : (
+              reminders.map(reminder => (
+                <Card key={reminder.id} className="reminder-card">
+                  <Card.Body>
+                    <div className="reminder-content">
+                      <div className="reminder-icon">
+                        <i className="bi bi-alarm"></i>
+                      </div>
+                      <div className="reminder-details">
+                        <Card.Title>{reminder.title}</Card.Title>
+                        <Card.Text>{reminder.message}</Card.Text>
+                        <div className="reminder-meta">
+                          <small>Échéance: {new Date(reminder.deadline).toLocaleDateString()}</small>
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline-primary"
+                        size="sm"
+                        className="action-btn"
+                        href={`/details_taches/${reminder.id}`}
+                        title="Voir la tâche"
+                      >
+                        <i className="bi bi-eye"></i>
+                      </Button>
+                    </div>
+                  </Card.Body>
+                </Card>
+              ))
+            )}
+          </div>
+        )}
+      </div>
     </>
   );
 };

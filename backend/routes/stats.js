@@ -99,8 +99,8 @@ router.get('/users', async (req, res) => {
       pool.query(`
         SELECT 
           DATE(login_time) AS date,
-          COUNT(DISTINCT id)::int AS activeUsers
-        FROM users
+          COUNT(DISTINCT user_id)::int AS activeUsers
+        FROM sessions
         WHERE login_time >= NOW() - INTERVAL '30 days'
         GROUP BY date
         ORDER BY date

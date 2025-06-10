@@ -2,7 +2,7 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { getUsers, findUserByEmail, createUser, updateUser, deleteUser, createSession, getUserSessions, getActiveSession, updateLogoutTime, getUserWorkStats} = require("../models/userModel");
 require("dotenv").config();
-
+const pool = require("../config/db"); // Ajoutez cette ligne en haut du fichier
 
 // Fonction pour récupérer tous les utilisateurs
 // Exemple de contrôleur pour récupérer des utilisateurs
@@ -127,7 +127,31 @@ const getUserSessionsController = async (req, res) => {
     if (!token) return res.status(401).json({ message: "Non autorisé" });
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const sessions = await getUserSessions(decoded.id);
+    
+    // Récupérer les paramètres de filtre
+    const { dateFrom, dateTo } = req.query;
+    
+    let query = `
+      SELECT * FROM sessions 
+      WHERE user_id = $1
+    `;
+    
+    const queryParams = [decoded.id];
+    
+    // Ajouter les conditions de filtre si elles existent
+    if (dateFrom) {
+      query += ` AND login_time >= $${queryParams.length + 1}`;
+      queryParams.push(dateFrom);
+    }
+    
+    if (dateTo) {
+      query += ` AND login_time <= $${queryParams.length + 1}`;
+      queryParams.push(dateTo + ' 23:59:59'); // Inclure toute la journée
+    }
+    
+    query += ` ORDER BY login_time DESC`;
+    
+    const { rows: sessions } = await pool.query(query, queryParams);
     
     res.json(sessions);
   } catch (err) {

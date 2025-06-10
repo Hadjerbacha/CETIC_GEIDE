@@ -377,11 +377,20 @@ const Statistique = () => {
   };
 
   const renderUserStats = () => {
-    if (!userStats) return null;
-    
-    return (
-      <Row className="g-4">
-        <Col lg={6}>
+  if (!userStats) return null;
+  
+  // Formatage des dates pour un affichage plus lisible
+  const formattedActivity = userStats.activity.map(item => ({
+    ...item,
+    date: new Date(item.date).toLocaleDateString('fr-FR', { 
+      day: '2-digit', 
+      month: 'short' 
+    })
+  }));
+
+  return (
+    <Row className="g-4">
+      <Col lg={6}>
           <Card className="h-100 chart-card">
             <Card.Body>
               <Card.Title>Users by Role</Card.Title>
@@ -416,43 +425,54 @@ const Statistique = () => {
             </Card.Body>
           </Card>
         </Col>
-        
-        <Col lg={6}>
-          <Card className="h-100 chart-card">
-            <Card.Body>
-              <Card.Title>User Activity</Card.Title>
-              <div style={{ height: '300px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={userStats.activity}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="date" tick={{ fill: '#6c757d' }} />
-                    <YAxis tick={{ fill: '#6c757d' }} />
-                    <Tooltip 
-                      contentStyle={{
-                        background: '#ffffff',
-                        border: 'none',
-                        borderRadius: '8px',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
-                      }}
-                    />
-                    <Line 
-                      type="monotone" 
-                      dataKey="activeUsers" 
-                      stroke={COLORS[0]} 
-                      strokeWidth={2}
-                      dot={{ r: 4 }}
-                      activeDot={{ r: 6 }}
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
-    );
-  };
-
+      
+      <Col lg={6}>
+        <Card className="h-100 chart-card">
+          <Card.Body>
+            <Card.Title>User Activity (Last 30 Days)</Card.Title>
+            <div style={{ height: '300px' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={formattedActivity}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                  <XAxis 
+                    dataKey="date" 
+                    tick={{ fill: '#6c757d' }}
+                  />
+                  <YAxis 
+                    tick={{ fill: '#6c757d' }}
+                    label={{ 
+                      value: 'Active Users', 
+                      angle: -90, 
+                      position: 'insideLeft',
+                      fill: '#6c757d'
+                    }}
+                  />
+                  <Tooltip 
+                    contentStyle={{
+                      background: '#ffffff',
+                      border: 'none',
+                      borderRadius: '8px',
+                      boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
+                    }}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="activeUsers" 
+                    stroke={COLORS[0]} 
+                    strokeWidth={2}
+                    dot={{ r: 4 }}
+                    activeDot={{ r: 6 }}
+                    name="Active Users"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </Card.Body>
+        </Card>
+      </Col>
+    </Row>
+  );
+};
   const renderWorkflowStats = () => {
     if (!workflowStats) return null;
     
