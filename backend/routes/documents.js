@@ -523,6 +523,25 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+router.get('/check-name', async (req, res) => {
+  const { name } = req.query;
+  if (!name) return res.status(400).json({ error: 'Nom manquant' });
+
+  try {
+    const doc = await pool.query('SELECT * FROM documents WHERE name = $1 ORDER BY version DESC LIMIT 1', [name]);
+
+    if (doc.rows.length > 0) {
+      return res.json({ exists: true, document: doc.rows[0] });
+    } else {
+      return res.json({ exists: false });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+
 router.post('/', auth, upload.single('file'), async (req, res) => {
   let {
     name,

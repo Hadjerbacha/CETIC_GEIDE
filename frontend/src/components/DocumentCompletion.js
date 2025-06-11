@@ -30,6 +30,8 @@ const DocumentCompletion = () => {
   const [existingDocument, setExistingDocument] = useState(null);
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [differenceNote, setDifferenceNote] = useState('');
+  const [confirmAddVersion, setConfirmAddVersion] = useState(null); // null | true | false
+
 
   // Récupérer la catégorie du document
   const category = docInfo?.category || '';
@@ -38,6 +40,22 @@ const DocumentCompletion = () => {
 
   // Vérifier les permissions
   const [canAddVersion, setCanAddVersion] = useState(false);
+
+  useEffect(() => {
+    const checkName = async () => {
+      const fullName = extension ? `${baseName}.${extension}` : baseName;
+      const duplicateExists = await checkForDuplicate(fullName);
+      if (!duplicateExists) {
+        setExistingDocument(null); // réinitialiser si pas de duplicata
+      }
+    };
+
+    if (baseName.trim()) {
+      checkName();
+    }
+    setConfirmAddVersion(null); // Réinitialiser la décision
+  }, [baseName, extension]);
+
 
   useEffect(() => {
     const handleBeforeUnload = (e) => {
@@ -322,13 +340,21 @@ const DocumentCompletion = () => {
           <div className="col-md-8">
             <Card className="p-4 shadow-sm">
               <h3 className="mb-4">📝 Compléter les informations du document</h3>
-              {existingDocument && !canAddVersion && (
-                <Alert variant="danger">
-                  Un document nommé <strong>{existingDocument.name}</strong> existe déjà.
-                  Vous n'avez pas les droits pour créer une nouvelle version. Veuillez changer le nom.
-                </Alert>
+              {existingDocument && existingDocument.id !== docInfo?.id && canAddVersion && confirmAddVersion === null && (
+                <div className="mb-3">
+                  <Alert variant="info">
+                    Ce nom est déjà utilisé. Voulez-vous l’enregistrer comme une <strong>nouvelle version</strong> du document existant ?
+                  </Alert>
+                  <div className="d-flex gap-2">
+                    <Button variant="outline-success" onClick={() => setConfirmAddVersion(true)}>
+                      Oui, ajouter comme nouvelle version
+                    </Button>
+                    <Button variant="outline-danger" onClick={() => setConfirmAddVersion(false)}>
+                      Non, je vais changer le nom
+                    </Button>
+                  </div>
+                </div>
               )}
-
 
               <Form onSubmit={handleSubmit}>
                 <Form.Group className="mb-3">
@@ -407,15 +433,33 @@ const DocumentCompletion = () => {
                     <option value="haute">Haute</option>
                   </Form.Select>
                 </Form.Group>
-
                 <div className="d-flex justify-content-end">
                   <Button
                     variant="success"
                     type="submit"
-                    disabled={!isFormValid() || isSaving}
+                    disabled={
+                      // 🔒 1. Le formulaire est invalide
+                      !isFormValid() ||
+
+                      // 🕐 2. Une sauvegarde est déjà en cours
+                      isSaving ||
+
+                      // 🚫 3. Le nom du document existe déjà, ce n’est pas le même document, et :
+                      // soit l'utilisateur n’a pas le droit d’ajouter une version,
+                      // soit il n’a pas encore confirmé vouloir l’ajouter comme nouvelle version
+                      (
+                        existingDocument &&
+                        existingDocument.id !== docInfo?.id &&
+                        (
+                          !canAddVersion ||         // Pas le droit d’ajouter une version
+                          confirmAddVersion !== true // Ou n’a pas encore cliqué sur "Oui"
+                        )
+                      )
+                    }
                   >
                     {isSaving ? 'Enregistrement...' : 'Enregistrer'}
                   </Button>
+
                 </div>
               </Form>
             </Card>
