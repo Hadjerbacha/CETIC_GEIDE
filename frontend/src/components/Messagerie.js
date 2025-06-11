@@ -17,6 +17,7 @@ const MessageriePage = ({ token }) => {
   const [isGroupMode, setIsGroupMode] = useState(false);
   const [messageContent, setMessageContent] = useState('');
   const [activeTab, setActiveTab] = useState('inbox');
+  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState({
     messages: false,
     users: false,
@@ -123,6 +124,7 @@ const MessageriePage = ({ token }) => {
   const filteredMessages = activeTab === 'sent'
     ? messages.filter(msg => msg.sender_id === currentUserId)
     : messages.filter(msg => msg.sender_id !== currentUserId);
+    
 
   return (
     <>
