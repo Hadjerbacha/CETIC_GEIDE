@@ -39,35 +39,42 @@ const ActivityLog = () => {
     }
   }, []);
 
-  const fetchActivities = async () => {
-    try {
-      setLoading(true);
-      const { data } = await axios.get(`http://localhost:5000/api/auth/sessions`, {
-        headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-      });
-      
-      // Transformer les données de session en activités
-      const transformedActivities = data.map(session => ({
-        id: session.id,
-        action_type: session.logout_time ? 'logout' : 'login',
-        type: 'Session utilisateur',
-        login_time: session.login_time,
-        logout_time: session.logout_time,
-        duration: session.duration ? `${Math.round(session.duration/60)} minutes` : 'En cours',
-        details: session.logout_time 
-          ? `Session terminée (${Math.round(session.duration/60)} minutes)` 
-          : 'Session active'
-      }));
+ const fetchActivities = async () => {
+  try {
+    setLoading(true);
+    const params = {};
+    
+    // Ajouter les paramètres de filtre si ils existent
+    if (filters.dateFrom) params.dateFrom = filters.dateFrom;
+    if (filters.dateTo) params.dateTo = filters.dateTo;
 
-      setActivities(transformedActivities);
-      setError(null);
-    } catch (err) {
-      setError(err.response?.data?.error || 'Erreur lors du chargement des activités');
-      setActivities([]);
-    } finally {
-      setLoading(false);
-    }
-  };
+    const { data } = await axios.get(`http://localhost:5000/api/auth/sessions`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('token')}` },
+      params: params // Envoyer les paramètres de filtre
+    });
+    
+    // Transformer les données de session en activités
+    const transformedActivities = data.map(session => ({
+      id: session.id,
+      action_type: session.logout_time ? 'logout' : 'login',
+      type: 'Session utilisateur',
+      login_time: session.login_time,
+      logout_time: session.logout_time,
+      duration: session.duration ? `${Math.round(session.duration/60)} minutes` : 'En cours',
+      details: session.logout_time 
+        ? `Session terminée (${Math.round(session.duration/60)} minutes)` 
+        : 'Session active'
+    }));
+
+    setActivities(transformedActivities);
+    setError(null);
+  } catch (err) {
+    setError(err.response?.data?.error || 'Erreur lors du chargement des activités');
+    setActivities([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
   useEffect(() => {
     if (userId) fetchActivities();

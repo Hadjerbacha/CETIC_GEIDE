@@ -180,7 +180,7 @@ const Navbar = () => {
 
 
           <div className="navbar-logo">
-            <Link to="/accueil"style={{ marginLeft: '-400px' }}>
+            <Link to="/accueil"style={{ marginLeft: '-450px' }}>
   <img 
     src="/logo4.png" 
     alt="CETIC Logo" 
@@ -207,7 +207,7 @@ const Navbar = () => {
     borderRadius: '30px',
     boxShadow: '0 2px 6px rgba(0, 0, 0, 0.15)',
     cursor: 'pointer',
-    minWidth: '170px' // pour donner plus de largeur
+    minWidth: '50px' // pour donner plus de largeur
   }}
 >
   <Link
@@ -223,7 +223,6 @@ const Navbar = () => {
     <Badge count={unreadNotificationsCount} offset={[-5, 5]}>
       <FaIcons.FaBell size={22} style={{ color: '#fff' }} />
     </Badge>
-    <h6 style={{ color: '#fff', margin: 0 }}>Notifications</h6>
   </Link>
 </motion.div>
 

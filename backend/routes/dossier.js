@@ -275,8 +275,10 @@ const getTemplateByFolderName = (folderName) => {
     return 'facture';
   } else if (lowerName.includes('contrat') || lowerName.includes('convention')) {
     return 'contrat';
-  } else if (lowerName.includes('conge') || lowerName.includes('absence')) {
+  } else if (lowerName.includes('conge') || lowerName.includes('demande de congé')) {
     return 'conge';
+  } else if (lowerName.includes('cv') || lowerName.includes('curriculum')) {
+    return 'cv';
   }
   return null;
 };
@@ -376,6 +378,29 @@ const workflowTemplates = {
         order: 3,
         durationDays: 1,
         depends_on: 2
+      }
+    ]
+  },
+  cv: {
+    name: 'Workflow CV',
+    description: 'Traitement des CV des candidats',
+    tasks: [
+      {
+        title: 'Analyse et évaluation du CV',
+        description: 'Extraire les informations clés (compétences, expérience, etc.) et évaluer la pertinence du profil par rapport aux postes ouverts',
+        type: 'validation',
+        role: 'manager',
+        order: 1,
+        durationDays: 3 // tu peux ajuster selon ton estimation
+      },
+      {
+        title: 'Décision finale',
+        description: 'Décider d’une suite (entretien, réserve, rejet) et archiver le CV',
+        type: 'validation',
+        role: 'gestionnaire RH',
+        order: 2,
+        durationDays: 1,
+        depends_on: 1
       }
     ]
   }

@@ -35,7 +35,7 @@ const Login = () => {
 			<div className={styles.login_form_container}>
 				<div className={styles.left}>
 					<form className={styles.form_container} onSubmit={handleSubmit} method="post">
-						<img className={styles.img} src="login-.png" alt="logoapp"/><br/><br/>
+						<img className={styles.img} src="logo44.png" alt="logoapp"/><br/><br/>
 						<input
 							type="email"
 							placeholder="Email"

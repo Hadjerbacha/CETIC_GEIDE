@@ -32,7 +32,6 @@ const AssignedTasks = () => {
   });
   const navigate = useNavigate();
 
-  
   const token = localStorage.getItem('token');
   const decodedToken = token ? parseJwt(token) : null;
   const userId = decodedToken?.id;
@@ -52,37 +51,38 @@ const AssignedTasks = () => {
       Authorization: `Bearer ${token}`,
     },
   };
+  
   const fetchTasks = async () => {
-  if (!userId || !token) return;
+    if (!userId || !token) return;
 
-  try {
-    const response = await axios.get('http://localhost:5000/api/tasks/mes-taches', axiosConfig);
-    
-    // Filtrer les tâches assignées ET non bloquées
-    const assignedTasks = response.data.filter(task => {
-      return task.assigned_to?.includes(userId) && task.status !== 'blocked';
-    });
+    try {
+      const response = await axios.get('http://localhost:5000/api/tasks/mes-taches', axiosConfig);
+      
+      // Filtrer les tâches assignées ET non bloquées
+      const assignedTasks = response.data.filter(task => {
+        return task.assigned_to?.includes(userId) && task.status !== 'blocked';
+      });
 
-    setTasks(assignedTasks);
-    
-    // Mise à jour des stats (optionnel - retirez "blocked" si nécessaire)
-    const statusCounts = {
-      pending: 0,
-      rejected: 0,
-      completed: 0,
-    };
+      setTasks(assignedTasks);
+      
+      // Mise à jour des stats (optionnel - retirez "blocked" si nécessaire)
+      const statusCounts = {
+        pending: 0,
+        rejected: 0,
+        completed: 0,
+      };
 
-    assignedTasks.forEach(task => {
-      if (task.status in statusCounts) {
-        statusCounts[task.status]++;
-      }
-    });
+      assignedTasks.forEach(task => {
+        if (task.status in statusCounts) {
+          statusCounts[task.status]++;
+        }
+      });
 
-    setStats(statusCounts);
-  } catch (error) {
-    console.error("Erreur:", error);
-  }
-};
+      setStats(statusCounts);
+    } catch (error) {
+      console.error("Erreur:", error);
+    }
+  };
 
   useEffect(() => {
     if (token && userId) fetchTasks();
@@ -90,71 +90,71 @@ const AssignedTasks = () => {
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'pending': return 'secondary';
-      case 'rejected': return 'danger';
-      case 'completed': return 'success';
-      default: return 'light';
+      case 'pending': return 'var(--bs-gray-500)';
+      case 'rejected': return 'var(--bs-danger)';
+      case 'completed': return 'var(--bs-success)';
+      default: return 'var(--bs-light)';
     }
   };
 
-const handleStatusChange = async (taskId, newStatus) => {
-  try {
-    // Si c'est un refus, demander une raison
-    if (newStatus === 'rejected') {
-      const reason = prompt("Veuillez saisir la raison du refus :");
-      if (!reason) return; // Annuler si pas de raison fournie
-      
-      const res = await fetch(`http://localhost:5000/api/tasks/${taskId}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ 
-          status: newStatus,
-          rejection_reason: reason 
-        }),
-      });
+  const handleStatusChange = async (taskId, newStatus) => {
+    try {
+      // Si c'est un refus, demander une raison
+      if (newStatus === 'rejected') {
+        const reason = prompt("Veuillez saisir la raison du refus :");
+        if (!reason) return; // Annuler si pas de raison fournie
+        
+        const res = await fetch(`http://localhost:5000/api/tasks/${taskId}/status`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ 
+            status: newStatus,
+            rejection_reason: reason 
+          }),
+        });
 
-      if (!res.ok) throw new Error('Erreur lors du refus');
-      
-      // Envoyer une notification au créateur
-      await fetch(`http://localhost:5000/api/tasks/${taskId}/notify-rejection`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ reason }),
-      });
+        if (!res.ok) throw new Error('Erreur lors du refus');
+        
+        // Envoyer une notification au créateur
+        await fetch(`http://localhost:5000/api/tasks/${taskId}/notify-rejection`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ reason }),
+        });
 
-    } else {
-      // Logique normale pour les autres statuts
-      const res = await fetch(`http://localhost:5000/api/tasks/${taskId}/status`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      if (!res.ok) throw new Error('Erreur lors de la mise à jour du statut');
+      } else {
+        // Logique normale pour les autres statuts
+        const res = await fetch(`http://localhost:5000/api/tasks/${taskId}/status`, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ status: newStatus }),
+        });
+        if (!res.ok) throw new Error('Erreur lors de la mise à jour du statut');
+      }
+
+      // Recharger les tâches
+      fetchTasks();
+    } catch (error) {
+      console.error("Erreur:", error);
+      alert("❌ Impossible de changer le statut !");
     }
-
-    // Recharger les tâches
-    fetchTasks();
-  } catch (error) {
-    console.error("Erreur:", error);
-    alert("❌ Impossible de changer le statut !");
-  }
-};
+  };
 
   const getPriorityColor = (priority) => {
     switch (priority) {
-      case 'haute': return 'danger';
-      case 'moyenne': return 'warning';
-      case 'basse': return 'info';
-      default: return 'secondary';
+      case 'haute': return 'var(--bs-danger)';
+      case 'moyenne': return 'var(--bs-warning)';
+      case 'basse': return 'var(--bs-info)';
+      default: return 'var(--bs-secondary)';
     }
   };
 
@@ -184,18 +184,18 @@ const handleStatusChange = async (taskId, newStatus) => {
       handleCloseModal();
     } catch (err) {
       console.error("Erreur d'ajout du commentaire :", err);
-      alert("❌ Impossible d’ajouter le commentaire");
+      alert("❌ Impossible d'ajouter le commentaire");
     }
   };
 
   // Logique de filtrage des tâches
-  const [statusFilter, setStatusFilter] = useState(''); // Filtre par statut
-  const [priorityFilter, setPriorityFilter] = useState(''); // Filtre par priorité
-  const [creatorFilter, setCreatorFilter] = useState(''); // Filtre par créateur
-  const [dateFilter, setDateFilter] = useState(''); // Filtre par date
+  const [statusFilter, setStatusFilter] = useState('');
+  const [priorityFilter, setPriorityFilter] = useState('');
+  const [creatorFilter, setCreatorFilter] = useState('');
+  const [dateFilter, setDateFilter] = useState('');
 
   const tasksPerPage = 10;
- const filteredTasks = tasks.filter(task => {
+  const filteredTasks = tasks.filter(task => {
     return (
       (task.title?.toLowerCase().includes(search.toLowerCase()) ||
         task.description?.toLowerCase().includes(search.toLowerCase()) ||
@@ -207,19 +207,15 @@ const handleStatusChange = async (taskId, newStatus) => {
     );
   });
   
-
-
   // Pagination des tâches filtrées
   const currentTasks = filteredTasks.slice((currentPage - 1) * tasksPerPage, currentPage * tasksPerPage);
 
-
-
   const [workflows, setWorkflows] = useState([]);
   useEffect(() => {
-    const token = localStorage.getItem('token'); // Récupère le token JWT du localStorage
+    const token = localStorage.getItem('token');
     const axiosConfig = {
       headers: {
-        Authorization: `Bearer ${token}`, // Ajoute le token dans les en-têtes
+        Authorization: `Bearer ${token}`,
       },
     };
   
@@ -229,212 +225,261 @@ const handleStatusChange = async (taskId, newStatus) => {
   }, []); 
   
   const getWorkflowName = (id) => {
-  const wf = workflows.find(w => w.id === id);
-  return wf ? wf.name : '---';
-};
-
+    if (!Array.isArray(workflows)) return '---';
+    const wf = workflows.find(w => w.id === id);
+    return wf ? wf.name : '---';
+  };
 
   return (
-    <div>
+    <div className="assigned-tasks-container">
       <Navbar />
 
-      <div className="d-flex justify-content-end align-items-center m-4" style={{ flexWrap: 'nowrap' }}>
-  <Form.Control
-    as="select"
-    value={statusFilter}
-    onChange={e => setStatusFilter(e.target.value)}
-    style={{ width: '150px', marginRight: '10px' }}
-  >
-    <option value="">Filtrer par statut</option>
-    <option value="pending">En attente</option>
-    <option value="rejected">Refusée</option>
-    <option value="completed">Terminée</option>
-  </Form.Control>
-  <Form.Control
-    as="select"
-    value={priorityFilter}
-    onChange={e => setPriorityFilter(e.target.value)}
-    style={{ width: '150px', marginRight: '10px' }}
-  >
-    <option value="">Filtrer par priorité</option>
-    <option value="Haute">Haute</option>
-    <option value="Moyenne">Moyenne</option>
-    <option value="Basse">Basse</option>
-  </Form.Control>
-  <Form.Control
-    type="text"
-    placeholder="Filtrer par créateur"
-    value={creatorFilter}
-    onChange={e => setCreatorFilter(e.target.value)}
-    style={{ width: '200px', marginRight: '10px' }}
-  />
-  <Form.Control
-    type="date"
-    value={dateFilter}
-    onChange={e => setDateFilter(e.target.value)}
-    style={{ width: '180px', marginRight: '10px' }}
-  />
-  <Form.Control
-    type="text"
-    placeholder="Rechercher..."
-    style={{ width: '250px' }}
-    onChange={e => setSearch(e.target.value)}
-  />
-</div>
-
-
-
-      <div className="row m-4">
-  <div className="col-md-4">
-    <div className="card text-white bg-success shadow">
-      <div className="card-body">
-        <h5 className="card-title">✅ Terminées</h5>
-        <p className="card-text fs-4">{stats.completed}</p>
-      </div>
-    </div>
-  </div>
-  <div className="col-md-4">
-    <div className="card text-white bg-secondary shadow">
-      <div className="card-body">
-        <h5 className="card-title">⏳ En attente</h5>
-        <p className="card-text fs-4">{stats.pending}</p>
-      </div>
-    </div>
-  </div>
-  <div className="col-md-4">
-    <div className="card text-white bg-danger shadow">
-      <div className="card-body">
-        <h5 className="card-title">❌ Refusées</h5>
-        <p className="card-text fs-4">{stats.rejected}</p>
-      </div>
-    </div>
-  </div>
-</div>
-
-      {error && <p className="text-danger">{error}</p>}
-
-      {tasks.length === 0 ? (
-        <p className='m-4'>Aucune tâche assignée.</p>
-      ) : (
-        <div className="m-4">
-        <Table striped bordered hover responsive>
-          <thead>
-            <tr>
-              <th>Tâche</th>
-              <th>Workflow liée</th>
-              <th>Échéance</th>
-              <th>Crée par</th>
-              <th>Priorité</th>
-              <th>Statut</th>
-              <th>Actions</th>
-
-            </tr>
-          </thead>
-          <tbody>
-             {currentTasks.map(task => (
-             <tr
-             key={task.id}
-             className={
-               new Date(task.due_date) < new Date() && task.status !== 'completed' ? 'table-danger' : ''
-             }
-           >
-           
-                <td>{task.title}</td>
-                <td>{getWorkflowName(task.workflow_id)}</td>
-                <td>{new Date(task.due_date).toLocaleDateString()}<br/>      
-  {(() => {
-    const today = new Date();
-    const dueDate = new Date(task.due_date);
-    const diffTime = dueDate - today;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    if (task.status === "completed") {
-      return "✅ Terminée";
-    }
-
-    return diffDays >= 0 ? `${diffDays} jour(s)` : "⛔ Dépassée";
-  })()}
-</td>
-                <td>{task.created_by_name}</td>
-                <td className={getPriorityColor(task.priority)}>
-                    {task.priority}
-                </td>
-                <td>
-                  <select
-                    value={task.status}
-                    className={`form-select form-select-sm bg-${getStatusColor(task.status)} text-white`}
-                    onChange={(e) => handleStatusChange(task.id, e.target.value)}
-                  >
-                    <option value="pending" className="text-dark">⏳ En attente</option>
-                    <option value="rejected" className="text-dark">❌ Refusée</option>
-                    <option value="completed" className="text-dark">✅ Terminée</option>
-                  </select>
-                </td>
-                <td>
-  <Button
-    size="sm"
-    variant="info"
-    onClick={() => navigate(`/details_taches/${task.id}`)}
-  >
-    📄 Détails
-  </Button>
-</td>
-
-
-              </tr>
-            ))}
-          </tbody>
-        </Table>
+      <div className="container-fluid px-4 py-3">
+        {/* Header with stats */}
+        <div className="d-flex justify-content-between align-items-center mb-4">
+          <h1 className="fw-bold text-primary">Mes Tâches</h1>
+          <div className="d-flex gap-3">
+            <div className="stat-card bg-success bg-opacity-10 border border-success border-opacity-25 rounded-3 p-3">
+              <div className="text-success fw-semibold">✅ Terminées</div>
+              <div className="fs-3 fw-bold">{stats.completed}</div>
+            </div>
+            <div className="stat-card bg-secondary bg-opacity-10 border border-secondary border-opacity-25 rounded-3 p-3">
+              <div className="text-secondary fw-semibold">⏳ En attente</div>
+              <div className="fs-3 fw-bold">{stats.pending}</div>
+            </div>
+            <div className="stat-card bg-danger bg-opacity-10 border border-danger border-opacity-25 rounded-3 p-3">
+              <div className="text-danger fw-semibold">❌ Refusées</div>
+              <div className="fs-3 fw-bold">{stats.rejected}</div>
+            </div>
+          </div>
         </div>
-      )}
+
+        {/* Filters */}
+        <div className="filters-container bg-light p-4 rounded-4 shadow-sm mb-4">
+          <div className="row g-3">
+            <div className="col-md-3">
+              <Form.Select 
+                value={statusFilter}
+                onChange={e => setStatusFilter(e.target.value)}
+                className="form-select-modern"
+              >
+                <option value="">Tous les statuts</option>
+                <option value="pending">En attente</option>
+                <option value="rejected">Refusée</option>
+                <option value="completed">Terminée</option>
+              </Form.Select>
+            </div>
+            <div className="col-md-2">
+              <Form.Select
+                value={priorityFilter}
+                onChange={e => setPriorityFilter(e.target.value)}
+                className="form-select-modern"
+              >
+                <option value="">Toutes priorités</option>
+                <option value="Haute">Haute</option>
+                <option value="Moyenne">Moyenne</option>
+                <option value="Basse">Basse</option>
+              </Form.Select>
+            </div>
+            <div className="col-md-3">
+              <Form.Control
+                type="text"
+                placeholder="Filtrer par créateur"
+                value={creatorFilter}
+                onChange={e => setCreatorFilter(e.target.value)}
+                className="form-control-modern"
+              />
+            </div>
+            <div className="col-md-2">
+              <Form.Control
+                type="date"
+                value={dateFilter}
+                onChange={e => setDateFilter(e.target.value)}
+                className="form-control-modern"
+              />
+            </div>
+            <div className="col-md-2">
+              <Form.Control
+                type="text"
+                placeholder="Rechercher..."
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                className="form-control-modern"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Tasks Table */}
+        {error && <div className="alert alert-danger">{error}</div>}
+
+        {tasks.length === 0 ? (
+          <div className="empty-state text-center py-5">
+            <i className="bi bi-inbox fs-1 text-muted"></i>
+            <h4 className="mt-3">Aucune tâche assignée</h4>
+            <p className="text-muted">Lorsque des tâches vous seront assignées, elles apparaîtront ici.</p>
+          </div>
+        ) : (
+          <div className="card border-0 shadow-sm">
+            <div className="card-body p-0">
+              <div className="table-responsive">
+                <Table hover className="mb-0">
+                  <thead className="table-light">
+                    <tr>
+                      <th className="ps-4">Tâche</th>
+                      <th>Workflow</th>
+                      <th>Échéance</th>
+                      <th>Créée par</th>
+                      <th>Priorité</th>
+                      <th>Statut</th>
+                      <th className="pe-4">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {currentTasks.map(task => (
+                      <tr 
+                        key={task.id}
+                        className={
+                          new Date(task.due_date) < new Date() && task.status !== 'completed' 
+                            ? 'table-warning' 
+                            : ''
+                        }
+                      >
+                        <td className="ps-4 fw-semibold">{task.title}</td>
+                        <td>{getWorkflowName(task.workflow_id)}</td>
+                        <td>
+                          <div className="d-flex flex-column">
+                            <span>{new Date(task.due_date).toLocaleDateString()}</span>
+                            <small className={
+                              task.status === "completed" 
+                                ? "text-success"
+                                : new Date(task.due_date) < new Date()
+                                ? "text-danger"
+                                : "text-muted"
+                            }>
+                              {(() => {
+                                const today = new Date();
+                                const dueDate = new Date(task.due_date);
+                                const diffTime = dueDate - today;
+                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+                                if (task.status === "completed") {
+                                  return "✅ Terminée";
+                                }
+
+                                return diffDays >= 0 
+                                  ? `${diffDays} jour(s) restant(s)` 
+                                  : "⛔ Dépassée";
+                              })()}
+                            </small>
+                          </div>
+                        </td>
+                        <td>{task.created_by_name}</td>
+                        <td>
+                          <span 
+                            className="badge rounded-pill"
+                            style={{
+                              backgroundColor: getPriorityColor(task.priority),
+                              color: 'white'
+                            }}
+                          >
+                            {task.priority}
+                          </span>
+                        </td>
+                        <td>
+                          <select
+                            value={task.status}
+                            className="form-select form-select-sm"
+                            style={{
+                              backgroundColor: getStatusColor(task.status),
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '20px',
+                              padding: '0.25rem 0.5rem'
+                            }}
+                            onChange={(e) => handleStatusChange(task.id, e.target.value)}
+                          >
+                            <option value="pending">⏳ En attente</option>
+                            <option value="rejected">❌ Refusée</option>
+                            <option value="completed">✅ Terminée</option>
+                          </select>
+                        </td>
+                        <td className="pe-4">
+                          <Button
+                            size="sm"
+                            variant="outline-primary"
+                            className="rounded-pill"
+                            onClick={() => navigate(`/details_taches/${task.id}`)}
+                          >
+                            <i className="bi bi-eye me-1"></i> Détails
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </Table>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Pagination */}
-         <div className="m-4">   
-        <Pagination>
-                {Array.from({ length: Math.ceil(filteredTasks.length / tasksPerPage) }, (_, idx) => (
+        {filteredTasks.length > tasksPerPage && (
+          <div className="d-flex justify-content-center mt-4">
+            <Pagination className="rounded-pill shadow-sm">
+              {Array.from({ length: Math.ceil(filteredTasks.length / tasksPerPage) }, (_, idx) => (
                 <Pagination.Item
-                    key={idx + 1}
-                    active={idx + 1 === currentPage}
-                    onClick={() => setCurrentPage(idx + 1)}
+                  key={idx + 1}
+                  active={idx + 1 === currentPage}
+                  onClick={() => setCurrentPage(idx + 1)}
+                  className="px-3 py-2"
                 >
-                    {idx + 1}
+                  {idx + 1}
                 </Pagination.Item>
-                ))}
+              ))}
             </Pagination>
-</div>
-      <Modal show={showModal} onHide={handleCloseModal}  style={{ zIndex: 1050 }}
-  backdrop="static"
-  centered>
-        <Modal.Header closeButton>
-            <Modal.Title>💬 Note sur la tâche</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-            <Form>
-            <Form.Group controlId="commentTextArea">
-                <Form.Label>Note</Form.Label>
-                <Form.Control
-                as="textarea"
-                rows={4}
-                value={commentText}
-                onChange={(e) => setCommentText(e.target.value)}
-                placeholder="Ajoutez une note ici..."
-                />
-            </Form.Group>
-            </Form>
-        </Modal.Body>
-        <Modal.Footer>
-            <Button variant="secondary" onClick={handleCloseModal}>
-            Annuler
-            </Button>
-            <Button variant="primary" onClick={handleSaveComment}>
-            💾 Enregistrer
-            </Button>
-        </Modal.Footer>
-        </Modal>
+          </div>
+        )}
 
+        {/* Comment Modal */}
+        <Modal show={showModal} onHide={handleCloseModal} centered backdrop="static">
+          <Modal.Header closeButton className="border-0 pb-0">
+            <Modal.Title className="fw-bold">📝 Note sur la tâche</Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            <Form>
+              <Form.Group controlId="commentTextArea">
+                <Form.Control
+                  as="textarea"
+                  rows={5}
+                  value={commentText}
+                  onChange={(e) => setCommentText(e.target.value)}
+                  placeholder="Ajoutez vos commentaires ici..."
+                  className="form-control-modern"
+                />
+              </Form.Group>
+            </Form>
+          </Modal.Body>
+          <Modal.Footer className="border-0">
+            <Button 
+              variant="outline-secondary" 
+              onClick={handleCloseModal}
+              className="rounded-pill px-4"
+            >
+              Annuler
+            </Button>
+            <Button 
+              variant="primary" 
+              onClick={handleSaveComment}
+              className="rounded-pill px-4"
+            >
+              <i className="bi bi-save me-1"></i> Enregistrer
+            </Button>
+          </Modal.Footer>
+        </Modal>
+      </div>
     </div>
   );
-  
 };
 
 export default AssignedTasks;

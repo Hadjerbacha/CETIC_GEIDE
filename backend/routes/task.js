@@ -1223,7 +1223,32 @@ router.post('/:id/generate-from-template', authMiddleware, async (req, res) => {
           depends_on: 2
         }
       ]
+    },
+  cv: {
+  workflowName: "Workflow de Traitement de CV",
+  workflowDescription: "Processus de réception, analyse et décision sur les CV des candidats",
+  tasks: [
+    {
+        title: 'Analyse et évaluation du CV',
+        description: 'Extraire les informations clés (compétences, expérience, etc.) et évaluer la pertinence du profil par rapport aux postes ouverts',
+        type: 'validation',
+        priority: "high",
+        role: 'manager',
+        order: 1,
+        durationDays: 3 // tu peux ajuster selon ton estimation
+      },
+    {
+      title: "Décision et archivage",
+      description: "Décider d’une suite (entretien, réserve, rejet) et archiver le CV",
+      type: "validation",
+      priority: "medium",
+      role: "gestionnaire RH",
+      order: 2,
+      durationDays: 1,
+      depends_on: 1
     }
+  ]
+}
   };
 
   try {
