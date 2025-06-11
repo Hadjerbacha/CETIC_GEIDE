@@ -706,21 +706,21 @@ const Doc = () => {
         },
         body: JSON.stringify({ is_archived: false }) // 👈 ici on désarchive
       });
-  
+
       const data = await response.json();
-  
+
       if (!response.ok) {
         console.error('Erreur API:', data);
         throw new Error(data.message || 'Erreur lors du désarchivage');
       }
-  
+
       alert('Document désarchivé avec succès ✅');
     } catch (error) {
       console.error('Erreur frontend:', error);
       alert('Une erreur est survenue ❌');
     }
   };
-  
+
 
 
   return (
@@ -960,8 +960,7 @@ const Doc = () => {
                       className={`category-btn ${selectedCategory === '' ? 'active' : ''}`}
                       onClick={() => setSelectedCategory('')}
                     >
-                      Toutes
-                    </button>
+                      Toutes                    </button>a
 
                     {categories.map((cat) => (
                       <button
@@ -1076,7 +1075,7 @@ const Doc = () => {
                                   <img src={shareIcon} width="20" alt="Partager" />
                                 </Button>
 
-                            
+
 
                                 {/* Archiver */}
                                 {userRole === 'admin' && (
@@ -1084,7 +1083,7 @@ const Doc = () => {
                                     variant="secondary"
                                     size="sm"
                                     className="me-2"
-                                    onClick={() => handleUnarchive (doc.id)}
+                                    onClick={() => handleUnarchive(doc.id)}
                                     title="Afficher le document"
                                   >
                                     <i className="bi bi-archive"></i>

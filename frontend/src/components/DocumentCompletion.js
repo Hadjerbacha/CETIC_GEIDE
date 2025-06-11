@@ -372,10 +372,10 @@ const DocumentCompletion = () => {
                         <Form.Control
                           type="text"
                           value={extension}
-                          onChange={(e) => setExtension(e.target.value)}
-                          style={{ width: '100px' }}
-                          required
+                          readOnly
+                          style={{ width: '100px', backgroundColor: '#e9ecef', cursor: 'not-allowed' }}
                         />
+
                       </>
                     )}
                   </div>
