@@ -105,30 +105,47 @@ const DocumentCompletion = () => {
           setExtension('');
         }
 
+      
         // Champs spécifiques par catégorie
-        const defaultFields = {
-          facture: {
-            num_facture: '',
-            nom_entreprise: '',
-            produit: '',
-            montant: '',
-            date_facture: ''
-          },
-          cv: {
-            num_cv: '',
-            nom_candidat: '',
-            metier: '',
-            lieu: '',
-            experience: '',
-            domaine: ''
-          },
-          demande_conge: {
-            num_demande: '',
-            date_debut: '',
-            date_fin: '',
-            motif: ''
-          }
-        };
+       const defaultFields = {
+  facture: {
+    num_facture: '',
+    nom_entreprise: '',
+    produit: '',
+    montant: '',
+    date_facture: ''
+  },
+  cv: {
+    num_cv: '',
+    nom_candidat: '',
+    metier: '',
+    lieu: '',
+    experience: '',
+    domaine: ''
+  },
+  demande_conge: {
+    num_demande: '',
+    date_debut: '',
+    date_fin: '',
+    motif: ''
+  },
+  contrat: {
+    numero_contrat: '',
+    type_contrat: '',
+    partie_prenante: '',
+    date_signature: '',
+    date_echeance: '',
+    montant: '',
+    statut: ''
+  },
+  rapport: {
+    type_rapport: '',
+    auteur: '',
+    date_rapport: '',
+    periode_couverte: '',
+    destinataire: ''
+  }
+};
 
         if (doc.category && defaultFields[doc.category]) {
           try {
@@ -153,18 +170,22 @@ const DocumentCompletion = () => {
   }, [id, token]);
 
   // Vérifier les champs obligatoires par catégorie
-  const validateCategoryFields = (category, values) => {
-    switch (category) {
-      case 'facture':
-        return values.num_facture && values.nom_entreprise && values.montant && values.date_facture;
-      case 'cv':
-        return values.num_cv && values.nom_candidat && values.metier && values.lieu;
-      case 'demande_conge':
-        return values.num_demande && values.date_debut && values.date_fin && values.motif;
-      default:
-        return true;
-    }
-  };
+ const validateCategoryFields = (category, values) => {
+  switch (category) {
+    case 'facture':
+      return values.num_facture && values.nom_entreprise && values.montant && values.date_facture;
+    case 'cv':
+      return values.num_cv && values.nom_candidat && values.metier && values.lieu;
+    case 'demande_conge':
+      return values.num_demande && values.date_debut && values.date_fin && values.motif;
+    case 'contrat':
+      return values.numero_contrat && values.type_contrat && values.partie_prenante && values.date_signature;
+    case 'rapport':
+      return values.type_rapport && values.auteur && values.date_rapport;
+    default:
+      return true;
+  }
+};
 
   // Vérifier si un document avec ce nom existe déjà
   const checkForDuplicate = async (docName) => {
@@ -184,38 +205,43 @@ const DocumentCompletion = () => {
     }
   };
 
+    const shouldShowCommonFields = (category) => {
+  return !['contrat', 'rapport'].includes(category);
+};
   // Enregistrer le document normalement
   const saveDocument = async () => {
-    setIsSaving(true);
-    try {
-      const fullName = extension ? `${baseName}.${extension}` : baseName;
-      const tagArray = tags.split(',').map(t => t.trim()).filter(Boolean);
+  setIsSaving(true);
+  try {
+    const fullName = extension ? `${baseName}.${extension}` : baseName;
+    const tagArray = tags.split(',').map(t => t.trim()).filter(Boolean);
 
-      const payload = {
-        name: fullName,
-        summary,
-        tags: tagArray,
-        priority,
-        is_completed: true,
-        ...extraFields
-      };
+    const basePayload = {
+      name: fullName,
+      is_completed: true,
+      ...extraFields
+    };
 
-      await axios.put(`http://localhost:5000/api/documents/${id}`, payload, {
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        }
-      });
+    // Ajouter les champs communs seulement si nécessaires
+    const fullPayload = shouldShowCommonFields(category) 
+      ? { ...basePayload, summary, tags: tagArray, priority }
+      : basePayload;
 
-      setSuccessMessage("Document enregistré avec succès !");
-      setIsCompleted(true);
-      setTimeout(() => navigate('/Documents'), 2000);
-    } catch (error) {
-      setErrorMessage("Échec de la mise à jour.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
+    await axios.put(`http://localhost:5000/api/documents/${id}`, fullPayload, {
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`
+      }
+    });
+
+    setSuccessMessage("Document enregistré avec succès !");
+    setIsCompleted(true);
+    setTimeout(() => navigate('/Documents'), 2000);
+  } catch (error) {
+    setErrorMessage("Échec de la mise à jour.");
+  } finally {
+    setIsSaving(false);
+  }
+};
 
   // Enregistrer comme nouvelle version
   const handleSaveAsVersion = async () => {
@@ -323,11 +349,14 @@ const DocumentCompletion = () => {
   };
 
   // Vérifier si le formulaire est valide
-  const isFormValid = () => {
-    const isCommonFieldsValid = baseName.trim() !== '' && summary.trim() !== '' && tags.trim() !== '' && priority.trim() !== '';
-    const isCategoryValid = validateCategoryFields(category, extraFields);
-    return isCommonFieldsValid && isCategoryValid;
-  };
+ const isFormValid = () => {
+  const isCommonFieldsValid = shouldShowCommonFields(category) 
+    ? baseName.trim() !== '' && summary.trim() !== '' && tags.trim() !== '' && priority.trim() !== ''
+    : baseName.trim() !== '';
+  
+  const isCategoryValid = validateCategoryFields(category, extraFields);
+  return isCommonFieldsValid && isCategoryValid;
+};
 
   return (
     <>
@@ -356,112 +385,108 @@ const DocumentCompletion = () => {
                 </div>
               )}
 
-              <Form onSubmit={handleSubmit}>
-                <Form.Group className="mb-3">
-                  <Form.Label>Nom du document</Form.Label>
-                  <div className="d-flex align-items-center">
-                    <Form.Control
-                      type="text"
-                      value={baseName}
-                      onChange={(e) => setBaseName(e.target.value)}
-                      required
-                    />
-                    {extension && (
-                      <>
-                        <span className="mx-2">.</span>
-                        <Form.Control
-                          type="text"
-                          value={extension}
-                          readOnly
-                          style={{ width: '100px', backgroundColor: '#e9ecef', cursor: 'not-allowed' }}
-                        />
+            <Form onSubmit={handleSubmit}>
+  <Form.Group className="mb-3">
+    <Form.Label>Nom du document</Form.Label>
+    <div className="d-flex align-items-center">
+      <Form.Control
+        type="text"
+        value={baseName}
+        onChange={(e) => setBaseName(e.target.value)}
+        required
+      />
+      {extension && (
+        <>
+          <span className="mx-2">.</span>
+          <Form.Control
+            type="text"
+            value={extension}
+            readOnly
+            style={{ width: '100px', backgroundColor: '#e9ecef', cursor: 'not-allowed' }}
+          />
+        </>
+      )}
+    </div>
+  </Form.Group>
 
-                      </>
-                    )}
-                  </div>
-                </Form.Group>
+  {Object.entries(extraFields).map(([key, value]) => (
+    <Form.Group className="mb-3" key={key}>
+      <Form.Label>{key.replace(/_/g, ' ').charAt(0).toUpperCase() + key.replace(/_/g, ' ').slice(1)}</Form.Label>
+      <Form.Control
+        type={key.toLowerCase().includes('date') ? 'date' : 'text'}
+        value={value}
+        onChange={(e) =>
+          setExtraFields((prev) => ({
+            ...prev,
+            [key]: e.target.value
+          }))
+        }
+        required={validateCategoryFields(category, extraFields)}
+      />
+    </Form.Group>
+  ))}
 
-                {Object.entries(extraFields).map(([key, value]) => (
-                  <Form.Group className="mb-3" key={key}>
-                    <Form.Label>{key.replace(/_/g, ' ').charAt(0).toUpperCase() + key.replace(/_/g, ' ').slice(1)}</Form.Label>
-                    <Form.Control
-                      type={key.toLowerCase().includes('date') ? 'date' : 'text'}
-                      value={value}
-                      onChange={(e) =>
-                        setExtraFields((prev) => ({
-                          ...prev,
-                          [key]: e.target.value
-                        }))
-                      }
-                      required={validateCategoryFields(category, extraFields)}
-                    />
-                  </Form.Group>
-                ))}
+  {shouldShowCommonFields(category) && (
+    <>
+      <Form.Group className="mb-3">
+        <Form.Label>Description</Form.Label>
+        <Form.Control
+          as="textarea"
+          rows={3}
+          value={summary}
+          onChange={(e) => setSummary(e.target.value)}
+          required
+        />
+      </Form.Group>
 
-                <Form.Group className="mb-3">
-                  <Form.Label>Description</Form.Label>
-                  <Form.Control
-                    as="textarea"
-                    rows={3}
-                    value={summary}
-                    onChange={(e) => setSummary(e.target.value)}
-                    required
-                  />
-                </Form.Group>
+      <Form.Group className="mb-3">
+        <Form.Label>Tags (séparés par des virgules)</Form.Label>
+        <Form.Control
+          type="text"
+          placeholder="ex: projet, client, 2023"
+          value={tags}
+          onChange={(e) => setTags(e.target.value)}
+          required
+        />
+      </Form.Group>
 
-                <Form.Group className="mb-3">
-                  <Form.Label>Tags (séparés par des virgules)</Form.Label>
-                  <Form.Control
-                    type="text"
-                    placeholder="ex: projet, client, 2023"
-                    value={tags}
-                    onChange={(e) => setTags(e.target.value)}
-                    required
-                  />
-                </Form.Group>
+      <Form.Group className="mb-3">
+        <Form.Label>Priorité</Form.Label>
+        <Form.Select
+          value={priority}
+          onChange={(e) => setPriority(e.target.value)}
+          required
+        >
+          <option value="">-- Choisir --</option>
+          <option value="basse">Basse</option>
+          <option value="moyenne">Moyenne</option>
+          <option value="haute">Haute</option>
+        </Form.Select>
+      </Form.Group>
+    </>
+  )}
 
-                <Form.Group className="mb-3">
-                  <Form.Label>Priorité</Form.Label>
-                  <Form.Select
-                    value={priority}
-                    onChange={(e) => setPriority(e.target.value)}
-                    required
-                  >
-                    <option value="">-- Choisir --</option>
-                    <option value="basse">Basse</option>
-                    <option value="moyenne">Moyenne</option>
-                    <option value="haute">Haute</option>
-                  </Form.Select>
-                </Form.Group>
-                <div className="d-flex justify-content-end">
-                  <Button
-                    variant="success"
-                    type="submit"
-                    disabled={
-                      // 🔒 1. Le formulaire est invalide
-                      !isFormValid() ||
-
-                      // 🕐 2. Une sauvegarde est déjà en cours
-                      isSaving ||
-
-                      // 🚫 3. Le nom du document existe déjà, ce n’est pas le même document, et :
-                      // soit l'utilisateur n’a pas le droit d’ajouter une version,
-                      // soit il n’a pas encore confirmé vouloir l’ajouter comme nouvelle version
-                      (
-                        existingDocument &&
-                        existingDocument.id !== docInfo?.id &&
-                        (
-                          !canAddVersion ||         // Pas le droit d’ajouter une version
-                          confirmAddVersion !== true // Ou n’a pas encore cliqué sur "Oui"
-                        )
-                      )
-                    }
-                  >
-                    {isSaving ? 'Enregistrement...' : 'Enregistrer'}
-                  </Button>
-
-                </div>
-              </Form>
+  <div className="d-flex justify-content-end">
+    <Button
+      variant="success"
+      type="submit"
+      disabled={
+        !isFormValid() ||
+        isSaving ||
+        (
+          existingDocument &&
+          existingDocument.id !== docInfo?.id &&
+          (
+            !canAddVersion ||
+            confirmAddVersion !== true
+          )
+        )
+      }
+    >
+      {isSaving ? 'Enregistrement...' : 'Enregistrer'}
+    </Button>
+  </div>
+</Form>
             </Card>
           </div>
 

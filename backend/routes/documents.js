@@ -807,57 +807,74 @@ router.get('/latest', auth, async (req, res) => {
   const isAdmin = req.user.role === 'admin';
 
   try {
-    let result;
+    let query = `
+      SELECT DISTINCT ON (d.name) d.*,
+        f.id as facture_id, f.numero_facture, f.montant, f.date_facture, f.nom_entreprise, f.produit,
+        cv.id as cv_id, cv.nom_candidat, cv.experience, cv.domaine, cv.num_cv, cv.metier, cv.lieu, cv.date_cv,
+        dc.id as demande_conge_id, dc.num_demande, dc.date_debut, dc.date_fin, dc.motif,
+        co.id as contrat_id, co.numero_contrat, co.type_contrat, co.partie_prenante, 
+        co.date_signature, co.date_echeance, co.montant as montant_contrat, co.statut,
+        r.id as rapport_id, r.type_rapport, r.auteur, r.date_rapport, r.periode_couverte, r.destinataire
+      FROM documents d
+      LEFT JOIN factures f ON f.document_id = d.id
+      LEFT JOIN cv cv ON cv.document_id = d.id
+      LEFT JOIN demande_conge dc ON dc.document_id = d.id
+      LEFT JOIN contrats co ON co.document_id = d.id
+      LEFT JOIN rapports r ON r.document_id = d.id
+      WHERE d.is_completed = true
+      AND d.is_archived = false
+    `;
 
-    if (isAdmin) {
-      result = await pool.query(`
-        SELECT DISTINCT ON (d.name) d.*,
-          f.id as facture_id, f.numero_facture, f.montant, f.date_facture, f.nom_entreprise, f.produit,
-          cv.id as cv_id, cv.nom_candidat, cv.experience, cv.domaine, cv.num_cv, cv.metier, cv.lieu, cv.date_cv,
-          dc.id as demande_conge_id, dc.num_demande, dc.date_debut, dc.date_fin, dc.motif
-        FROM documents d
-        LEFT JOIN factures f ON f.document_id = d.id
-        LEFT JOIN cv cv ON cv.document_id = d.id
-        LEFT JOIN demande_conge dc ON dc.document_id = d.id
-        WHERE d.is_completed = true
-        AND d.is_archived = false
-        ORDER BY d.name, d.version DESC
-      `);
-    } else {
-      result = await pool.query(`
-        SELECT DISTINCT ON (d.name) d.*,
-          f.id as facture_id, f.numero_facture, f.montant, f.date_facture, f.nom_entreprise, f.produit,
-          cv.id as cv_id, cv.nom_candidat, cv.experience, cv.domaine, cv.num_cv, cv.metier, cv.lieu, cv.date_cv,
-          dc.id as demande_conge_id, dc.num_demande, dc.date_debut, dc.date_fin, dc.motif
-        FROM documents d
-        LEFT JOIN factures f ON f.document_id = d.id
-        LEFT JOIN cv cv ON cv.document_id = d.id
-        LEFT JOIN demande_conge dc ON dc.document_id = d.id
-        LEFT JOIN document_permissions dp ON dp.document_id = d.id AND dp.user_id = $1
-        WHERE
-          d.is_completed = true
-          AND d.is_archived = false
-          AND (
-            d.visibility = 'public'
-            OR (dp.can_read = true)
-            OR ($1 = ANY(d.id_share))
-            OR EXISTS (
-              SELECT 1
-              FROM user_groups ug
-              WHERE ug.user_id = $1
-              AND ug.group_id = ANY(d.id_group))
+    if (!isAdmin) {
+      query += `
+        AND (
+          d.visibility = 'public'
+          OR EXISTS (
+            SELECT 1 FROM document_permissions dp 
+            WHERE dp.document_id = d.id AND dp.user_id = $1 AND dp.can_read = true
           )
-        ORDER BY d.name, d.version DESC
-      `, [userId]);
+          OR ($1 = ANY(d.id_share))
+          OR EXISTS (
+            SELECT 1 FROM user_groups ug
+            WHERE ug.user_id = $1 AND ug.group_id = ANY(d.id_group)
+          )
+      `;
     }
 
-    res.status(200).json(result.rows);
+    query += ` ORDER BY d.name, d.version DESC`;
+
+    const result = await pool.query(query, isAdmin ? [] : [userId]);
+    
+    // Normalisation des données
+    const normalizedRows = result.rows.map(row => ({
+      ...row,
+      summary: row.summary || '',
+      category: row.category || 'autre',
+      // Fusion des métadonnées spécifiques
+      ...(row.contrat_id ? {
+        numero_contrat: row.numero_contrat,
+        type_contrat: row.type_contrat,
+        partie_prenante: row.partie_prenante,
+        date_signature: row.date_signature,
+        date_echeance: row.date_echeance,
+        montant_contrat: row.montant_contrat,
+        statut_contrat: row.statut
+      } : {}),
+      ...(row.rapport_id ? {
+        type_rapport: row.type_rapport,
+        auteur: row.auteur,
+        date_rapport: row.date_rapport,
+        periode_couverte: row.periode_couverte,
+        destinataire: row.destinataire
+      } : {})
+    }));
+
+    res.status(200).json(normalizedRows);
   } catch (err) {
     console.error('Erreur récupération dernières versions :', err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
-
 router.get('/archive', auth, async (req, res) => {
   const userId = req.user.id;
   const isAdmin = req.user.role === 'admin';
@@ -1030,6 +1047,41 @@ router.put('/:id', auth, async (req, res) => {
       is_completed = Boolean(numDemande && dateConge);
     }
 
+    if (category === 'contrat') {
+      const {
+        numero_contrat = '',
+        type_contrat = '',
+        partie_prenante = '',
+        date_signature = null,
+        date_echeance = null,
+        montant = 0,
+        statut = ''
+      } = req.body;
+
+      is_completed = Boolean(
+        numero_contrat && 
+        type_contrat && 
+        partie_prenante && 
+        date_signature
+      );
+    }
+
+    if (category === 'rapport') {
+      const {
+        type_rapport = '',
+        auteur = '',
+        date_rapport = null,
+        periode_couverte = '',
+        destinataire = ''
+      } = req.body;
+
+      is_completed = Boolean(
+        type_rapport && 
+        auteur && 
+        date_rapport
+      );
+    }
+
     // 3. Mise à jour de la table documents
     await pool.query(`
       UPDATE documents 
@@ -1115,6 +1167,68 @@ router.put('/:id', auth, async (req, res) => {
         ]);
         break;
 
+      case 'contrat':
+        await pool.query(`
+          INSERT INTO contrats (
+            document_id, 
+            numero_contrat, 
+            type_contrat, 
+            partie_prenante, 
+            date_signature, 
+            date_echeance, 
+            montant, 
+            statut
+          )
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          ON CONFLICT (document_id) DO UPDATE 
+          SET 
+            numero_contrat = $2,
+            type_contrat = $3,
+            partie_prenante = $4,
+            date_signature = $5,
+            date_echeance = $6,
+            montant = $7,
+            statut = $8
+        `, [
+          documentId,
+          req.body.numero_contrat || '',
+          req.body.type_contrat || '',
+          req.body.partie_prenante || '',
+          req.body.date_signature || null,
+          req.body.date_echeance || null,
+          req.body.montant || 0,
+          req.body.statut || ''
+        ]);
+        break;
+
+      case 'rapport':
+        await pool.query(`
+          INSERT INTO rapports (
+            document_id, 
+            type_rapport, 
+            auteur, 
+            date_rapport, 
+            periode_couverte, 
+            destinataire
+          )
+          VALUES ($1, $2, $3, $4, $5, $6)
+          ON CONFLICT (document_id) DO UPDATE 
+          SET 
+            type_rapport = $2,
+            auteur = $3,
+            date_rapport = $4,
+            periode_couverte = $5,
+            destinataire = $6
+        `, [
+          documentId,
+          req.body.type_rapport || '',
+          req.body.auteur || '',
+          req.body.date_rapport || null,
+          req.body.periode_couverte || '',
+          req.body.destinataire || ''
+        ]);
+        break;
+
       default:
         break;
     }
@@ -1152,7 +1266,6 @@ router.put('/:id', auth, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
-
 
 router.get('/:id/details', auth, async (req, res) => {
   const documentId = req.params.id;
