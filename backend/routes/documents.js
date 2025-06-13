@@ -104,13 +104,13 @@ const classifyText = async (text, filePath) => {
     return 'autre';
   }
 };
-
 router.get('/:id/my-permissions', auth, async (req, res) => {
-  const documentId = req.params.id;
+  const documentId = parseInt(req.params.id);
   const userId = req.user.id;
 
   try {
-    const result = await pool.query(`
+    // Étape 1 : vérifier les permissions explicites dans document_permissions
+    const { rows: permRows } = await pool.query(`
       SELECT can_read, can_modify, can_delete, can_share, access_type
       FROM document_permissions
       WHERE document_id = $1 AND user_id = $2
@@ -125,16 +125,72 @@ router.get('/:id/my-permissions', auth, async (req, res) => {
       LIMIT 1;
     `, [documentId, userId]);
 
-    if (result.rowCount === 0) {
-      return res.status(403).json({ error: "Aucune permission trouvée pour ce document." });
+    if (permRows.length > 0) {
+      return res.status(200).json(permRows[0]);
     }
 
-    res.status(200).json(result.rows[0]);
+    // Étape 2 : récupérer document
+    const { rows: docRows } = await pool.query(`
+      SELECT visibility, owner_id, id_share, id_group
+      FROM documents
+      WHERE id = $1
+    `, [documentId]);
+
+    if (docRows.length === 0) {
+      return res.status(404).json({ error: "Document non trouvé." });
+    }
+
+    const document = docRows[0];
+
+    // Étape 3 : si public → lecture seule
+    if (document.visibility === 'public') {
+      return res.status(200).json({
+        can_read: true,
+        can_modify: false,
+        can_delete: false,
+        can_share: false,
+        access_type: 'public'
+      });
+    }
+
+    // Étape 4 : si user est dans id_share
+    if (document.id_share && document.id_share.includes(userId)) {
+      return res.status(200).json({
+        can_read: true,
+        can_modify: false,
+        can_delete: false,
+        can_share: false,
+        access_type: 'custom'
+      });
+    }
+
+    // Étape 5 : si user appartient à un groupe de id_group
+    if (document.id_group && document.id_group.length > 0) {
+      const { rows: groupRows } = await pool.query(
+        `SELECT 1 FROM user_groups WHERE user_id = $1 AND group_id = ANY($2) LIMIT 1`,
+        [userId, document.id_group]
+      );
+
+      if (groupRows.length > 0) {
+        return res.status(200).json({
+          can_read: true,
+          can_modify: false,
+          can_delete: false,
+          can_share: false,
+          access_type: 'group'
+        });
+      }
+    }
+
+    // Sinon : pas de droit
+    return res.status(403).json({ error: "Aucune permission trouvée pour ce document." });
+
   } catch (err) {
     console.error('Erreur récupération des permissions:', err.stack);
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
+
 
 // Initialisation des tables de la base de données
 async function initializeDatabase() {
@@ -375,7 +431,7 @@ router.get('/', auth, async (req, res) => {
       LEFT JOIN factures f ON f.document_id = d.id
       LEFT JOIN cv ON cv.document_id = d.id
       LEFT JOIN demande_conge dcg ON dcg.document_id = d.id
-      ${!isAdmin ? 'JOIN document_permissions dp ON dp.document_id = d.id' : ''}
+      ${!isAdmin ? 'LEFT JOIN document_permissions dp ON dp.document_id = d.id' : ''}
       WHERE true
     `;
 
@@ -384,10 +440,11 @@ router.get('/', auth, async (req, res) => {
 
     if (!isAdmin) {
       baseQuery += `
-        AND (
-          dp.access_type = 'public'
-          OR (dp.user_id = $1 AND dp.access_type IN ('custom', 'read', 'owner'))
-        )
+       AND (
+  d.visibility = 'public'
+  OR (dp.user_id = $1 AND dp.access_type IN ('custom', 'read', 'owner'))
+)
+
       `;
       params.push(userId);
       paramIndex++;
@@ -764,12 +821,21 @@ router.get('/latest', auth, async (req, res) => {
       result = await pool.query(`
         SELECT DISTINCT ON (d.name) d.*
         FROM documents d
-        JOIN document_permissions dp ON dp.document_id = d.id
+        LEFT JOIN document_permissions dp ON dp.document_id = d.id AND dp.user_id = $1
         WHERE
-          dp.user_id = $1
-          AND dp.can_read = true
-          AND d.is_completed = true
+          d.is_completed = true
           AND d.is_archived = false
+          AND (
+            d.visibility = 'public'
+            OR (dp.can_read = true)
+            OR ($1 = ANY(d.id_share))
+            OR EXISTS (
+              SELECT 1
+              FROM user_groups ug
+              WHERE ug.user_id = $1
+              AND ug.group_id = ANY(d.id_group)
+            )
+          )
         ORDER BY d.name, d.version DESC
       `, [userId]);
     }
@@ -780,6 +846,7 @@ router.get('/latest', auth, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
+
 router.get('/archive', auth, async (req, res) => {
   const userId = req.user.id;
   const isAdmin = req.user.role === 'admin';
@@ -1120,27 +1187,78 @@ router.get('/:id/details', auth, async (req, res) => {
   }
 });
 
-
-
 router.post('/:id/share', auth, async (req, res) => {
-  const documentId = req.params.id;
-  const { visibility, id_group, id_share } = req.body;
+  const documentId = parseInt(req.params.id);
+  const userId = req.user.id;
+
+  const {
+    visibility,
+    id_share = [],
+    id_group = [],
+    can_modify = false,
+    can_delete = false,
+    can_share = false
+  } = req.body;
 
   try {
-    const query = `
-      UPDATE documents 
-      SET visibility = $1, id_group = $2, id_share = $3
-      WHERE id = $4
-    `;
-    await pool.query(query, [visibility, id_group || null, id_share || null, documentId]);
+    console.log("📩 Reçu pour partage :", {
+      visibility, id_share, id_group, can_modify, can_delete, can_share
+    });
 
-    res.status(200).json({ message: 'Partage mis à jour avec succès.' });
-  } catch (error) {
-    console.error('Erreur lors du partage du document :', error);
-    res.status(500).json({ error: 'Erreur lors du partage du document.' });
-    console.error('Erreur:', err.stack);
-    if (req.file) fs.unlink(req.file.path, () => { });
-    res.status(500).json({ error: 'Erreur lors de l\'ajout', details: err.message });
+    // 1. Update documents table
+    await pool.query(`
+      UPDATE documents
+      SET visibility = $1, id_share = $2, id_group = $3
+      WHERE id = $4
+    `, [visibility, id_share, id_group, documentId]);
+
+    // 2. Get owner of the document
+    const { rows } = await pool.query(
+      `SELECT owner_id FROM documents WHERE id = $1`,
+      [documentId]
+    );
+    const ownerId = rows[0]?.owner_id;
+
+    const isOwner = userId === ownerId;
+
+    // 3. Insert permissions for shared users
+    for (const targetId of id_share) {
+      await pool.query(`
+        INSERT INTO document_permissions 
+        (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
+        VALUES ($1, $2, 'custom', true, $3, $4, $5)
+        ON CONFLICT (user_id, document_id) DO UPDATE
+        SET can_read = true, can_modify = $3, can_delete = $4, can_share = $5
+      `, [
+        targetId,
+        documentId,
+        isOwner ? can_modify : false,
+        isOwner ? can_delete : false,
+        isOwner ? can_share : false
+      ]);
+    }
+
+    // 4. Insert permissions for group members
+    if (id_group.length > 0) {
+      const { rows: members } = await pool.query(`
+        SELECT DISTINCT user_id FROM user_groups WHERE group_id = ANY($1)
+      `, [id_group]);
+
+      for (const member of members) {
+        await pool.query(`
+          INSERT INTO document_permissions 
+          (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
+          VALUES ($1, $2, 'group', true, false, false, false)
+          ON CONFLICT (user_id, document_id) DO NOTHING
+        `, [member.user_id, documentId]);
+      }
+    }
+
+    res.status(200).json({ message: "Partage mis à jour avec succès." });
+
+  } catch (err) {
+    console.error("❌ Erreur dans partage :", err);
+    res.status(500).json({ error: "Erreur lors du partage", details: err.message });
   }
 });
 
@@ -1240,7 +1358,7 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-/*
+//doc detail
 router.get('/:id', auth, async (req, res) => {
   const documentId = req.params.id;
 
@@ -1260,7 +1378,7 @@ router.get('/:id', auth, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
-*/
+
 
 
 router.post('/folders', auth, async (req, res) => {

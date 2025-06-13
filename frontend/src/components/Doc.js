@@ -384,16 +384,16 @@ const Doc = () => {
       return acc;
     }, {})
   );
-const isMediaFile = (doc) => {
-  const extension = doc.file_path?.split('.').pop().toLowerCase() || '';
-  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp'];
-  const videoExtensions = ['mp4', 'avi', 'mkv', 'mov', 'webm'];
-  
-  return {
-    isPhoto: imageExtensions.includes(extension),
-    isVideo: videoExtensions.includes(extension)
+  const isMediaFile = (doc) => {
+    const extension = doc.file_path?.split('.').pop().toLowerCase() || '';
+    const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp'];
+    const videoExtensions = ['mp4', 'avi', 'mkv', 'mov', 'webm'];
+
+    return {
+      isPhoto: imageExtensions.includes(extension),
+      isVideo: videoExtensions.includes(extension)
+    };
   };
-};
 
   const filteredDocuments = latestDocs.filter((doc) => {
     const docName = doc.name || '';
@@ -436,8 +436,6 @@ const isMediaFile = (doc) => {
     const matchesCategory =
       !selectedCategory || selectedCategory === '' ||
       (docCategory && docCategory.toLowerCase() === selectedCategory.toLowerCase());
-
-    console.log("nom_candidat ➡️", doc.metadata?.nom_candidat);
 
     // Filtrage avancé spécifique aux catégories métier
     const matchesAdvancedCategory = (() => {
@@ -705,29 +703,29 @@ const isMediaFile = (doc) => {
     }
   };
 
-const handleArchive = async (docId) => {
-  try {
-    const response = await fetch(`http://localhost:5000/api/documents/${docId}/archive`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`, // Très important !
-      },
-    });
+  const handleArchive = async (docId) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/documents/${docId}/archive`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`, // Très important !
+        },
+      });
 
-    const data = await response.json(); // On lit la réponse pour voir le message
+      const data = await response.json(); // On lit la réponse pour voir le message
 
-    if (!response.ok) {
-      console.error('Erreur API:', data);
-      throw new Error(data.message || 'Erreur lors de l’archivage');
+      if (!response.ok) {
+        console.error('Erreur API:', data);
+        throw new Error(data.message || 'Erreur lors de l’archivage');
+      }
+
+      alert('Document archivé avec succès ✅');
+    } catch (error) {
+      console.error('Erreur frontend:', error);
+      alert('Une erreur est survenue ❌');
     }
-
-    alert('Document archivé avec succès ✅');
-  } catch (error) {
-    console.error('Erreur frontend:', error);
-    alert('Une erreur est survenue ❌');
-  }
-};
+  };
 
 
   return (
@@ -1226,42 +1224,42 @@ const handleArchive = async (docId) => {
 
                                 {/* Créer un workflow */}
                                 <Button
-  variant="dark"
-  size="sm"
-  className="ms-2"
-  onClick={() => {
-    if (userRole === 'admin' || doc.owner_id === userId) {
-      handleOpenConfirm(doc);
-    }
-  }}
-  disabled={
-    !(userRole === 'admin' || doc.owner_id === userId) || 
-    isMediaFile(doc).isPhoto || 
-    isMediaFile(doc).isVideo
-  }
-  title={
-    isMediaFile(doc).isPhoto || isMediaFile(doc).isVideo 
-      ? 'Workflow non disponible pour les médias' 
-      : userRole === 'admin' || doc.owner_id === userId
-        ? 'Créer un workflow'
-        : 'Non autorisé à créer un workflow'
-  }
-  style={{
-    opacity: (userRole === 'admin' || doc.owner_id === userId) && 
-             !isMediaFile(doc).isPhoto && 
-             !isMediaFile(doc).isVideo 
-      ? 1 
-      : 0.15,
-    pointerEvents: (userRole === 'admin' || doc.owner_id === userId) && 
-                  !isMediaFile(doc).isPhoto && 
-                  !isMediaFile(doc).isVideo 
-      ? 'auto' 
-      : 'none'
-  }}
->
-  <i className="bi bi-play-fill me-1"></i>
-</Button>
-{/* Archiver */}
+                                  variant="dark"
+                                  size="sm"
+                                  className="ms-2"
+                                  onClick={() => {
+                                    if (userRole === 'admin' || doc.owner_id === userId) {
+                                      handleOpenConfirm(doc);
+                                    }
+                                  }}
+                                  disabled={
+                                    !(userRole === 'admin' || doc.owner_id === userId) ||
+                                    isMediaFile(doc).isPhoto ||
+                                    isMediaFile(doc).isVideo
+                                  }
+                                  title={
+                                    isMediaFile(doc).isPhoto || isMediaFile(doc).isVideo
+                                      ? 'Workflow non disponible pour les médias'
+                                      : userRole === 'admin' || doc.owner_id === userId
+                                        ? 'Créer un workflow'
+                                        : 'Non autorisé à créer un workflow'
+                                  }
+                                  style={{
+                                    opacity: (userRole === 'admin' || doc.owner_id === userId) &&
+                                      !isMediaFile(doc).isPhoto &&
+                                      !isMediaFile(doc).isVideo
+                                      ? 1
+                                      : 0.15,
+                                    pointerEvents: (userRole === 'admin' || doc.owner_id === userId) &&
+                                      !isMediaFile(doc).isPhoto &&
+                                      !isMediaFile(doc).isVideo
+                                      ? 'auto'
+                                      : 'none'
+                                  }}
+                                >
+                                  <i className="bi bi-play-fill me-1"></i>
+                                </Button>
+                                {/* Archiver */}
                                 {userRole === 'admin' && (
                                   <Button
                                     variant="secondary"
@@ -1415,15 +1413,26 @@ const handleArchive = async (docId) => {
                   <Button
                     variant="primary"
                     onClick={async () => {
-                      const visibilityValue = shareAccessType === 'public' ? 'public' : 'custom';
+                      const visibilityValue = shareAccessType === 'custom' ? 'custom' : 'public';
 
                       try {
-                        await axios.put(
-                          `http://localhost:5000/api/documents/${docToShare.id}`,
+                        console.log("PARTAGE ENVOYÉ 👉", {
+                          visibility: visibilityValue,
+                          id_share: selectedUsers,
+                          id_group: selectedGroup ? [selectedGroup] : [],
+                          can_modify: permissions.modify,
+                          can_delete: permissions.delete,
+                          can_share: permissions.share
+                        });
+
+                        await axios.post(`http://localhost:5000/api/documents/${docToShare.id}/share`,
                           {
                             visibility: visibilityValue,
-                            id_share: selectedUsers.length > 0 ? selectedUsers : [],     // tableau d'IDs
-                            id_group: selectedGroup ? [selectedGroup] : [],              // tableau d'un seul élément ou vide
+                            id_share: selectedUsers.length > 0 ? selectedUsers : [],
+                            id_group: selectedGroup ? [selectedGroup] : [],
+                            can_modify: permissions.modify,
+                            can_delete: permissions.delete,
+                            can_share: permissions.share,
                           },
                           { headers: { Authorization: `Bearer ${token}` } }
                         );

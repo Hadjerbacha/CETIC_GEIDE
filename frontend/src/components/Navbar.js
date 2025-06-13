@@ -68,7 +68,6 @@ const Navbar = () => {
         .catch(err => console.error("Erreur notifications :", err));
     }
   }, [currentUser]);
-
   const sidebarItems = [
     {
       title: 'Accueil',
@@ -105,6 +104,11 @@ const Navbar = () => {
       )
     },
     {
+      title: 'Messagerie',
+      path: '/messagerie',
+      icon: <FaIcons.FaEnvelope />,
+    },
+    {
       title: 'Tableau de bord',
       path: '/Statistique',
       icon: <FaIcons.FaChartLine />,
@@ -126,12 +130,13 @@ const Navbar = () => {
     },
   ];
 
+
   const userMenu = (
     <div className="user-dropdown-menu">
       <div className="user-info">
-        <Avatar 
-          size={40} 
-          style={{ 
+        <Avatar
+          size={40}
+          style={{
             backgroundColor: '#174193',
             color: '#fff',
             fontWeight: 'bold'
@@ -163,127 +168,127 @@ const Navbar = () => {
 
   return (
     <>
-    <IconContext.Provider value={{ color: '#174193' }}>
-      <header className="modern-navbar">
-        <div className="navbar-container">
-          <motion.div 
-            whileHover={{ scale: 1.05 }}
-            className="menu-toggle"
-          >
-            <FaIcons.FaBars onClick={showSidebar} />
-          </motion.div>
+      <IconContext.Provider value={{ color: '#174193' }}>
+        <header className="modern-navbar">
+          <div className="navbar-container">
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              className="menu-toggle"
+            >
+              <FaIcons.FaBars onClick={showSidebar} />
+            </motion.div>
 
 
-          <div className="navbar-logo">
-            <Link to="/accueil"style={{ marginLeft: '-450px' }}>
-  <img 
-    src="/logo4.png" 
-    alt="CETIC Logo" 
-    style={{
-      height: '60px',
-      cursor: 'pointer'
-    }}
-  />
-</Link>
-</div>
-
-
-          <div className="navbar-right">
-           <motion.div 
-  whileHover={{ scale: 1.05 }}
-  className="notification-icon"
-  style={{
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    margin: 0,
-    padding: '6px 20px',
-    backgroundColor: '#1890ff',
-    borderRadius: '30px',
-    boxShadow: '0 2px 6px rgba(0, 0, 0, 0.15)',
-    cursor: 'pointer',
-    minWidth: '50px' // pour donner plus de largeur
-  }}
->
-  <Link
-    to="/notif"
-    style={{
-      color: '#fff',
-      textDecoration: 'none',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '10px' // espace entre l'icône et le texte
-    }}
-  >
-    <Badge count={unreadNotificationsCount} offset={[-5, 5]}>
-      <FaIcons.FaBell size={22} style={{ color: '#fff' }} />
-    </Badge>
-  </Link>
-</motion.div>
-
-
-            <Dropdown overlay={userMenu} trigger={['click']}>
-              <div className="user-avatar">
-                <Avatar 
-                  size={40} 
-                  style={{ 
-                    backgroundColor: '#174193',
-                    color: '#fff',
-                    fontWeight: 'bold',
+            <div className="navbar-logo">
+              <Link to="/accueil" style={{ marginLeft: '-450px' }}>
+                <img
+                  src="/logo4.png"
+                  alt="CETIC Logo"
+                  style={{
+                    height: '60px',
                     cursor: 'pointer'
                   }}
+                />
+              </Link>
+            </div>
+
+
+            <div className="navbar-right">
+              <motion.div
+                whileHover={{ scale: 1.05 }}
+                className="notification-icon"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: 0,
+                  padding: '6px 20px',
+                  backgroundColor: '#1890ff',
+                  borderRadius: '30px',
+                  boxShadow: '0 2px 6px rgba(0, 0, 0, 0.15)',
+                  cursor: 'pointer',
+                  minWidth: '50px' // pour donner plus de largeur
+                }}
+              >
+                <Link
+                  to="/notif"
+                  style={{
+                    color: '#fff',
+                    textDecoration: 'none',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px' // espace entre l'icône et le texte
+                  }}
                 >
-                  {currentUser?.name?.charAt(0)}{currentUser?.prenom?.charAt(0)}
-                </Avatar>
-                <span className="user-name-short">
-                  {currentUser?.name} {currentUser?.prenom}
-                </span>
-                <FaIcons.FaChevronDown className="dropdown-arrow" />
-              </div>
-            </Dropdown>
+                  <Badge count={unreadNotificationsCount} offset={[-5, 5]}>
+                    <FaIcons.FaBell size={22} style={{ color: '#fff' }} />
+                  </Badge>
+                </Link>
+              </motion.div>
+
+
+              <Dropdown overlay={userMenu} trigger={['click']}>
+                <div className="user-avatar">
+                  <Avatar
+                    size={40}
+                    style={{
+                      backgroundColor: '#174193',
+                      color: '#fff',
+                      fontWeight: 'bold',
+                      cursor: 'pointer'
+                    }}
+                  >
+                    {currentUser?.name?.charAt(0)}{currentUser?.prenom?.charAt(0)}
+                  </Avatar>
+                  <span className="user-name-short">
+                    {currentUser?.name} {currentUser?.prenom}
+                  </span>
+                  <FaIcons.FaChevronDown className="dropdown-arrow" />
+                </div>
+              </Dropdown>
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
 
-      <motion.nav 
-  initial={{ x: -300 }}
-  animate={{ x: sidebar ? 0 : -300 }}
-  transition={{ type: 'spring', stiffness: 300, damping: 30 }}
-  className="modern-sidebar"
->
-  <div className="sidebar-header">
-    <motion.div 
-      whileHover={{ rotate: 90 }}
-      className="close-btn"
-      onClick={showSidebar}
-    >
-      <AiIcons.AiOutlineClose />
-    </motion.div>
-  </div>
-
-  <ul className="sidebar-items">
-    {sidebarItems
-      .filter(Boolean)
-      .map((item, index) => (
-        <motion.li 
-          key={index}
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          className="nav-item"
+        <motion.nav
+          initial={{ x: -300 }}
+          animate={{ x: sidebar ? 0 : -300 }}
+          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+          className="modern-sidebar"
         >
-          <Link to={item.path}>
-            <span className="nav-icon">{item.icon}</span>
-            <span className="nav-title">{item.title}</span>
-          </Link>
-        </motion.li>
-      ))}
-  </ul>
-</motion.nav>
-    </IconContext.Provider>
-    <br/>
-    <br/>
-    <br/>
-    <br/>
+          <div className="sidebar-header">
+            <motion.div
+              whileHover={{ rotate: 90 }}
+              className="close-btn"
+              onClick={showSidebar}
+            >
+              <AiIcons.AiOutlineClose />
+            </motion.div>
+          </div>
+
+          <ul className="sidebar-items">
+            {sidebarItems
+              .filter(Boolean)
+              .map((item, index) => (
+                <motion.li
+                  key={index}
+                  whileHover={{ scale: 1.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  className="nav-item"
+                >
+                  <Link to={item.path}>
+                    <span className="nav-icon">{item.icon}</span>
+                    <span className="nav-title">{item.title}</span>
+                  </Link>
+                </motion.li>
+              ))}
+          </ul>
+        </motion.nav>
+      </IconContext.Provider>
+      <br />
+      <br />
+      <br />
+      <br />
     </>
   );
 };

@@ -571,37 +571,39 @@ const Doc = () => {
       setErrorMessage('Impossible de charger les documents pour cette catégorie.');
     }
   };
+  
+  
+    const handleUpdatePermissions = async () => {
+      try {
+        const payload = {
+          visibility: shareAccessType === 'public' ? 'public' : 'custom',
+          id_share: selectedUsers.length > 0 ? selectedUsers[0] : null, // ou gérer plusieurs
+          id_group: selectedGroup || null
+        };
+  
+        await axios.post(`http://localhost:5000/api/documents/${docToShare.id}/share`, payload, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+  
+        toast.success('Permissions mises à jour avec succès !');
+        setShowShareModal(false);
+      } catch (error) {
+        console.error('Erreur de mise à jour des permissions :', error);
+        toast.error('Échec de mise à jour des permissions.');
+      }
+    };
+  
+    const handlePermissionChange = (type) => (e) => {
+      const checked = e.target.checked;
+      setPermissions((prev) => ({
+        ...prev,
+        consult: true,
+        [type]: checked,
+      }));
+    };
 
-  const handleUpdatePermissions = async () => {
-    try {
-      const payload = {
-        visibility: shareAccessType === 'public' ? 'public' : 'custom',
-        id_share: selectedUsers.length > 0 ? selectedUsers[0] : null, // ou gérer plusieurs
-        id_group: selectedGroup || null
-      };
-
-      await axios.post(`http://localhost:5000/api/documents/${docToShare.id}/share`, payload, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      toast.success('Permissions mises à jour avec succès !');
-      setShowShareModal(false);
-    } catch (error) {
-      console.error('Erreur de mise à jour des permissions :', error);
-      toast.error('Échec de mise à jour des permissions.');
-    }
-  };
-
-  const handlePermissionChange = (type) => (e) => {
-    const checked = e.target.checked;
-    setPermissions((prev) => ({
-      ...prev,
-      consult: true,
-      [type]: checked,
-    }));
-  };
 
   const [permissionsByDoc, setPermissionsByDoc] = useState({});
 
@@ -1051,7 +1053,7 @@ const Doc = () => {
                                   <i className="bi bi-trash"></i>
                                 </Button>
 
-                                {/* Partager */}
+                                {/* Partager 
                                 <Button
                                   variant="light"
                                   size="sm"
@@ -1075,7 +1077,7 @@ const Doc = () => {
                                   <img src={shareIcon} width="20" alt="Partager" />
                                 </Button>
 
-
+*/}
 
                                 {/* Archiver */}
                                 {userRole === 'admin' && (
