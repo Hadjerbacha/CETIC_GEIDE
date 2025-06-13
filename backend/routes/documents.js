@@ -812,9 +812,9 @@ router.get('/latest', auth, async (req, res) => {
     if (isAdmin) {
       result = await pool.query(`
         SELECT DISTINCT ON (d.name) d.*,
-          f.numero_facture, f.montant, f.date_facture,
-          cv.nom_candidat, cv.metier, cv.date_cv,
-          dc.num_demande, dc.date_debut, dc.date_fin
+          f.id as facture_id, f.numero_facture, f.montant, f.date_facture, f.nom_entreprise, f.produit,
+          cv.id as cv_id, cv.nom_candidat, cv.experience, cv.domaine, cv.num_cv, cv.metier, cv.lieu, cv.date_cv,
+          dc.id as demande_conge_id, dc.num_demande, dc.date_debut, dc.date_fin, dc.motif
         FROM documents d
         LEFT JOIN factures f ON f.document_id = d.id
         LEFT JOIN cv cv ON cv.document_id = d.id
@@ -826,9 +826,9 @@ router.get('/latest', auth, async (req, res) => {
     } else {
       result = await pool.query(`
         SELECT DISTINCT ON (d.name) d.*,
-          f.numero_facture, f.montant, f.date_facture,
-          cv.nom_candidat, cv.metier, cv.date_cv,
-          dc.num_demande, dc.date_debut, dc.date_fin
+          f.id as facture_id, f.numero_facture, f.montant, f.date_facture, f.nom_entreprise, f.produit,
+          cv.id as cv_id, cv.nom_candidat, cv.experience, cv.domaine, cv.num_cv, cv.metier, cv.lieu, cv.date_cv,
+          dc.id as demande_conge_id, dc.num_demande, dc.date_debut, dc.date_fin, dc.motif
         FROM documents d
         LEFT JOIN factures f ON f.document_id = d.id
         LEFT JOIN cv cv ON cv.document_id = d.id
@@ -857,6 +857,7 @@ router.get('/latest', auth, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
+
 router.get('/archive', auth, async (req, res) => {
   const userId = req.user.id;
   const isAdmin = req.user.role === 'admin';

@@ -56,7 +56,7 @@ const Doc = () => {
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [existingWorkflow, setExistingWorkflow] = useState(null);
-  const categories = ['Contrat', 'Mémoire', 'Article', 'Rapport', 'facture', 'cv', 'demande_conge'];
+  const categories = ['Contrat', 'Rapport', 'facture', 'cv', 'demande_conge', 'photo', 'video','autre'];
   const [selectedCategory, setSelectedCategory] = useState('');
   const [categoryClickCount, setCategoryClickCount] = useState(0);
   const [summary, setSummary] = useState('');
@@ -409,7 +409,7 @@ const Doc = () => {
       (!startDate || (docDate && docDate >= new Date(startDate))) &&
       (!endDate || (docDate && docDate <= new Date(endDate)));
 
-    // Recherche globale simple ou avancée (sur contenu, résumé, description, etc.)
+    // Recherche globale simple ou avancée
     const searchLower = searchQuery.toLowerCase();
     const matchesSearch = useAdvancedFilter
       ? (
@@ -427,39 +427,43 @@ const Doc = () => {
       !selectedCategory || selectedCategory === '' ||
       (docCategory && docCategory.toLowerCase() === selectedCategory.toLowerCase());
 
-
-    console.log("nom_candidat ➡️", doc.metadata?.nom_candidat);
-
     // Filtrage avancé spécifique aux catégories métier
     const matchesAdvancedCategory = (() => {
       if (selectedCategory === 'facture') {
-        const numeroMatch = !searchFilters.numero_facture || (doc.numero_facture && doc.numero_facture.includes(searchFilters.numero_facture));
-        const montantMatch = !searchFilters.montant || (doc.montant && Number(doc.montant) === Number(searchFilters.montant));
-        const dateFactureMatch = !searchFilters.date_facture || (doc.date_facture && new Date(doc.date_facture).toISOString().split('T')[0] === searchFilters.date_facture);
+        const numeroMatch = !searchFilters.numero_facture || 
+                         (doc.numero_facture && doc.numero_facture.toString().includes(searchFilters.numero_facture.toString()));
+        const montantMatch = !searchFilters.montant || 
+                          (doc.montant && Number(doc.montant) === Number(searchFilters.montant));
+        const dateFactureMatch = !searchFilters.date_facture || 
+                              (doc.date_facture && new Date(doc.date_facture).toISOString().split('T')[0] === searchFilters.date_facture);
         return numeroMatch && montantMatch && dateFactureMatch;
       }
 
       if (selectedCategory === 'cv') {
-        // Assure-toi que doc a bien les champs spécifiques au CV
-        const nomMatch = !searchFilters.nom_candidat || (doc.nom_candidat && doc.nom_candidat.toLowerCase().includes(searchFilters.nom_candidat.toLowerCase()));
-        const metierMatch = !searchFilters.metier || (doc.metier && doc.metier.toLowerCase().includes(searchFilters.metier.toLowerCase()));
-        const dateCvMatch = !searchFilters.date_cv || (doc.date_cv && new Date(doc.date_cv).toISOString().split('T')[0] === searchFilters.date_cv);
+        const nomMatch = !searchFilters.nom_candidat || 
+                       (doc.nom_candidat && doc.nom_candidat.toLowerCase().includes(searchFilters.nom_candidat.toLowerCase()));
+        const metierMatch = !searchFilters.metier || 
+                         (doc.metier && doc.metier.toLowerCase().includes(searchFilters.metier.toLowerCase()));
+        const dateCvMatch = !searchFilters.date_cv || 
+                         (doc.date_cv && new Date(doc.date_cv).toISOString().split('T')[0] === searchFilters.date_cv);
         return nomMatch && metierMatch && dateCvMatch;
       }
 
       if (selectedCategory === 'demande_conge') {
-        const numDemandeMatch = !searchFilters.numdemande || (doc.numdemande && doc.numdemande.includes(searchFilters.numdemande));
-        const dateCongeMatch = !searchFilters.dateconge || (doc.dateconge && new Date(doc.dateconge).toISOString().split('T')[0] === searchFilters.dateconge);
+        // Note: le champ dans la table est num_demande, pas numdemande
+        const numDemandeMatch = !searchFilters.numdemande || 
+                             (doc.num_demande && doc.num_demande.toString().includes(searchFilters.numdemande.toString()));
+        // Note: dans la table c'est date_debut, pas dateconge
+        const dateCongeMatch = !searchFilters.dateconge || 
+                            (doc.date_debut && new Date(doc.date_debut).toISOString().split('T')[0] === searchFilters.dateconge);
         return numDemandeMatch && dateCongeMatch;
       }
 
-      // Si aucune catégorie spécifique, on passe
       return true;
     })();
 
-    // Résultat final, tous les filtres doivent passer
     return matchesType && matchesDate && matchesSearch && matchesCategory && matchesAdvancedCategory;
-  });
+});
 
   const handleOpenConfirm = async (doc) => {
     setModalDoc(doc);

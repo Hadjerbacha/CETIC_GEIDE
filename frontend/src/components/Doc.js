@@ -56,7 +56,7 @@ const Doc = () => {
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [existingWorkflow, setExistingWorkflow] = useState(null);
-  const categories = ['Contrat', 'Mémoire', 'Article', 'Rapport', 'facture', 'cv', 'demande_conge', 'photo', 'video'];
+  const categories = ['Contrat', 'Rapport', 'facture', 'cv', 'demande_conge', 'photo', 'video', 'autre'];
   const [selectedCategory, setSelectedCategory] = useState('');
   const [categoryClickCount, setCategoryClickCount] = useState(0);
   const [summary, setSummary] = useState('');
@@ -395,7 +395,7 @@ const Doc = () => {
     };
   };
 
- const filteredDocuments = latestDocs.filter((doc) => {
+  const filteredDocuments = latestDocs.filter((doc) => {
     const docName = doc.name || '';
     const docFilePath = doc.file_path || '';
     const docDate = doc.date ? new Date(doc.date) : null;
@@ -440,32 +440,32 @@ const Doc = () => {
     // Filtrage avancé spécifique aux catégories métier
     const matchesAdvancedCategory = (() => {
       if (selectedCategory === 'facture') {
-        const numeroMatch = !searchFilters.numero_facture || 
-                         (doc.numero_facture && doc.numero_facture.toString().includes(searchFilters.numero_facture.toString()));
-        const montantMatch = !searchFilters.montant || 
-                          (doc.montant && Number(doc.montant) === Number(searchFilters.montant));
-        const dateFactureMatch = !searchFilters.date_facture || 
-                              (doc.date_facture && new Date(doc.date_facture).toISOString().split('T')[0] === searchFilters.date_facture);
+        const numeroMatch = !searchFilters.numero_facture ||
+          (doc.numero_facture && doc.numero_facture.toString().includes(searchFilters.numero_facture.toString()));
+        const montantMatch = !searchFilters.montant ||
+          (doc.montant && Number(doc.montant) === Number(searchFilters.montant));
+        const dateFactureMatch = !searchFilters.date_facture ||
+          (doc.date_facture && new Date(doc.date_facture).toISOString().split('T')[0] === searchFilters.date_facture);
         return numeroMatch && montantMatch && dateFactureMatch;
       }
 
       if (selectedCategory === 'cv') {
-        const nomMatch = !searchFilters.nom_candidat || 
-                       (doc.nom_candidat && doc.nom_candidat.toLowerCase().includes(searchFilters.nom_candidat.toLowerCase()));
-        const metierMatch = !searchFilters.metier || 
-                         (doc.metier && doc.metier.toLowerCase().includes(searchFilters.metier.toLowerCase()));
-        const dateCvMatch = !searchFilters.date_cv || 
-                         (doc.date_cv && new Date(doc.date_cv).toISOString().split('T')[0] === searchFilters.date_cv);
+        const nomMatch = !searchFilters.nom_candidat ||
+          (doc.nom_candidat && doc.nom_candidat.toLowerCase().includes(searchFilters.nom_candidat.toLowerCase()));
+        const metierMatch = !searchFilters.metier ||
+          (doc.metier && doc.metier.toLowerCase().includes(searchFilters.metier.toLowerCase()));
+        const dateCvMatch = !searchFilters.date_cv ||
+          (doc.date_cv && new Date(doc.date_cv).toISOString().split('T')[0] === searchFilters.date_cv);
         return nomMatch && metierMatch && dateCvMatch;
       }
 
       if (selectedCategory === 'demande_conge') {
         // Note: le champ dans la table est num_demande, pas numdemande
-        const numDemandeMatch = !searchFilters.numdemande || 
-                             (doc.num_demande && doc.num_demande.toString().includes(searchFilters.numdemande.toString()));
+        const numDemandeMatch = !searchFilters.numdemande ||
+          (doc.num_demande && doc.num_demande.toString().includes(searchFilters.numdemande.toString()));
         // Note: dans la table c'est date_debut, pas dateconge
-        const dateCongeMatch = !searchFilters.dateconge || 
-                            (doc.date_debut && new Date(doc.date_debut).toISOString().split('T')[0] === searchFilters.dateconge);
+        const dateCongeMatch = !searchFilters.dateconge ||
+          (doc.date_debut && new Date(doc.date_debut).toISOString().split('T')[0] === searchFilters.dateconge);
         return numDemandeMatch && dateCongeMatch;
       }
 
@@ -473,7 +473,7 @@ const Doc = () => {
     })();
 
     return matchesType && matchesDate && matchesSearch && matchesCategory && matchesAdvancedCategory;
-});
+  });
 
   const handleOpenConfirm = async (doc) => {
     setModalDoc(doc);
@@ -987,13 +987,14 @@ const Doc = () => {
                         <Form>
                           <div className="d-flex align-items-end gap-3 flex-wrap">
                             <Form.Group className="mb-0">
-                              <Form.Label>Numéro Facture</Form.Label>
+                              <Form.Label>Numéro facture</Form.Label>
                               <Form.Control
                                 type="text"
                                 value={searchFilters.numero_facture || ''}
                                 onChange={(e) => setSearchFilters({ ...searchFilters, numero_facture: e.target.value })}
                               />
                             </Form.Group>
+
                             <Form.Group className="mb-0">
                               <Form.Label>Montant</Form.Label>
                               <Form.Control
@@ -1002,19 +1003,133 @@ const Doc = () => {
                                 onChange={(e) => setSearchFilters({ ...searchFilters, montant: e.target.value })}
                               />
                             </Form.Group>
+
                             <Form.Group className="mb-0">
-                              <Form.Label>Date Facture</Form.Label>
+                              <Form.Label>Date facture</Form.Label>
                               <Form.Control
                                 type="date"
                                 value={searchFilters.date_facture || ''}
                                 onChange={(e) => setSearchFilters({ ...searchFilters, date_facture: e.target.value })}
                               />
                             </Form.Group>
+
+                            <Form.Group className="mb-0">
+                              <Form.Label>Entreprise</Form.Label>
+                              <Form.Control
+                                type="text"
+                                value={searchFilters.nom_entreprise || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, nom_entreprise: e.target.value })}
+                              />
+                            </Form.Group>
+
+                            <Form.Group className="mb-0">
+                              <Form.Label>Produit</Form.Label>
+                              <Form.Control
+                                type="text"
+                                value={searchFilters.produit || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, produit: e.target.value })}
+                              />
+                            </Form.Group>
+
                             <div className="d-flex align-items-end">
                               <Button className="btn-purple" onClick={filteredDocuments}>
                                 Rechercher
                               </Button>
+                            </div>
+                          </div>
+                        </Form>
+                      </>
+                    )}
 
+                     {['autre', 'photo', 'video'].includes(selectedCategory) && (
+                      <>
+                        <h5 className="mb-3">
+                          🔎 Recherche avancée - {selectedCategory === 'photo' ? 'Photos' : selectedCategory === 'video' ? 'Vidéos' : 'Autres documents'}
+                        </h5>
+                        <Form>
+                          <div className="d-flex align-items-end gap-3 flex-wrap">
+                            {/* Description */}
+                            <Form.Group className="mb-0">
+                              <Form.Label>Description</Form.Label>
+                              <Form.Control
+                                as="textarea"
+                                rows={3}
+                                value={searchFilters.description || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, description: e.target.value })}
+                              />
+                            </Form.Group>
+
+                            {/* Résumé */}
+                            <Form.Group className="mb-0">
+                              <Form.Label>Résumé</Form.Label>
+                              <Form.Control
+                                as="textarea"
+                                rows={3}
+                                value={searchFilters.summary || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, summary: e.target.value })}
+                              />
+                            </Form.Group>
+
+                            {/* Tags */}
+                            <Form.Group className="mb-0">
+                              <Form.Label>Tags</Form.Label>
+                              <Form.Control
+                                type="text"
+                                value={searchFilters.tags || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, tags: e.target.value })}
+                                placeholder="Séparés par des virgules"
+                              />
+                            </Form.Group>
+
+                            {/* Priorité */}
+                            <Form.Group className="mb-0">
+                              <Form.Label>Priorité</Form.Label>
+                              <Form.Select
+                                value={searchFilters.priority || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, priority: e.target.value })}
+                              >
+                                <option value="">Toutes</option>
+                                <option value="basse">Basse</option>
+                                <option value="moyenne">Moyenne</option>
+                                <option value="haute">Haute</option>
+                              </Form.Select>
+                            </Form.Group>
+
+                            {/* Auteur */}
+                            <Form.Group className="mb-0">
+                              <Form.Label>Auteur</Form.Label>
+                              <Form.Control
+                                type="text"
+                                value={searchFilters.author || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, author: e.target.value })}
+                              />
+                            </Form.Group>
+
+                            {/* Dossier */}
+                            <Form.Group className="mb-0">
+                              <Form.Label>Dossier</Form.Label>
+                              <Form.Control
+                                type="text"
+                                value={searchFilters.folder || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, folder: e.target.value })}
+                              />
+                            </Form.Group>
+
+                            {/* Date de création */}
+                            <Form.Group className="mb-0">
+                              <Form.Label>Date de création</Form.Label>
+                              <Form.Control
+                                type="date"
+                                value={searchFilters.creation_date || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, creation_date: e.target.value })}
+                              />
+                            </Form.Group>
+
+                            {/* Bouton de recherche */}
+                            <div className="d-flex align-items-end">
+                              <Button className="btn-purple" onClick={filteredDocuments}>
+                                Rechercher
+                              </Button>
                             </div>
                           </div>
                         </Form>
@@ -1023,6 +1138,8 @@ const Doc = () => {
                   </Card>
                 </div>
               )}
+
+
 
 
               <div className="container-fluid d-flex flex-column gap-4 mb-4">
