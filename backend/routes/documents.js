@@ -811,16 +811,28 @@ router.get('/latest', auth, async (req, res) => {
 
     if (isAdmin) {
       result = await pool.query(`
-        SELECT DISTINCT ON (name) d.*
+        SELECT DISTINCT ON (d.name) d.*,
+          f.numero_facture, f.montant, f.date_facture,
+          cv.nom_candidat, cv.metier, cv.date_cv,
+          dc.num_demande, dc.date_debut, dc.date_fin
         FROM documents d
+        LEFT JOIN factures f ON f.document_id = d.id
+        LEFT JOIN cv cv ON cv.document_id = d.id
+        LEFT JOIN demande_conge dc ON dc.document_id = d.id
         WHERE d.is_completed = true
         AND d.is_archived = false
-        ORDER BY name, version DESC
+        ORDER BY d.name, d.version DESC
       `);
     } else {
       result = await pool.query(`
-        SELECT DISTINCT ON (d.name) d.*
+        SELECT DISTINCT ON (d.name) d.*,
+          f.numero_facture, f.montant, f.date_facture,
+          cv.nom_candidat, cv.metier, cv.date_cv,
+          dc.num_demande, dc.date_debut, dc.date_fin
         FROM documents d
+        LEFT JOIN factures f ON f.document_id = d.id
+        LEFT JOIN cv cv ON cv.document_id = d.id
+        LEFT JOIN demande_conge dc ON dc.document_id = d.id
         LEFT JOIN document_permissions dp ON dp.document_id = d.id AND dp.user_id = $1
         WHERE
           d.is_completed = true
@@ -833,8 +845,7 @@ router.get('/latest', auth, async (req, res) => {
               SELECT 1
               FROM user_groups ug
               WHERE ug.user_id = $1
-              AND ug.group_id = ANY(d.id_group)
-            )
+              AND ug.group_id = ANY(d.id_group))
           )
         ORDER BY d.name, d.version DESC
       `, [userId]);
@@ -846,7 +857,6 @@ router.get('/latest', auth, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
-
 router.get('/archive', auth, async (req, res) => {
   const userId = req.user.id;
   const isAdmin = req.user.role === 'admin';
