@@ -1267,11 +1267,48 @@ router.put('/:id', auth, async (req, res) => {
   }
 });
 
+// Renommez la route pour correspondre à ce que le frontend appelle
+router.get('/:id/metadata', auth, async (req, res) => {
+  const documentId = req.params.id;
+
+  try {
+    const docRes = await pool.query('SELECT category FROM documents WHERE id = $1', [documentId]);
+    
+    if (docRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Document non trouvé' });
+    }
+
+    const category = docRes.rows[0].category;
+    let meta = {};
+
+    switch (category) {
+      case 'contrat':
+        const contratRes = await pool.query('SELECT * FROM contrats WHERE document_id = $1', [documentId]);
+        meta = contratRes.rows[0] || {};
+        break;
+      // ... autres cas ...
+    }
+
+    res.json(meta);
+
+  } catch (err) {
+    console.error('Erreur récupération métadonnées:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 router.get('/:id/details', auth, async (req, res) => {
   const documentId = req.params.id;
 
   try {
-    const docRes = await pool.query('SELECT * FROM documents WHERE id = $1', [documentId]);
+    // Récupération du document de base
+    const docRes = await pool.query(`
+      SELECT d.*, 
+             EXTRACT(EPOCH FROM (NOW() - d.date)) as age_seconds,
+             pg_size_pretty(d.size) as size_formatted
+      FROM documents d 
+      WHERE id = $1
+    `, [documentId]);
 
     if (docRes.rowCount === 0) {
       return res.status(404).json({ error: 'Document non trouvé' });
@@ -1279,7 +1316,9 @@ router.get('/:id/details', auth, async (req, res) => {
 
     const doc = docRes.rows[0];
     let meta = {};
+    let technicalInfo = {};
 
+    // Récupération des métadonnées spécifiques
     switch (doc.category) {
       case 'cv':
         const cv = await pool.query('SELECT * FROM cv WHERE document_id = $1', [documentId]);
@@ -1296,21 +1335,65 @@ router.get('/:id/details', auth, async (req, res) => {
         meta = conge.rows[0] || {};
         break;
 
+      case 'contrat':
+        const contrat = await pool.query(`
+          SELECT numero_contrat, type_contrat, partie_prenante, 
+                 date_signature, date_echeance, montant, statut
+          FROM contrats 
+          WHERE document_id = $1
+        `, [documentId]);
+        meta = contrat.rows[0] || {};
+        break;
+
+      case 'rapport':
+        const rapport = await pool.query(`
+          SELECT type_rapport, auteur, date_rapport, periode_couverte, destinataire
+          FROM rapports 
+          WHERE document_id = $1
+        `, [documentId]);
+        meta = rapport.rows[0] || {};
+        break;
+
       default:
         meta = {};
     }
 
+    // Informations techniques pour les médias
+    const fileExt = doc.name.split('.').pop().toLowerCase();
+    if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'mp4', 'mov', 'avi', 'webm'].includes(fileExt)) {
+      try {
+        const techRes = await pool.query(`
+          SELECT width, height, duration 
+          FROM media_metadata 
+          WHERE document_id = $1
+        `, [documentId]);
+        
+        technicalInfo = techRes.rows[0] || {};
+      } catch (err) {
+        console.log('Aucune métadonnée technique trouvée pour ce média');
+      }
+    }
+
     res.json({
-      document: doc,
-      details: meta
+      document: {
+        ...doc,
+        // Formatage des dates pour le frontend
+        date: new Date(doc.date).toISOString(),
+        date_signature: meta.date_signature ? new Date(meta.date_signature).toISOString() : null,
+        date_echeance: meta.date_echeance ? new Date(meta.date_echeance).toISOString() : null
+      },
+      details: meta,
+      technicalInfo
     });
 
   } catch (err) {
     console.error('Erreur récupération détails document :', err.stack);
-    res.status(500).json({ error: 'Erreur serveur' });
+    res.status(500).json({ 
+      error: 'Erreur serveur',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 });
-
 router.post('/:id/share', auth, async (req, res) => {
   const documentId = parseInt(req.params.id);
   const userId = req.user.id;
