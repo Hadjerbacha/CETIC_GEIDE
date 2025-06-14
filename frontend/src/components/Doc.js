@@ -395,7 +395,7 @@ const Doc = () => {
     };
   };
 
- const filteredDocuments = latestDocs.filter((doc) => {
+  const filteredDocuments = latestDocs.filter((doc) => {
     // Normalisation des données
     const docName = doc.name ? doc.name.toString().toLowerCase() : '';
     const docFilePath = doc.file_path ? doc.file_path.toString() : '';
@@ -427,114 +427,114 @@ const Doc = () => {
     const { isPhoto, isVideo } = isMediaFile(doc);
 
     // Filtrage par type de fichier
-    const matchesType = filterType === 'Tous les documents' || 
-                       fileExtension === filterType.toLowerCase();
+    const matchesType = filterType === 'Tous les documents' ||
+      fileExtension === filterType.toLowerCase();
 
     // Filtrage par date
     const matchesDate = (!startDate || (docDate && docDate >= new Date(startDate))) &&
-                       (!endDate || (docDate && docDate <= new Date(endDate)));
+      (!endDate || (docDate && docDate <= new Date(endDate)));
 
     // Recherche globale
     const searchLower = searchQuery.toLowerCase();
     const matchesSearch = useAdvancedFilter ? (
-        docContent.includes(searchLower) ||
-        docSummary.includes(searchLower) ||
-        docDescription.includes(searchLower) ||
-        docFolder.includes(searchLower) ||
-        docAuthor.includes(searchLower) ||
-        docTags.some(tag => tag.includes(searchLower))
+      docContent.includes(searchLower) ||
+      docSummary.includes(searchLower) ||
+      docDescription.includes(searchLower) ||
+      docFolder.includes(searchLower) ||
+      docAuthor.includes(searchLower) ||
+      docTags.some(tag => tag.includes(searchLower))
     ) : (
-        docName.includes(searchLower)
+      docName.includes(searchLower)
     );
 
     // Filtrage par catégorie
     const matchesCategory = (() => {
-        if (!selectedCategory) return true;
-        
-        const selectedCat = selectedCategory.toLowerCase();
-        
-        // Filtres spéciaux pour les médias
-        if (selectedCat === 'photo') return isPhoto;
-        if (selectedCat === 'video') return isVideo;
-        if (selectedCat === 'autre') return !isPhoto && !isVideo;
-        
-        return docCategory === selectedCat;
+      if (!selectedCategory) return true;
+
+      const selectedCat = selectedCategory.toLowerCase();
+
+      // Filtres spéciaux pour les médias
+      if (selectedCat === 'photo') return isPhoto;
+      if (selectedCat === 'video') return isVideo;
+      if (selectedCat === 'autre') return !isPhoto && !isVideo;
+
+      return docCategory === selectedCat;
     })();
 
     // Filtres avancés spécifiques
     const matchesAdvancedFilters = (() => {
-        if (!showAdvancedFilters) return true;
+      if (!showAdvancedFilters) return true;
 
-        // Convertir les filtres de recherche en minuscules
-        const filters = Object.fromEntries(
-            Object.entries(searchFilters).map(([k, v]) => 
-                [k, v ? v.toString().toLowerCase() : ''])
-        );
+      // Convertir les filtres de recherche en minuscules
+      const filters = Object.fromEntries(
+        Object.entries(searchFilters).map(([k, v]) =>
+          [k, v ? v.toString().toLowerCase() : ''])
+      );
 
-        // Filtres communs à toutes les catégories
-        const commonFilters = {
-            description: !filters.description || docDescription.includes(filters.description),
-            summary: !filters.summary || docSummary.includes(filters.summary),
-            tags: !filters.tags || filters.tags.split(',')
-                .map(t => t.trim())
-                .every(tag => docTags.some(dt => dt.includes(tag))),
-            priority: !filters.priority || docPriority === filters.priority,
-            author: !filters.author || docAuthor.includes(filters.author),
-            folder: !filters.folder || docFolder.includes(filters.folder),
-            creation_date: !filters.creation_date || docCreationDate === filters.creation_date
-        };
+      // Filtres communs à toutes les catégories
+      const commonFilters = {
+        description: !filters.description || docDescription.includes(filters.description),
+        summary: !filters.summary || docSummary.includes(filters.summary),
+        tags: !filters.tags || filters.tags.split(',')
+          .map(t => t.trim())
+          .every(tag => docTags.some(dt => dt.includes(tag))),
+        priority: !filters.priority || docPriority === filters.priority,
+        author: !filters.author || docAuthor.includes(filters.author),
+        folder: !filters.folder || docFolder.includes(filters.folder),
+        creation_date: !filters.creation_date || docCreationDate === filters.creation_date
+      };
 
-        // Filtres spécifiques aux catégories
-        switch(selectedCategory.toLowerCase()) {
-            case 'facture':
-                return commonFilters.description &&
-                       commonFilters.summary &&
-                       commonFilters.tags &&
-                       (!filters.numero_facture || doc.numero_facture?.toString().includes(filters.numero_facture)) &&
-                       (!filters.montant || Number(doc.montant) === Number(filters.montant)) &&
-                       (!filters.date_facture || (doc.date_facture && new Date(doc.date_facture).toISOString().split('T')[0] === filters.date_facture));
+      // Filtres spécifiques aux catégories
+      switch (selectedCategory.toLowerCase()) {
+        case 'facture':
+          return commonFilters.description &&
+            commonFilters.summary &&
+            commonFilters.tags &&
+            (!filters.numero_facture || doc.numero_facture?.toString().includes(filters.numero_facture)) &&
+            (!filters.montant || Number(doc.montant) === Number(filters.montant)) &&
+            (!filters.date_facture || (doc.date_facture && new Date(doc.date_facture).toISOString().split('T')[0] === filters.date_facture));
 
-            case 'cv':
-                return commonFilters.description &&
-                       commonFilters.summary &&
-                       commonFilters.tags &&
-                       (!filters.nom_candidat || doc.nom_candidat?.toLowerCase().includes(filters.nom_candidat)) &&
-                       (!filters.metier || doc.metier?.toLowerCase().includes(filters.metier)) &&
-                       (!filters.date_cv || (doc.date_cv && new Date(doc.date_cv).toISOString().split('T')[0] === filters.date_cv));
+        case 'cv':
+          return commonFilters.description &&
+            commonFilters.summary &&
+            commonFilters.tags &&
+            (!filters.nom_candidat || doc.nom_candidat?.toLowerCase().includes(filters.nom_candidat)) &&
+            (!filters.metier || doc.metier?.toLowerCase().includes(filters.metier)) &&
+            (!filters.date_cv || (doc.date_cv && new Date(doc.date_cv).toISOString().split('T')[0] === filters.date_cv));
 
-            case 'demande_conge':
-                return commonFilters.description &&
-                       commonFilters.summary &&
-                       commonFilters.tags &&
-                       (!filters.numdemande || doc.num_demande?.toString().includes(filters.numdemande)) &&
-                       (!filters.dateconge || (doc.date_debut && new Date(doc.date_debut).toISOString().split('T')[0] === filters.dateconge));
+        case 'demande_conge':
+          return commonFilters.description &&
+            commonFilters.summary &&
+            commonFilters.tags &&
+            (!filters.numdemande || doc.num_demande?.toString().includes(filters.numdemande)) &&
+            (!filters.dateconge || (doc.date_debut && new Date(doc.date_debut).toISOString().split('T')[0] === filters.dateconge));
 
-            case 'contrat':
-                return commonFilters.description &&
-                       commonFilters.summary &&
-                       commonFilters.tags &&
-                       (!filters.numero_contrat || docNumeroContrat.includes(filters.numero_contrat)) &&
-                       (!filters.type_contrat || docTypeContrat === filters.type_contrat) &&
-                       (!filters.partie_prenante || docPartiePrenante.includes(filters.partie_prenante)) &&
-                       (!filters.date_signature || docDateSignature === filters.date_signature) &&
-                       (!filters.statut || docStatutContrat === filters.statut);
+        case 'contrat':
+          return commonFilters.description &&
+            commonFilters.summary &&
+            commonFilters.tags &&
+            (!filters.numero_contrat || docNumeroContrat.includes(filters.numero_contrat)) &&
+            (!filters.type_contrat || docTypeContrat === filters.type_contrat) &&
+            (!filters.partie_prenante || docPartiePrenante.includes(filters.partie_prenante)) &&
+            (!filters.date_signature || docDateSignature === filters.date_signature) &&
+            (!filters.statut || docStatutContrat === filters.statut);
 
-            case 'rapport':
-                return commonFilters.description &&
-                       commonFilters.summary &&
-                       commonFilters.tags &&
-                       (!filters.type_rapport || docTypeRapport === filters.type_rapport) &&
-                       (!filters.auteur || docAuteurRapport.includes(filters.auteur)) &&
-                       (!filters.date_rapport || docDateRapport === filters.date_rapport) &&
-                       (!filters.destinataire || docDestinataireRapport.includes(filters.destinataire));
+        case 'rapport':
+          return commonFilters.description &&
+            commonFilters.summary &&
+            commonFilters.tags &&
+            (!filters.type_rapport || docTypeRapport === filters.type_rapport) &&
+            (!filters.auteur || docAuteurRapport.includes(filters.auteur)) &&
+            (!filters.date_rapport || docDateRapport === filters.date_rapport) &&
+            (!filters.destinataire || docDestinataireRapport.includes(filters.destinataire));
 
-            default:
-                return Object.values(commonFilters).every(v => v);
-        }
+        default:
+          return Object.values(commonFilters).every(v => v);
+      }
     })();
 
     return matchesType && matchesDate && matchesSearch && matchesCategory && matchesAdvancedFilters;
-});
+  });
 
   const handleOpenConfirm = async (doc) => {
     setModalDoc(doc);
@@ -1093,130 +1093,130 @@ const Doc = () => {
                         </Form>
                       </>
                     )}
-               {selectedCategory === 'Contrat' && (
-    <>
-        <h5 className="mb-3">🔎 Recherche avancée - Contrats</h5>
-        <Form>
-            <div className="d-flex align-items-end gap-3 flex-wrap">
-                <Form.Group className="mb-0">
-                    <Form.Label>Numéro contrat</Form.Label>
-                    <Form.Control
-                        value={searchFilters.numero_contrat || ''}
-                        onChange={(e) => setSearchFilters({...searchFilters, numero_contrat: e.target.value})}
-                    />
-                </Form.Group>
+                    {selectedCategory === 'Contrat' && (
+                      <>
+                        <h5 className="mb-3">🔎 Recherche avancée - Contrats</h5>
+                        <Form>
+                          <div className="d-flex align-items-end gap-3 flex-wrap">
+                            <Form.Group className="mb-0">
+                              <Form.Label>Numéro contrat</Form.Label>
+                              <Form.Control
+                                value={searchFilters.numero_contrat || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, numero_contrat: e.target.value })}
+                              />
+                            </Form.Group>
 
-                <Form.Group className="mb-0">
-                    <Form.Label>Type de contrat</Form.Label>
-                    <Form.Control
-                        value={searchFilters.type_contrat || ''}
-                        onChange={(e) => setSearchFilters({...searchFilters, type_contrat: e.target.value})}
-                    />
-                </Form.Group>
+                            <Form.Group className="mb-0">
+                              <Form.Label>Type de contrat</Form.Label>
+                              <Form.Control
+                                value={searchFilters.type_contrat || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, type_contrat: e.target.value })}
+                              />
+                            </Form.Group>
 
-                <Form.Group className="mb-0">
-                    <Form.Label>Partie prenante</Form.Label>
-                    <Form.Control
-                        value={searchFilters.partie_prenante || ''}
-                        onChange={(e) => setSearchFilters({...searchFilters, partie_prenante: e.target.value})}
-                    />
-                </Form.Group>
+                            <Form.Group className="mb-0">
+                              <Form.Label>Partie prenante</Form.Label>
+                              <Form.Control
+                                value={searchFilters.partie_prenante || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, partie_prenante: e.target.value })}
+                              />
+                            </Form.Group>
 
-                <Form.Group className="mb-0">
-                    <Form.Label>Date signature</Form.Label>
-                    <Form.Control
-                        type="date"
-                        value={searchFilters.date_signature || ''}
-                        onChange={(e) => setSearchFilters({...searchFilters, date_signature: e.target.value})}
-                    />
-                </Form.Group>
+                            <Form.Group className="mb-0">
+                              <Form.Label>Date signature</Form.Label>
+                              <Form.Control
+                                type="date"
+                                value={searchFilters.date_signature || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, date_signature: e.target.value })}
+                              />
+                            </Form.Group>
 
-                <Form.Group className="mb-0">
-                    <Form.Label>Statut</Form.Label>
-                    <Form.Control
-                        value={searchFilters.statut || ''}
-                        onChange={(e) => setSearchFilters({...searchFilters, statut: e.target.value})}
-                    />
-                </Form.Group>
+                            <Form.Group className="mb-0">
+                              <Form.Label>Statut</Form.Label>
+                              <Form.Control
+                                value={searchFilters.statut || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, statut: e.target.value })}
+                              />
+                            </Form.Group>
 
-                <div className="d-flex align-items-end">
-                    <Button className="btn-purple" onClick={filteredDocuments}>
-                        Rechercher
-                    </Button>
-                </div>
-            </div>
-        </Form>
-    </>
-)}
+                            <div className="d-flex align-items-end">
+                              <Button className="btn-purple" onClick={filteredDocuments}>
+                                Rechercher
+                              </Button>
+                            </div>
+                          </div>
+                        </Form>
+                      </>
+                    )}
 
-{selectedCategory === 'Rapport' && (
-    <>
-        <h5 className="mb-3">🔎 Recherche avancée - Rapports</h5>
-        <Form>
-            <div className="d-flex align-items-end gap-3 flex-wrap">
-                <Form.Group className="mb-0">
-                    <Form.Label>Type de rapport</Form.Label>
-                    <Form.Control
-                        value={searchFilters.type_rapport || ''}
-                        onChange={(e) => setSearchFilters({...searchFilters, type_rapport: e.target.value})}
-                    />
-                </Form.Group>
+                    {selectedCategory === 'Rapport' && (
+                      <>
+                        <h5 className="mb-3">🔎 Recherche avancée - Rapports</h5>
+                        <Form>
+                          <div className="d-flex align-items-end gap-3 flex-wrap">
+                            <Form.Group className="mb-0">
+                              <Form.Label>Type de rapport</Form.Label>
+                              <Form.Control
+                                value={searchFilters.type_rapport || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, type_rapport: e.target.value })}
+                              />
+                            </Form.Group>
 
-                <Form.Group className="mb-0">
-                    <Form.Label>Auteur</Form.Label>
-                    <Form.Control
-                        value={searchFilters.auteur || ''}
-                        onChange={(e) => setSearchFilters({...searchFilters, auteur: e.target.value})}
-                    />
-                </Form.Group>
+                            <Form.Group className="mb-0">
+                              <Form.Label>Auteur</Form.Label>
+                              <Form.Control
+                                value={searchFilters.auteur || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, auteur: e.target.value })}
+                              />
+                            </Form.Group>
 
-                <Form.Group className="mb-0">
-                    <Form.Label>Date rapport</Form.Label>
-                    <Form.Control
-                        type="date"
-                        value={searchFilters.date_rapport || ''}
-                        onChange={(e) => setSearchFilters({...searchFilters, date_rapport: e.target.value})}
-                    />
-                </Form.Group>
+                            <Form.Group className="mb-0">
+                              <Form.Label>Date rapport</Form.Label>
+                              <Form.Control
+                                type="date"
+                                value={searchFilters.date_rapport || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, date_rapport: e.target.value })}
+                              />
+                            </Form.Group>
 
-                <Form.Group className="mb-0">
-                    <Form.Label>Destinataire</Form.Label>
-                    <Form.Control
-                        value={searchFilters.destinataire || ''}
-                        onChange={(e) => setSearchFilters({...searchFilters, destinataire: e.target.value})}
-                    />
-                </Form.Group>
+                            <Form.Group className="mb-0">
+                              <Form.Label>Destinataire</Form.Label>
+                              <Form.Control
+                                value={searchFilters.destinataire || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, destinataire: e.target.value })}
+                              />
+                            </Form.Group>
 
-                <div className="d-flex align-items-end">
-                    <Button className="btn-purple" onClick={filteredDocuments}>
-                        Rechercher
-                    </Button>
-                </div>
-            </div>
-        </Form>
-    </>
-)}
-                     {['autre', 'photo', 'video'].includes(selectedCategory) && (
+                            <div className="d-flex align-items-end">
+                              <Button className="btn-purple" onClick={filteredDocuments}>
+                                Rechercher
+                              </Button>
+                            </div>
+                          </div>
+                        </Form>
+                      </>
+                    )}
+                    {['autre', 'photo', 'video'].includes(selectedCategory) && (
                       <>
                         <h5 className="mb-3">
                           🔎 Recherche avancée - {selectedCategory === 'photo' ? 'Photos' : selectedCategory === 'video' ? 'Vidéos' : 'Autres documents'}
                         </h5>
                         <Form>
                           <div className="d-flex align-items-end gap-3 flex-wrap">
-                            {/* Description */}
-                            <Form.Group className="mb-0">
+                            {/* Description - Modifié pour avoir la même hauteur */}
+                            <Form.Group className="mb-0 flex-grow-1">
                               <Form.Label>Description</Form.Label>
                               <Form.Control
                                 as="textarea"
-                                rows={3}
+                                rows={1}  // Changé de 3 à 1
+                                style={{ minHeight: '38px', resize: 'vertical' }}  // Hauteur fixe comme les autres champs
                                 value={searchFilters.description || ''}
                                 onChange={(e) => setSearchFilters({ ...searchFilters, description: e.target.value })}
                               />
                             </Form.Group>
-                      
 
                             {/* Tags */}
-                            <Form.Group className="mb-0">
+                            <Form.Group className="mb-0" style={{ minWidth: '200px' }}>
                               <Form.Label>Tags</Form.Label>
                               <Form.Control
                                 type="text"
@@ -1227,7 +1227,7 @@ const Doc = () => {
                             </Form.Group>
 
                             {/* Priorité */}
-                            <Form.Group className="mb-0">
+                            <Form.Group className="mb-0" style={{ minWidth: '200px' }}>
                               <Form.Label>Priorité</Form.Label>
                               <Form.Select
                                 value={searchFilters.priority || ''}
@@ -1240,12 +1240,21 @@ const Doc = () => {
                               </Form.Select>
                             </Form.Group>
 
-
                             {/* Bouton de recherche */}
                             <div className="d-flex align-items-end">
                               <Button className="btn-purple" onClick={filteredDocuments}>
                                 Rechercher
                               </Button>
+
+                              {['autre'].includes(selectedCategory) && (
+                                <Button
+                                  className="btn-purple ms-2"
+                                  variant="outline-secondary"
+                                  onClick={() => navigate('/documents-non-complets')}
+                                >
+                                  Documents non complétés
+                                </Button>
+                              )}
                             </div>
                           </div>
                         </Form>
@@ -1261,19 +1270,42 @@ const Doc = () => {
               <div className="container-fluid d-flex flex-column gap-4 mb-4">
                 <style>{`
 
-                .btn-purple {
-  background-color:rgb(83, 82, 99) !important;
-  border-color: rgb(83, 82, 99) !important;
-  color: #fff;
-  font-weight: 600;
-  transition: all 0.3s ease-in-out;
-  border-radius: 40px;
-}
+  .btn-purple {
+    background-color: rgb(83, 82, 99) !important;
+    border-color: rgb(83, 82, 99) !important;
+    color: #fff;
+    font-weight: 600;
+    transition: all 0.3s ease-in-out;
+    border-radius: 8px;
+    padding: 8px 16px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 
-.btn-purple:hover {
-  background-color:rgb(33, 32, 39) !important;
-  border-color:rgb(33, 32, 39) !important;
-}
+  .btn-purple:hover {
+    background-color: rgb(33, 32, 39) !important;
+    border-color: rgb(33, 32, 39) !important;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  }
+
+  .form-control, .form-select {
+    border-radius: 8px !important;
+    border: 1px solid #ddd !important;
+    height: 38px;
+  }
+
+  .form-control:focus, .form-select:focus {
+    box-shadow: 0 0 0 0.25rem rgba(108, 99, 255, 0.25);
+    border-color: #6c63ff !important;
+  }
+
+  textarea.form-control {
+    min-height: 38px;
+    resize: vertical;
+  }
 
 .form-control {
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1) !important;

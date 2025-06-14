@@ -306,21 +306,7 @@ const FolderListPage = () => {
                 <Card.Body>
                   <Card.Title className="d-flex justify-content-between align-items-center">
                     <span><FaFolderOpen className="me-2 text-primary" /> {folder.name}</span>
-                    <Dropdown as={ButtonGroup} className="mb-3 float-end">
-                      <Dropdown.Toggle variant="light" size="sm" title="Ajouter">
-                        <FaPlus />
-                      </Dropdown.Toggle>
-                      <Dropdown.Menu>
-                        <Dropdown.Item onClick={() => openModal(folder.id, 'subfolder')}>
-                          <FaFolderPlus className="me-2" />
-                          Ajouter un sous-dossier
-                        </Dropdown.Item>
-                        <Dropdown.Item onClick={() => openModal(folder.id, 'document')}>
-                          <FaFileUpload className="me-2" />
-                          Ajouter un document
-                        </Dropdown.Item>
-                      </Dropdown.Menu>
-                    </Dropdown>
+                  
                   </Card.Title>
                   <Card.Text>{folder.description || 'Aucune description'}</Card.Text>
                 </Card.Body>
