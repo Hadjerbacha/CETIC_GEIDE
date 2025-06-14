@@ -581,14 +581,29 @@ router.get('/', auth, async (req, res) => {
 });
 
 router.get('/check-name', async (req, res) => {
-  const { name } = req.query;
+  const { name, currentDocId } = req.query; // Ajoutez currentDocId pour exclure le document actuel
+  
   if (!name) return res.status(400).json({ error: 'Nom manquant' });
 
   try {
-    const doc = await pool.query('SELECT * FROM documents WHERE name = $1 ORDER BY version DESC LIMIT 1', [name]);
+    let query;
+    let params = [name];
+    
+    if (currentDocId) {
+      query = 'SELECT * FROM documents WHERE name = $1 AND id != $2 ORDER BY version DESC LIMIT 1';
+      params.push(currentDocId);
+    } else {
+      query = 'SELECT * FROM documents WHERE name = $1 ORDER BY version DESC LIMIT 1';
+    }
+
+    const doc = await pool.query(query, params);
 
     if (doc.rows.length > 0) {
-      return res.json({ exists: true, document: doc.rows[0] });
+      return res.json({ 
+        exists: true, 
+        document: doc.rows[0],
+        canAddVersion: true // Vous pourriez ajouter cette info si nécessaire
+      });
     } else {
       return res.json({ exists: false });
     }
@@ -1488,52 +1503,56 @@ router.post('/:id/share', auth, async (req, res) => {
       visibility, id_share, id_group, can_modify, can_delete, can_share
     });
 
-    // 1. Update documents table
+    // 1. Mettre à jour la visibilité dans la table documents
     await pool.query(`
       UPDATE documents
       SET visibility = $1, id_share = $2, id_group = $3
       WHERE id = $4
     `, [visibility, id_share, id_group, documentId]);
 
-    // 2. Get owner of the document
-    const { rows } = await pool.query(
-      `SELECT owner_id FROM documents WHERE id = $1`,
-      [documentId]
-    );
-    const ownerId = rows[0]?.owner_id;
+    // 2. Gérer les permissions pour les utilisateurs partagés
+    if (visibility === 'custom' && id_share.length > 0) {
+      // Supprimer toutes les permissions custom existantes
+      await pool.query(`
+        DELETE FROM document_permissions 
+        WHERE document_id = $1 AND access_type = 'custom'
+      `, [documentId]);
 
-    const isOwner = userId === ownerId;
+      // Ajouter les nouvelles permissions
+      const insertValues = id_share.map(targetId => 
+        `(${targetId}, ${documentId}, 'custom', true, ${can_modify}, ${can_delete}, ${can_share})`
+      ).join(',');
 
-    // 3. Insert permissions for shared users
-    for (const targetId of id_share) {
       await pool.query(`
         INSERT INTO document_permissions 
         (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
-        VALUES ($1, $2, 'custom', true, $3, $4, $5)
-        ON CONFLICT (user_id, document_id) DO UPDATE
-        SET can_read = true, can_modify = $3, can_delete = $4, can_share = $5
-      `, [
-        targetId,
-        documentId,
-        isOwner ? can_modify : false,
-        isOwner ? can_delete : false,
-        isOwner ? can_share : false
-      ]);
+        VALUES ${insertValues}
+      `);
     }
 
-    // 4. Insert permissions for group members
-    if (id_group.length > 0) {
+    // 3. Gérer les permissions pour les groupes
+    if (visibility === 'custom' && id_group.length > 0) {
+      // Supprimer toutes les permissions de groupe existantes
+      await pool.query(`
+        DELETE FROM document_permissions 
+        WHERE document_id = $1 AND access_type = 'group'
+      `, [documentId]);
+
+      // Ajouter les permissions pour les membres des groupes
       const { rows: members } = await pool.query(`
         SELECT DISTINCT user_id FROM user_groups WHERE group_id = ANY($1)
       `, [id_group]);
 
-      for (const member of members) {
+      if (members.length > 0) {
+        const groupInsertValues = members.map(member => 
+          `(${member.user_id}, ${documentId}, 'group', true, false, false, false)`
+        ).join(',');
+
         await pool.query(`
           INSERT INTO document_permissions 
           (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
-          VALUES ($1, $2, 'group', true, false, false, false)
-          ON CONFLICT (user_id, document_id) DO NOTHING
-        `, [member.user_id, documentId]);
+          VALUES ${groupInsertValues}
+        `);
       }
     }
 

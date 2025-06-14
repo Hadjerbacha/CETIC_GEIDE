@@ -56,6 +56,17 @@ const DocumentCompletion = () => {
     setConfirmAddVersion(null); // Réinitialiser la décision
   }, [baseName, extension]);
 
+  useEffect(() => {
+  const timer = setTimeout(async () => {
+    if (baseName.trim()) {
+      const fullName = extension ? `${baseName}.${extension}` : baseName;
+      await checkForDuplicate(fullName);
+    }
+  }, 500);
+
+  return () => clearTimeout(timer);
+}, [baseName, extension]);
+
 
   useEffect(() => {
     const handleBeforeUnload = (e) => {
@@ -188,22 +199,30 @@ const DocumentCompletion = () => {
 };
 
   // Vérifier si un document avec ce nom existe déjà
-  const checkForDuplicate = async (docName) => {
-    try {
-      const res = await axios.get(`http://localhost:5000/api/documents/check-name?name=${docName}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
+ const checkForDuplicate = async (docName) => {
+  if (!docName.trim()) return false;
 
-      if (res.data.exists && res.data.document.id !== id) {
-        setExistingDocument(res.data.document);
-        return true;
-      }
-      return false;
-    } catch (error) {
-      console.error("Erreur vérification doublon:", error);
-      return false;
+  try {
+    const res = await axios.get(`http://localhost:5000/api/documents/check-name`, {
+      params: {
+        name: docName,
+        currentDocId: id // Envoyez l'ID du document actuel
+      },
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    if (res.data.exists) {
+      setExistingDocument(res.data.document);
+      return true;
     }
-  };
+    setExistingDocument(null);
+    return false;
+  } catch (error) {
+    console.error("Erreur vérification doublon:", error);
+    setErrorMessage("Erreur lors de la vérification du nom");
+    return false;
+  }
+};
 
     const shouldShowCommonFields = (category) => {
   return !['contrat', 'rapport'].includes(category);
@@ -284,38 +303,40 @@ const DocumentCompletion = () => {
   };
 
   // Soumission du formulaire
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+ const handleSubmit = async (e) => {
+  e.preventDefault();
+  setErrorMessage(null);
 
-    // Valider les champs obligatoires
-    if (!validateCategoryFields(category, extraFields)) {
-      setErrorMessage("Veuillez remplir tous les champs obligatoires pour cette catégorie.");
+  // Valider les champs obligatoires
+  if (!validateCategoryFields(category, extraFields)) {
+    setErrorMessage("Veuillez remplir tous les champs obligatoires pour cette catégorie.");
+    return;
+  }
+
+  const fullName = extension ? `${baseName}.${extension}` : baseName;
+  
+  // Si le nom n'a pas changé, enregistrer normalement
+  if (docInfo && fullName === docInfo.name) {
+    await saveDocument();
+    return;
+  }
+
+  // Vérifier si un document avec ce nom existe déjà
+  const duplicateExists = await checkForDuplicate(fullName);
+
+  if (duplicateExists) {
+    if (canAddVersion) {
+      // Ne pas afficher la modal ici - nous avons déjà le bouton dans l'UI
       return;
-    }
-
-    // Vérifier si le nom a changé
-    const fullName = extension ? `${baseName}.${extension}` : baseName;
-    const isNameChanged = fullName !== docInfo.name;
-
-    // Si le nom n'a pas changé, enregistrer normalement
-    if (!isNameChanged) {
-      await saveDocument();
-      return;
-    }
-
-    // Si le nom a changé, vérifier les doublons
-    const duplicateExists = await checkForDuplicate(fullName);
-
-    if (duplicateExists) {
-      if (canAddVersion) {
-        setShowVersionModal(true);
-      } else {
-        setErrorMessage("Un document avec ce nom existe déjà. Vous n'avez pas les droits pour le modifier. Veuillez choisir un autre nom.");
-      }
     } else {
-      await saveDocument();
+      setErrorMessage("Un document avec ce nom existe déjà. Vous n'avez pas les droits pour le modifier. Veuillez choisir un autre nom.");
+      return;
     }
-  };
+  }
+
+  // Pas de doublon ou doublon avec droits, enregistrer normalement
+  await saveDocument();
+};
 
   // Aperçu du document
   const renderDocumentViewer = () => {
@@ -355,7 +376,11 @@ const DocumentCompletion = () => {
     : baseName.trim() !== '';
   
   const isCategoryValid = validateCategoryFields(category, extraFields);
-  return isCommonFieldsValid && isCategoryValid;
+  
+  // Cas spécial : doublon existant sans droits de modification
+  const hasNameConflict = existingDocument && existingDocument.id !== docInfo?.id && !canAddVersion;
+  
+  return isCommonFieldsValid && isCategoryValid && !hasNameConflict;
 };
 
   return (
@@ -369,22 +394,42 @@ const DocumentCompletion = () => {
           <div className="col-md-8">
             <Card className="p-4 shadow-sm">
               <h3 className="mb-4">📝 Compléter les informations du document</h3>
-              {existingDocument && existingDocument.id !== docInfo?.id && canAddVersion && confirmAddVersion === null && (
-                <div className="mb-3">
-                  <Alert variant="info">
-                    Ce nom est déjà utilisé. Voulez-vous l’enregistrer comme une <strong>nouvelle version</strong> du document existant ?
-                  </Alert>
-                  <div className="d-flex gap-2">
-                    <Button variant="outline-success" onClick={() => setConfirmAddVersion(true)}>
-                      Oui, ajouter comme nouvelle version
-                    </Button>
-                    <Button variant="outline-danger" onClick={() => setConfirmAddVersion(false)}>
-                      Non, je vais changer le nom
-                    </Button>
-                  </div>
-                </div>
-              )}
-
+      {existingDocument && existingDocument.id !== docInfo?.id && (
+  <div className="mb-3">
+    {canAddVersion ? (
+      <Alert variant="warning">
+        <strong>Un document avec le même nom existe déjà.</strong>
+        <p className="mb-2">Vous avez les droits de modification (can_modify=true).</p>
+        <div className="d-flex gap-2">
+          <Button 
+            variant="outline-primary" 
+            onClick={() => {
+              setShowVersionModal(true);
+              setDifferenceNote('');
+            }}
+          >
+            Ajouter comme nouvelle version
+          </Button>
+          <span className="align-self-center">ou</span>
+          <Button 
+            variant="outline-secondary" 
+            onClick={() => {
+              setBaseName(prev => `${prev}_${Date.now()}`);
+              setExistingDocument(null);
+            }}
+          >
+            Modifier le nom
+          </Button>
+        </div>
+      </Alert>
+    ) : (
+      <Alert variant="danger">
+        <strong>Un document avec ce nom existe déjà.</strong>
+        <p className="mb-0">Vous n'avez pas les droits de modification (can_modify=false). Veuillez changer le nom du document.</p>
+      </Alert>
+    )}
+  </div>
+)}
             <Form onSubmit={handleSubmit}>
   <Form.Group className="mb-3">
     <Form.Label>Nom du document</Form.Label>
@@ -499,49 +544,46 @@ const DocumentCompletion = () => {
         </div>
 
         {/* Modal pour nouvelle version */}
-        <Modal show={showVersionModal} onHide={() => setShowVersionModal(false)}>
-          <Modal.Header closeButton>
-            <Modal.Title>Document existant détecté</Modal.Title>
-          </Modal.Header>
-          <Modal.Body>
-            <Alert variant="info" className="mb-3">
-              Un document portant le nom <strong>{existingDocument?.name}</strong> existe déjà.
-            </Alert>
+      <Modal show={showVersionModal} onHide={() => setShowVersionModal(false)}>
+  <Modal.Header closeButton>
+    <Modal.Title>Ajouter comme nouvelle version</Modal.Title>
+  </Modal.Header>
+  <Modal.Body>
+    <div className="mb-3">
+      <h5>Document existant:</h5>
+      <p><strong>Nom:</strong> {existingDocument?.name}</p>
+      <p><strong>Description:</strong> {existingDocument?.summary || 'Aucune'}</p>
+      <p><strong>Dernière modification:</strong> {new Date(existingDocument?.updated_at).toLocaleString()}</p>
+    </div>
 
-            <p>Vous avez les droits pour :</p>
-            <ul>
-              <li>Ajouter ce document comme nouvelle version</li>
-              <li>Modifier le nom pour créer un document distinct</li>
-            </ul>
-
-            <Form.Group className="mb-3">
-              <Form.Label>Notes sur les modifications (obligatoire)</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={3}
-                value={differenceNote}
-                onChange={(e) => setDifferenceNote(e.target.value)}
-                placeholder="Décrivez les changements apportés dans cette version..."
-                required
-              />
-              <Form.Text className="text-muted">
-                Ces notes aideront à identifier les différences avec la version précédente.
-              </Form.Text>
-            </Form.Group>
-          </Modal.Body>
-          <Modal.Footer>
-            <Button variant="secondary" onClick={() => setShowVersionModal(false)}>
-              Modifier le nom
-            </Button>
-            <Button
-              variant="primary"
-              onClick={handleSaveAsVersion}
-              disabled={!differenceNote.trim() || isSaving}
-            >
-              {isSaving ? 'Enregistrement...' : 'Enregistrer comme nouvelle version'}
-            </Button>
-          </Modal.Footer>
-        </Modal>
+    <Form.Group className="mb-3">
+      <Form.Label>Notes de version (obligatoire)</Form.Label>
+      <Form.Control
+        as="textarea"
+        rows={3}
+        value={differenceNote}
+        onChange={(e) => setDifferenceNote(e.target.value)}
+        placeholder="Décrivez les changements apportés dans cette version..."
+        required
+      />
+      <Form.Text className="text-muted">
+        Ces notes aideront à identifier les différences avec la version précédente.
+      </Form.Text>
+    </Form.Group>
+  </Modal.Body>
+  <Modal.Footer>
+    <Button variant="secondary" onClick={() => setShowVersionModal(false)}>
+      Annuler
+    </Button>
+    <Button
+      variant="primary"
+      onClick={handleSaveAsVersion}
+      disabled={!differenceNote.trim() || isSaving}
+    >
+      {isSaving ? 'Enregistrement...' : 'Confirmer la nouvelle version'}
+    </Button>
+  </Modal.Footer>
+</Modal>
       </Container>
     </>
   );
