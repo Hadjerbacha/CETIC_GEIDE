@@ -670,8 +670,6 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
   }
 }
 
-// Après avoir extrait le texte de la vidéo
-console.log('Texte extrait de la vidéo :', extractedText);
 
   const finalCategory = await classifyText(extractedText, req.file.originalname);
 
@@ -1082,282 +1080,137 @@ router.get('/archived', auth, async (req, res) => {
 //complete upload
 router.put('/:id', auth, async (req, res) => {
   const documentId = parseInt(req.params.id, 10);
+  const userId = req.user.id;
   const {
     name,
     summary = '',
     tags = [],
-    prio = 'moyenne',
+    priority = 'moyenne',
     collection_name = '',
     metadata = {},
+    diff_version = '',
+    is_completed = false,
     ...extraFields
   } = req.body;
 
   try {
+    // 1. Validation
     if (!name) {
       return res.status(400).json({ error: 'Le nom du document est requis.' });
     }
 
-    // 1. Récupération de la catégorie
-    const catRes = await pool.query(`SELECT category FROM documents WHERE id = $1`, [documentId]);
-    const category = catRes.rows[0]?.category;
+    // 2. Récupération du document original
+    const { rows: [originalDoc] } = await pool.query(
+      'SELECT id, name, category, version FROM documents WHERE id = $1',
+      [documentId]
+    );
 
-    // 2. Déduction de is_completed selon la catégorie
-    let is_completed = req.body.is_completed ?? false;
-
-    if (category === 'facture') {
-      const {
-        num_facture = '',
-        nom_entreprise = '',
-        produit = '',
-        montant = 0,
-        date_facture = null
-      } = req.body;
-
-      is_completed = Boolean(num_facture && nom_entreprise && produit && montant && date_facture);
+    if (!originalDoc) {
+      return res.status(404).json({ error: 'Document introuvable' });
     }
 
-    if (category === 'cv') {
-      const {
-        num_cv = '',
-        nom_candidat = '',
-        metier = '',
-        lieu = '',
-        experience = '',
-        domaine = ''
-      } = req.body;
+    // 3. Vérification des permissions
+    const { rows: [permission] } = await pool.query(
+      'SELECT can_modify FROM document_permissions WHERE user_id = $1 AND document_id = $2',
+      [userId, documentId]
+    );
 
-      is_completed = Boolean(num_cv && nom_candidat && metier && lieu && experience && domaine);
+    if (!permission?.can_modify && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Permission de modification refusée' });
     }
 
-    if (category === 'demande_conge') {
-      const {
-        numDemande = '',
-        dateConge = null
-      } = extraFields;
+    // 4. Détection de nouvelle version
+    const isNewVersion = originalDoc.name !== name && is_completed;
+    let newVersion = originalDoc.version;
 
-      is_completed = Boolean(numDemande && dateConge);
-    }
-
-    if (category === 'contrat') {
-      const {
-        numero_contrat = '',
-        type_contrat = '',
-        partie_prenante = '',
-        date_signature = null,
-        date_echeance = null,
-        montant = 0,
-        statut = ''
-      } = req.body;
-
-      is_completed = Boolean(
-        numero_contrat && 
-        type_contrat && 
-        partie_prenante && 
-        date_signature
+    if (isNewVersion) {
+      const { rows: [{ max_version }] } = await pool.query(
+        'SELECT MAX(version) as max_version FROM documents WHERE name = $1 AND id != $2',
+        [name, documentId]
       );
+      newVersion = (max_version || 0) + 1;
     }
 
-    if (category === 'rapport') {
-      const {
-        type_rapport = '',
-        auteur = '',
-        date_rapport = null,
-        periode_couverte = '',
-        destinataire = ''
-      } = req.body;
-
-      is_completed = Boolean(
-        type_rapport && 
-        auteur && 
-        date_rapport
-      );
-    }
-
-    // 3. Mise à jour de la table documents
-    await pool.query(`
-      UPDATE documents 
-      SET 
+    // 5. Mise à jour du document (sans updated_at)
+    const { rows: [updatedDoc] } = await pool.query(
+      `UPDATE documents SET
         name = $1,
         summary = $2,
         tags = $3,
         priority = $4,
         metadata = $5,
-        is_completed = $6
-      WHERE id = $7
-    `, [name, summary, tags, prio, metadata, is_completed, documentId]);
+        diff_version = $6,
+        is_completed = $7,
+        version = $8
+       WHERE id = $9
+       RETURNING *`,
+      [
+        name,
+        summary,
+        tags,
+        priority,
+        metadata,
+        diff_version,
+        is_completed,
+        newVersion,
+        documentId
+      ]
+    );
 
-    // 4. Si le document vient juste d’être complété, on lui attribue une version
-    if (is_completed) {
-      const versionRes = await pool.query(`
-        SELECT MAX(version) as max_version 
-        FROM documents 
-        WHERE name = $1 AND version IS NOT NULL AND id != $2
-      `, [name, documentId]);
-
-      const lastVersion = versionRes.rows[0].max_version || 0;
-
-      await pool.query(`
-        UPDATE documents SET version = $1 WHERE id = $2
-      `, [lastVersion + 1, documentId]);
+    // 6. Gestion des métadonnées spécifiques (exemple pour facture)
+    if (originalDoc.category === 'facture') {
+      await pool.query(
+        `INSERT INTO factures (
+          document_id, numero_facture, nom_entreprise, produit, montant, date_facture
+        ) VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (document_id) DO UPDATE SET
+          numero_facture = $2,
+          nom_entreprise = $3,
+          produit = $4,
+          montant = $5,
+          date_facture = $6`,
+        [
+          documentId,
+          extraFields.num_facture || '',
+          extraFields.nom_entreprise || '',
+          extraFields.produit || '',
+          extraFields.montant || 0,
+          extraFields.date_facture || null
+        ]
+      );
     }
 
-    // 5. Ajout/MAJ dans la table spécialisée
-    switch (category) {
-      case 'facture':
-        await pool.query(`
-          INSERT INTO factures (document_id, numero_facture, nom_entreprise, produit, montant, date_facture)
-          VALUES ($1, $2, $3, $4, $5, $6)
-          ON CONFLICT (document_id) DO UPDATE 
-          SET numero_facture = $2,
-              nom_entreprise = $3,
-              produit = $4,
-              montant = $5,
-              date_facture = $6;
-        `, [
-          documentId,
-          req.body.num_facture || '',
-          req.body.nom_entreprise || '',
-          req.body.produit || '',
-          req.body.montant || 0,
-          req.body.date_facture || null
-        ]);
-        break;
-
-      case 'cv':
-        await pool.query(`
-          INSERT INTO cv (document_id, num_cv, nom_candidat, metier, lieu, experience, domaine)
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
-          ON CONFLICT (document_id) DO UPDATE SET
-            num_cv = $2,
-            nom_candidat = $3,
-            metier = $4,
-            lieu = $5,
-            experience = $6,
-            domaine = $7
-        `, [
-          documentId,
-          req.body.num_cv || '',
-          req.body.nom_candidat || '',
-          req.body.metier || '',
-          req.body.lieu || '',
-          req.body.experience || '',
-          req.body.domaine || ''
-        ]);
-        break;
-
-      case 'demande_conge':
-        await pool.query(`
-          INSERT INTO demande_conges (document_id, numDemande, dateConge)
-          VALUES ($1, $2, $3)
-          ON CONFLICT (document_id) DO UPDATE 
-          SET numDemande = $2, dateConge = $3;
-        `, [
-          documentId,
-          extraFields.numDemande || '',
-          extraFields.dateConge || null
-        ]);
-        break;
-
-      case 'contrat':
-        await pool.query(`
-          INSERT INTO contrats (
-            document_id, 
-            numero_contrat, 
-            type_contrat, 
-            partie_prenante, 
-            date_signature, 
-            date_echeance, 
-            montant, 
-            statut
-          )
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-          ON CONFLICT (document_id) DO UPDATE 
-          SET 
-            numero_contrat = $2,
-            type_contrat = $3,
-            partie_prenante = $4,
-            date_signature = $5,
-            date_echeance = $6,
-            montant = $7,
-            statut = $8
-        `, [
-          documentId,
-          req.body.numero_contrat || '',
-          req.body.type_contrat || '',
-          req.body.partie_prenante || '',
-          req.body.date_signature || null,
-          req.body.date_echeance || null,
-          req.body.montant || 0,
-          req.body.statut || ''
-        ]);
-        break;
-
-      case 'rapport':
-        await pool.query(`
-          INSERT INTO rapports (
-            document_id, 
-            type_rapport, 
-            auteur, 
-            date_rapport, 
-            periode_couverte, 
-            destinataire
-          )
-          VALUES ($1, $2, $3, $4, $5, $6)
-          ON CONFLICT (document_id) DO UPDATE 
-          SET 
-            type_rapport = $2,
-            auteur = $3,
-            date_rapport = $4,
-            periode_couverte = $5,
-            destinataire = $6
-        `, [
-          documentId,
-          req.body.type_rapport || '',
-          req.body.auteur || '',
-          req.body.date_rapport || null,
-          req.body.periode_couverte || '',
-          req.body.destinataire || ''
-        ]);
-        break;
-
-      default:
-        break;
-    }
-
-    // 6. Gestion des collections (optionnelle)
+    // 7. Gestion des collections
     if (collection_name) {
-      const resCollection = await pool.query(
-        `SELECT id FROM collections WHERE name = $1 AND user_id = $2`,
-        [collection_name, req.user.id]
+      const { rows: [collection] } = await pool.query(
+        `INSERT INTO collections (name, user_id)
+         VALUES ($1, $2)
+         ON CONFLICT (name, user_id) DO UPDATE SET name = $1
+         RETURNING id`,
+        [collection_name, userId]
       );
 
-      let collectionId = resCollection.rows[0]?.id;
-      if (!collectionId) {
-        const insert = await pool.query(
-          `INSERT INTO collections (name, user_id) VALUES ($1, $2) RETURNING id`,
-          [collection_name, req.user.id]
-        );
-        collectionId = insert.rows[0].id;
-      }
-
-      await pool.query(`
-        INSERT INTO document_collections (document_id, collection_id, is_saved, collection_name)
-        VALUES ($1, $2, true, $3)
-        ON CONFLICT (document_id, collection_id) DO UPDATE 
-        SET is_saved = true, collection_name = $3
-      `, [documentId, collectionId, collection_name]);
+      await pool.query(
+        `INSERT INTO document_collections (document_id, collection_id)
+         VALUES ($1, $2)
+         ON CONFLICT (document_id, collection_id) DO NOTHING`,
+        [documentId, collection.id]
+      );
     }
 
-    // 7. Renvoi du document mis à jour
-    const updated = await pool.query('SELECT * FROM documents WHERE id = $1', [documentId]);
-    res.status(200).json(updated.rows[0]);
+    res.status(200).json({
+      ...updatedDoc,
+      is_new_version: isNewVersion
+    });
 
   } catch (err) {
-    console.error('❌ Erreur update document :', err);
-    res.status(500).json({ error: 'Erreur serveur', details: err.message });
+    console.error('❌ Erreur:', err.stack);
+    res.status(500).json({ 
+      error: 'Erreur serveur',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 });
-
 // Renommez la route pour correspondre à ce que le frontend appelle
 router.get('/:id/metadata', auth, async (req, res) => {
   const documentId = req.params.id;
@@ -1586,43 +1439,34 @@ router.get('/stats', async (req, res) => {
 });
 router.get('/:id/versions', auth, async (req, res) => {
   const id = parseInt(req.params.id, 10);
-
-  // Vérification que l'id est un entier valide
-  if (isNaN(id)) {
-    return res.status(400).json({ error: 'ID de document invalide' });
-  }
-
+  
   try {
-    // Récupération du nom du document de base
-    const result = await pool.query(`
-      SELECT name
+    // 1. Récupérer le nom original
+    const { rows: [doc] } = await pool.query(
+      'SELECT name FROM documents WHERE id = $1', 
+      [id]
+    );
+    if (!doc) return res.status(404).json({ error: 'Document introuvable' });
+
+    // 2. Récupérer toutes les versions
+    const { rows: versions } = await pool.query(`
+      SELECT 
+        id, name, version, diff_version
       FROM documents
-      WHERE id = $1
-    `, [id]);
+      WHERE name = $1 AND is_completed = true
+      ORDER BY version DESC
+    `, [doc.name]);
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Document introuvable' });
-    }
-
-    const { name } = result.rows[0];
-
-    // Récupération de toutes les versions avec le même nom, version complète uniquement
-    const versions = await pool.query(`
-      SELECT *
-      FROM documents
-      WHERE name = $1
-      AND is_completed = true
-      ORDER BY version DESC NULLS LAST, created_at DESC
-    `, [name]);
-
-    res.status(200).json(versions.rows);
+    res.status(200).json(versions);
 
   } catch (err) {
-    console.error('Erreur récupération des versions :', err.stack);
-    res.status(500).json({ error: 'Erreur serveur', details: err.message });
+    console.error('❌ Erreur:', err);
+    res.status(500).json({ 
+      error: 'Erreur serveur', 
+      details: err.message 
+    });
   }
 });
-
 
 
 // GET : récupérer un document spécifique par ID
