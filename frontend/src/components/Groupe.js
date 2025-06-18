@@ -196,23 +196,25 @@ const Groupe = () => {
                                         </div>
                                     </td>
                                     <td className="text-end">
-                                        <Button
-                                            variant="outline-warning"
-                                            size="sm"
-                                            className="action-btn me-2"
-                                            onClick={() => handleEdit(g)}
-                                        >
-                                            <FiEdit2 />
-                                        </Button>
-                                        <Button
-                                            variant="outline-danger"
-                                            size="sm"
-                                            className="action-btn"
-                                            onClick={() => confirmDelete(g.id)}
-                                        >
-                                            <FiTrash2 />
-                                        </Button>
-                                    </td>
+  <div className="d-inline-flex align-items-center">
+    <Button
+      variant="outline-warning"
+      size="sm"
+      className="me-2"
+      onClick={() => handleEdit(g)}
+    >
+      <FiEdit2 />
+    </Button>
+    <Button
+      variant="outline-danger"
+      size="sm"
+      onClick={() => confirmDelete(g.id)}
+    >
+      <FiTrash2 />
+    </Button>
+  </div>
+</td>
+
                                 </tr>
                             ))}
                         </tbody>

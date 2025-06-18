@@ -36,6 +36,15 @@ import { Bar, Pie, Doughnut } from 'react-chartjs-2';
 // Enregistrement des composants Chart.js
 Chart.register(...registerables);
 
+function parseJwt(token) {
+  try {
+    return JSON.parse(atob(token.split('.')[1]));
+  } catch (e) {
+    console.error("Erreur de parsing du token :", e);
+    return null;
+  }
+}
+
 const Accueil = () => {
   const [assignedTasks, setAssignedTasks] = useState([]);
   const [stats, setStats] = useState({
@@ -51,48 +60,69 @@ const Accueil = () => {
   const navigate = useNavigate();
   const token = localStorage.getItem("token");
 
-  // Décoder le token pour récupérer userId
-  useEffect(() => {
-    if (token) {
+  // Dans le useEffect qui récupère userId
+useEffect(() => {
+  if (token) {
+    try {
       const decoded = jwtDecode(token);
       setUserId(decoded.id);
+      // Pré-remplir les infos utilisateur basiques
+      setCurrentUser({
+        name: decoded.name,
+        prenom: decoded.prenom
+      });
+    } catch (err) {
+      console.error("Erreur de décodage du token:", err);
     }
-  }, [token]);
+  }
+}, [token]);
 
-  // Récupérer les données
-  useEffect(() => {
-    if (!token) return;
+// Récupérer les données seulement quand userId est disponible
+useEffect(() => {
+  if (!token || !userId) return; // Ne pas exécuter si userId est null
 
-    const config = { headers: { Authorization: `Bearer ${token}` } };
+  const config = { headers: { Authorization: `Bearer ${token}` } };
 
-    const fetchData = async () => {
-      try {
-        const [statsRes, tasksRes, catsRes, userRes] = await Promise.all([
-          axios.get("http://localhost:5000/api/stats/global", config),
-          axios.get("http://localhost:5000/api/tasks/mes-taches", config),
-          axios.get("http://localhost:5000/api/documents", config),
-          axios.get(`http://localhost:5000/api/auth/users/${userId}`, config)
-        ]);
+  const fetchData = async () => {
+    try {
+      const [statsRes, tasksRes, catsRes] = await Promise.all([
+        axios.get("http://localhost:5000/api/stats/global", config),
+        axios.get("http://localhost:5000/api/tasks/mes-taches", config),
+        axios.get("http://localhost:5000/api/documents", config)
+        // Retirez la requête pour les infos utilisateur si elle n'est pas essentielle
+      ]);
 
-        setStats({
-          documents: statsRes.data.totalDocuments,
-          users: statsRes.data.totalUsers,
-          workflows: statsRes.data.totalWorkflows,
-          tasks: statsRes.data.totalTasks
-        });
+      setStats({
+        documents: statsRes.data.totalDocuments,
+        users: statsRes.data.totalUsers,
+        workflows: statsRes.data.totalWorkflows,
+        tasks: statsRes.data.totalTasks
+      });
 
-        setAssignedTasks(tasksRes.data.slice(0, 5));
-        setCategories(catsRes.data);
-        setCurrentUser(userRes.data);
-      } catch (err) {
-        console.error("Erreur lors du chargement des données:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
+      // Filtrage des tâches
+      const assignedTasks = tasksRes.data
+        .filter(task => task.assigned_to?.includes(userId) && task.status !== 'blocked' && task.status !== 'completed')
+        .slice(0, 5);
 
-    fetchData();
-  }, [token, userId]);
+      setAssignedTasks(assignedTasks);
+      setCategories(catsRes.data);
+      
+      // Utilisez les infos du token si vous n'avez pas besoin de plus de détails
+      const decoded = jwtDecode(token);
+      setCurrentUser({
+        name: decoded.name,
+        prenom: decoded.prenom
+      });
+
+    } catch (err) {
+      console.error("Erreur lors du chargement des données:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  fetchData();
+}, [token, userId]); // Dépend de userId
 
    const quickLinks = [
     { name: "Tous les documents", icon: faFileInvoice, path: "/documents" },
@@ -173,7 +203,6 @@ const Accueil = () => {
                             <span className={`task-status ${task.status}`}>
                               {task.status === 'completed' ? 'Terminée' : 'En cours'}
                             </span>
-                            <FontAwesomeIcon icon={faChevronRight} className="chevron" />
                           </div>
                         </li>
                       ))}
