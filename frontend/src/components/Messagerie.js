@@ -1,22 +1,38 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import Navbar from './Navbar';
-import { useNavigate } from 'react-router-dom';
 import Select from 'react-select';
 import 'react-toastify/dist/ReactToastify.css';
 import { jwtDecode } from 'jwt-decode';
 import { toast } from 'react-toastify';
-import { Card, Button, Form, Container, Row, Col, ListGroup, Badge, Spinner } from 'react-bootstrap';
+import { 
+  Card, 
+  Button, 
+  Form, 
+  Container, 
+  Row, 
+  Col, 
+  ListGroup, 
+  Badge, 
+  Spinner,
+  Tab,
+  Tabs
+} from 'react-bootstrap';
 
-const MessageriePage = ({ token }) => {
-  const [messages, setMessages] = useState([]);
+const API_BASE_URL = 'http://localhost:5000/api';
+
+const MessageriePage = () => {
+  const token = localStorage.getItem('token');
+  const [messages, setMessages] = useState({ received: [], sent: [] });
   const [users, setUsers] = useState([]);
   const [groups, setGroups] = useState([]);
   const [selectedRecipient, setSelectedRecipient] = useState(null);
   const [isGroupMode, setIsGroupMode] = useState(false);
   const [messageContent, setMessageContent] = useState('');
   const [activeTab, setActiveTab] = useState('inbox');
+  const [userId, setUserId] = useState(null);
+  
   const [loading, setLoading] = useState({
     messages: false,
     users: false,
@@ -24,71 +40,107 @@ const MessageriePage = ({ token }) => {
     sending: false
   });
 
+  // Décodage du token pour obtenir l'ID utilisateur
   useEffect(() => {
-    fetchAllData();
+    if (token) {
+      try {
+        const { id } = jwtDecode(token);
+        setUserId(id);
+      } catch (e) {
+        console.error('Token invalide:', e);
+        toast.error('Session invalide, veuillez vous reconnecter');
+      }
+    }
   }, [token]);
 
-  const fetchAllData = async () => {
+  // Options pour les destinataires (groupes ou utilisateurs)
+  const recipientOptions = useCallback(() => {
+    return isGroupMode
+      ? groups.map(g => ({ label: g.name, value: g.id, type: 'group' }))
+      : users.map(u => ({ 
+          label: `${u.prenom} ${u.name} (${u.role})`, 
+          value: u.id, 
+          type: 'user' 
+        }));
+  }, [isGroupMode, groups, users]);
+
+  // Messages filtrés selon l'onglet actif
+  const currentMessages = useCallback(() => {
+    return activeTab === 'sent' ? messages.sent : messages.received;
+  }, [activeTab, messages]);
+
+  // Récupération des données initiales
+  const fetchAllData = useCallback(async () => {
     try {
       setLoading(prev => ({ ...prev, messages: true, users: true, groups: true }));
       await Promise.all([fetchMessages(), fetchUsers(), fetchGroups()]);
     } catch (error) {
-      console.error("Error fetching data:", error);
+      console.error("Erreur lors du chargement des données:", error);
+      toast.error("Erreur lors du chargement des données");
     } finally {
       setLoading(prev => ({ ...prev, messages: false, users: false, groups: false }));
     }
-  };
+  }, [token]);
 
-  const fetchMessages = async () => {
+  // Récupération des messages
+  const fetchMessages = useCallback(async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/messages', {
-        headers: { Authorization: `Bearer ${token}` },
+      const res = await axios.get(`${API_BASE_URL}/messages`, {
+        headers: { Authorization: `Bearer ${token}` }
       });
-      setMessages(Array.isArray(res.data) ? res.data : []);
+      setMessages({
+        received: res.data.received || [],
+        sent: res.data.sent || []
+      });
     } catch (err) {
-      console.error("Erreur lors du fetch des messages :", err);
+      console.error("Erreur lors de la récupération des messages:", err);
       toast.error("Erreur lors du chargement des messages");
     }
-  };
+  }, [token]);
 
-  const fetchUsers = async () => {
+  // Récupération des utilisateurs
+  const fetchUsers = useCallback(async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/auth/users', {
+      const res = await axios.get(`${API_BASE_URL}/auth/users`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setUsers(Array.isArray(res.data) ? res.data : res.data.users || []);
     } catch (err) {
-      console.error("Erreur lors du fetch des utilisateurs :", err);
-      toast.error("Erreur lors du chargement des utilisateurs");
+      console.error("Erreur lors de la récupération des utilisateurs:", err);
     }
-  };
+  }, [token]);
 
-  const fetchGroups = async () => {
+  // Récupération des groupes
+  const fetchGroups = useCallback(async () => {
     try {
-      const res = await axios.get('http://localhost:5000/api/groups', {
+      const res = await axios.get(`${API_BASE_URL}/groups`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setGroups(Array.isArray(res.data) ? res.data : res.data.groups || []);
     } catch (err) {
-      console.error("Erreur lors du fetch des groupes :", err);
-      toast.error("Erreur lors du chargement des groupes");
+      console.error("Erreur lors de la récupération des groupes:", err);
     }
-  };
+  }, [token]);
 
+  // Envoi d'un nouveau message
   const handleSendMessage = async () => {
-    if (!messageContent || !selectedRecipient) return;
+    if (!messageContent || !selectedRecipient) {
+      toast.warning('Veuillez sélectionner un destinataire et écrire un message');
+      return;
+    }
 
     setLoading(prev => ({ ...prev, sending: true }));
-    const body = {
-        content: messageContent,
-        sender_id: currentUserId,
-        ...(isGroupMode
-          ? { group_id: selectedRecipient.value }
-          : { recipient_id: selectedRecipient.value }),
-      };
-      
+    
+    const messageData = {
+      content: messageContent,
+      sender_id: userId,
+      ...(isGroupMode
+        ? { group_id: selectedRecipient.value }
+        : { recipient_id: selectedRecipient.value }),
+    };
+
     try {
-      await axios.post('http://localhost:5000/api/messages', body, {
+      await axios.post(`${API_BASE_URL}/messages`, messageData, {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
@@ -98,172 +150,172 @@ const MessageriePage = ({ token }) => {
       await fetchMessages();
       toast.success("Message envoyé avec succès!");
     } catch (err) {
-      console.error("Erreur d'envoi :", err);
+      console.error("Erreur lors de l'envoi du message:", err);
       toast.error(err.response?.data?.message || "Erreur lors de l'envoi du message");
     } finally {
       setLoading(prev => ({ ...prev, sending: false }));
     }
   };
 
-  const recipientOptions = isGroupMode
-    ? groups.map((g) => ({ 
-        label: g.name, 
-        value: g.id,
-        type: 'group' 
-      }))
-    : users.map((u) => ({ 
-        label: `${u.prenom} ${u.name} (${u.role})`, 
-        value: u.id,
-        type: 'user' 
-      }));
-
-  const decodedToken = token ? jwtDecode(token) : null;
-  const currentUserId = decodedToken?.userId;
-
-  const filteredMessages = activeTab === 'sent'
-    ? messages.filter(msg => msg.sender_id === currentUserId)
-    : messages.filter(msg => msg.sender_id !== currentUserId);
+  // Effet pour charger les données au montage
+  useEffect(() => {
+    if (token) {
+      fetchAllData();
+    }
+  }, [token, fetchAllData]);
 
   return (
     <>
       <Navbar />
-      <Container fluid className="messagerie-container">
-        <Row>
-          <Col md={12}>
-            <h2 className="mb-4 border-bottom pb-2">Messagerie</h2>
+      <Container fluid className="messagerie-container py-4">
+        <Row className="mb-4">
+          <Col>
+            <h2 className="text-primary">Messagerie</h2>
+            <p className="text-muted">
+              {activeTab === 'inbox' 
+                ? 'Consultez vos messages reçus' 
+                : 'Consultez vos messages envoyés'}
+            </p>
           </Col>
         </Row>
 
-        <Row>
-          <Col md={3} className="pe-0">
-            <div className="d-flex flex-column h-100 border-end">
-              <div className="p-3 border-bottom">
-                <Button 
-                  variant={activeTab === 'inbox' ? 'primary' : 'outline-primary'} 
-                  className="w-100 mb-2" 
-                  onClick={() => setActiveTab('inbox')}
+        <Row className="g-0">
+          {/* Sidebar */}
+          <Col md={3} className="pe-3">
+            <Card className="h-100 shadow-sm">
+              <Card.Body className="d-flex flex-column">
+                {/* Onglets de navigation */}
+                <Tabs
+                  activeKey={activeTab}
+                  onSelect={(k) => setActiveTab(k)}
+                  className="mb-3"
+                  fill
                 >
-                  Boîte de réception
-                </Button>
-                <Button 
-                  variant={activeTab === 'sent' ? 'primary' : 'outline-primary'} 
-                  className="w-100" 
-                  onClick={() => setActiveTab('sent')}
-                >
-                  Messages envoyés
-                </Button>
-              </div>
+                  <Tab eventKey="inbox" title="Reçus" />
+                  <Tab eventKey="sent" title="Envoyés" />
+                </Tabs>
 
-              <div className="p-3 border-bottom">
-                <Form.Check
-                  type="switch"
-                  id="group-mode-switch"
-                  label="Envoyer à un groupe"
-                  checked={isGroupMode}
-                  onChange={() => {
-                    setIsGroupMode(!isGroupMode);
-                    setSelectedRecipient(null);
-                  }}
-                />
-                <div className="mt-2">
+                {/* Sélection du destinataire */}
+                <div className="mb-3">
+                  <Form.Check
+                    type="switch"
+                    id="group-mode-switch"
+                    label="Envoyer à un groupe"
+                    checked={isGroupMode}
+                    onChange={() => {
+                      setIsGroupMode(!isGroupMode);
+                      setSelectedRecipient(null);
+                    }}
+                    className="mb-3"
+                  />
+                  
                   {loading.users || loading.groups ? (
                     <div className="text-center py-2">
                       <Spinner animation="border" size="sm" />
                     </div>
                   ) : (
                     <Select
-                      placeholder={isGroupMode ? "Choisir un groupe" : "Choisir un contact"}
-                      options={recipientOptions}
+                      placeholder={isGroupMode ? "Choisir un groupe..." : "Choisir un contact..."}
+                      options={recipientOptions()}
                       value={selectedRecipient}
                       onChange={setSelectedRecipient}
                       className="basic-multi-select"
                       classNamePrefix="select"
                       isClearable
-                      noOptionsMessage={() => "Aucune option disponible"}
+                      noOptionsMessage={() => "Aucun résultat trouvé"}
                     />
                   )}
                 </div>
-              </div>
-            </div>
+              </Card.Body>
+            </Card>
           </Col>
 
+          {/* Zone principale */}
           <Col md={9}>
-            <div className="d-flex flex-column h-100">
-              <div className="message-list flex-grow-1 overflow-auto p-3">
+            <Card className="h-100 shadow-sm">
+              {/* Liste des messages */}
+              <Card.Body className="overflow-auto" style={{ maxHeight: '60vh' }}>
                 {loading.messages ? (
                   <div className="text-center py-5">
-                    <Spinner animation="border" />
-                    <p className="mt-2">Chargement des messages...</p>
+                    <Spinner animation="border" variant="primary" />
+                    <p className="mt-2 text-muted">Chargement des messages...</p>
                   </div>
-                ) : filteredMessages.length === 0 ? (
+                ) : currentMessages().length === 0 ? (
                   <div className="text-center text-muted py-5">
-                    <h5>Aucun message</h5>
-                    <p>{activeTab === 'inbox' ? "Vous n'avez reçu aucun message" : "Vous n'avez envoyé aucun message"}</p>
+                    <i className="bi bi-envelope-open fs-1"></i>
+                    <h5 className="mt-3">Aucun message</h5>
+                    <p>
+                      {activeTab === 'inbox' 
+                        ? "Vous n'avez reçu aucun message" 
+                        : "Vous n'avez envoyé aucun message"}
+                    </p>
                   </div>
                 ) : (
                   <ListGroup variant="flush">
-                    {filteredMessages.map((msg, index) => {
-                      const sender = users.find(u => u.id === msg.sender_id);
-                      const group = msg.group_id ? groups.find(g => g.id === msg.group_id) : null;
-                      
-                      return (
-                        <ListGroup.Item 
-                          key={index} 
-                          className={`message-item ${msg.sender_id === currentUserId ? 'sent' : 'received'}`}
-                        >
-                          <div className="d-flex justify-content-between align-items-start mb-1">
-                            <strong>
-                              {msg.sender_id === currentUserId ? 
-                                'Moi' : 
-                                (sender ? `${sender.prenom} ${sender.name}` : `Utilisateur ${msg.sender_id}`)}
+                    {currentMessages().map((msg) => (
+                      <ListGroup.Item 
+                        key={msg.id}
+                        className={`py-3 ${!msg.is_read && activeTab === 'inbox' ? 'bg-light' : ''}`}
+                      >
+                        <div className="d-flex justify-content-between align-items-start mb-2">
+                          <div>
+                            <strong className="d-block">
+                              {activeTab === 'sent'
+                                ? `À: ${msg.recipient_prenom} ${msg.recipient_name}`
+                                : `De: ${msg.sender_prenom} ${msg.sender_name}`}
                             </strong>
-                            <small className="text-muted">
-                              {new Date(msg.sent_at).toLocaleString()}
-                            </small>
+                            {msg.group_id && (
+                              <Badge bg="info" className="me-2">Groupe</Badge>
+                            )}
                           </div>
-                          <div className="message-content">
-                            {msg.content}
-                          </div>
-                          {group && (
-                            <Badge bg="secondary" className="mt-1">
-                              Groupe: {group.name}
-                            </Badge>
-                          )}
-                        </ListGroup.Item>
-                      );
-                    })}
+                          <small className="text-muted">
+                            {new Date(msg.sent_at).toLocaleString()}
+                          </small>
+                        </div>
+                        <div className="message-content ps-2 border-start border-primary">
+                          {msg.content}
+                        </div>
+                      </ListGroup.Item>
+                    ))}
                   </ListGroup>
                 )}
-              </div>
+              </Card.Body>
 
-              <div className="message-composer border-top p-3">
-                <Form.Group className="mb-3">
+              {/* Zone de composition */}
+              <Card.Footer className="bg-white border-top">
+                <Form.Group>
                   <Form.Control
                     as="textarea"
                     rows={3}
                     value={messageContent}
                     onChange={(e) => setMessageContent(e.target.value)}
                     placeholder={`Écrire un message ${isGroupMode ? 'au groupe' : ''}...`}
-                    className="mb-2"
+                    className="mb-3"
                     disabled={!selectedRecipient}
                   />
                   <div className="d-flex justify-content-end">
-                    <Button 
-                      variant="primary" 
+                    <Button
+                      variant="primary"
                       onClick={handleSendMessage}
                       disabled={!messageContent || !selectedRecipient || loading.sending}
+                      className="px-4"
                     >
                       {loading.sending ? (
                         <>
                           <Spinner animation="border" size="sm" className="me-2" />
-                          Envoi...
+                          Envoi en cours...
                         </>
-                      ) : 'Envoyer'}
+                      ) : (
+                        <>
+                          <i className="bi bi-send me-2"></i>
+                          Envoyer
+                        </>
+                      )}
                     </Button>
                   </div>
                 </Form.Group>
-              </div>
-            </div>
+              </Card.Footer>
+            </Card>
           </Col>
         </Row>
       </Container>

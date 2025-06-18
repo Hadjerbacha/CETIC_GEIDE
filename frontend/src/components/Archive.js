@@ -1,493 +1,1343 @@
-import React, { useEffect, useState } from 'react';
-import { 
-  Table, Card, Button, Badge, Form, Modal, Spinner, 
-  Pagination, Dropdown, Accordion, Tab, Tabs 
-} from 'react-bootstrap';
+import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import { format, parseISO } from 'date-fns';
-import { fr } from 'date-fns/locale';
-import { toast } from 'react-toastify';
-import { FiDownload, FiSearch, FiFilter, FiPrinter, FiFileText } from 'react-icons/fi';
+import { Card, Spinner, Tooltip, OverlayTrigger, Container, Row, Col, Button, Form, Table, Alert, InputGroup, FormControl, Modal } from 'react-bootstrap';
+import 'bootstrap/dist/css/bootstrap.min.css';
 import Navbar from './Navbar';
-import { jsPDF } from 'jspdf';
+import { useNavigate } from 'react-router-dom';
+import Select from 'react-select';
+import 'react-toastify/dist/ReactToastify.css';
+import shareIcon from './img/share.png';
+import { jwtDecode } from 'jwt-decode';
+import { toast } from 'react-toastify';
+import { FaCloudUploadAlt } from 'react-icons/fa';
+import Tesseract from 'tesseract.js';
+import { getDocument } from 'pdfjs-dist/webpack'; // Importer getDocument depuis pdfjs-dist
+import { pdfjs } from 'pdfjs-dist/webpack';
+import importDoc from './img/importDoc.jpg';
+import importFolder from './img/importFolder.jpg';
+import { Dropdown, ButtonGroup } from 'react-bootstrap';
+import { FaUpload, FaFileUpload, FaFolderOpen } from 'react-icons/fa';
 
-const ArchivePage = () => {
-  const [archives, setArchives] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedArchive, setSelectedArchive] = useState(null);
+
+const Doc = () => {
+  const [errorMessage, setErrorMessage] = useState('');
+  const [documents, setDocuments] = useState([]);
+  const [savedDocuments, setSavedDocuments] = useState([]);
+  const [pendingName, setPendingName] = useState('');
+  const [pendingFile, setPendingFile] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [filterType, setFilterType] = useState('Tous les documents');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [useAdvancedFilter, setUseAdvancedFilter] = useState(false);
+  const [collectionName, setCollectionName] = useState('');
+  const [collections, setCollections] = useState([]);
+  const [isSavingCollection, setIsSavingCollection] = useState(false);
+  const [selectedExistingCollection, setSelectedExistingCollection] = useState('');
+  const [selectedVersion, setSelectedVersion] = useState(null);
+  const [users, setUsers] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);
+  const [description, setDescription] = useState('');
+  const [showConflictPrompt, setShowConflictPrompt] = useState(false);
+  const [conflictingDocName, setConflictingDocName] = useState('');
+  const [forceUpload, setForceUpload] = useState(false);
+  const [tags, setTags] = useState([]);
+  const [priority, setPriority] = useState('');
+  const [accessType, setAccessType] = useState('private');
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [docToShare, setDocToShare] = useState(null);
+  const [shareAccessType, setShareAccessType] = useState('private');
+  const [shareUsers, setShareUsers] = useState([]);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [modalDoc, setModalDoc] = useState(null);
+  const [autoWfName, setAutoWfName] = useState('');
+  const [showUploadForm, setShowUploadForm] = useState(false);
+  const [allowedUsers, setAllowedUsers] = useState([]);
+  const [selectedDoc, setSelectedDoc] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(10);
-  const [sortConfig, setSortConfig] = useState({ key: 'completed_at', direction: 'desc' });
-  const [filters, setFilters] = useState({
-    dateRange: null,
-    reportType: 'all'
+  const [existingWorkflow, setExistingWorkflow] = useState(null);
+  const categories = ['Contrat', 'Mémoire', 'Article', 'Rapport', 'facture', 'cv', 'demande_conge'];
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [categoryClickCount, setCategoryClickCount] = useState(0);
+  const [summary, setSummary] = useState('');
+  const [access, setAccess] = useState('private');
+  const [selectedUsers, setSelectedUsers] = useState([]);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [allGroups, setAllGroups] = useState([]);  // Liste des groupes
+  const [selectedGroup, setSelectedGroup] = useState(null); // Groupe sélectionné
+  const [category, setCategory] = useState('');
+  const [myPermissions, setMyPermissions] = useState(null);
+  const [conflictingDoc, setConflictingDoc] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [step, setStep] = useState(1); // pour gérer les étapes (1 = fichier, 2 = détails)
+  const [documentId, setDocumentId] = useState(null); // ID du document renvoyé par le backend
+  const [searchFilters, setSearchFilters] = useState({});
+  const [showFilterCard, setShowFilterCard] = useState(false);
+  const [showUploadFolderForm, setShowUploadFolderForm] = useState(false);
+  const [uploadType, setUploadType] = useState(null);
+  const [folderFiles, setFolderFiles] = useState([]);
+  const [folderName, setFolderName] = useState('');
+  const [folderDescription, setFolderDescription] = useState('');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [parentId, setParentId] = useState(null);
+  const btnRefs = useRef({});
+
+  useEffect(() => {
+    const activeBtn = btnRefs.current[selectedCategory || ''];
+    const highlight = document.querySelector('.category-highlight');
+    if (activeBtn && highlight) {
+      const { offsetLeft, offsetWidth } = activeBtn;
+      highlight.style.transform = `translateX(${offsetLeft}px)`;
+      highlight.style.width = `${offsetWidth}px`;
+    }
+  }, [selectedCategory]);
+
+
+
+
+
+
+
+  const [permissions, setPermissions] = useState({
+    consult: true,  // toujours activé
+    modify: true,
+    delete: true,
+    share: true,
   });
 
-  // Fetch archives with filters
-  const fetchArchives = async () => {
-    setLoading(true);
-    try {
-      const token = localStorage.getItem('token');
-      const params = {
-        page: currentPage,
-        limit: itemsPerPage,
-        search: searchTerm,
-        sort: `${sortConfig.key},${sortConfig.direction}`,
-        ...filters,
-        include: 'tasks,document'
-      };
-  
-      const res = await axios.get('http://localhost:5000/api/workflows/archives', {
-        params,
-        headers: { Authorization: `Bearer ${token}` }
+  useEffect(() => {
+    if (accessType === "private") {
+      setPermissions({
+        consult: true,
+        modify: true,
+        delete: true,
+        share: true,
       });
-  
-      setArchives(res.data);
-    } catch (err) {
-      handleFetchError(err);
-    } finally {
-      setLoading(false);
+    } else {
+      setPermissions({
+        ...permissions,
+        modify: false,
+        delete: false,
+        share: false,
+      });
     }
+  }, [accessType]);
+
+
+  const GROUPS_API = 'http://localhost:5000/api/groups';
+
+
+  const [formData, setFormData] = useState({
+    documentName: '',
+    category: '',
+    file: null,
+    accessType: 'private',
+    users: [],
+  });
+
+  const token = localStorage.getItem('token');
+  const [isSaving, setIsSaving] = useState(false);
+  const navigate = useNavigate();
+  const [userId, setUserId] = useState(null);
+
+  // Ajoutez ce state en haut du composant
+  const [userRole, setUserRole] = useState('');
+
+  // Modifiez le useEffect pour récupérer le rôle
+  useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+        const { id, role } = jwtDecode(token);
+        setUserId(id);
+        setUserRole(role);
+      } catch (e) {
+        console.error('Token invalide:', e);
+      }
+    }
+  }, []);
+
+  const openShareModal = (doc) => {
+    setDocToShare(doc);
+    setShareAccessType(doc.access || 'private');
+    setShareUsers(doc.allowedUsers || []);
+    setShowShareModal(true);
   };
 
-  const handleFetchError = (err) => {
-    console.error('Erreur:', err);
-    if (err.response?.status === 401) {
-      localStorage.removeItem('token');
-      window.location.href = '/login';
-    } else {
-      toast.error(err.response?.data?.message || 'Erreur lors du chargement des archives');
+  const fetchDocuments = async () => {
+    try {
+      const res = await fetch('http://localhost:5000/api/documents/archive', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (res.status === 401) throw new Error('Non autorisé');
+      const data = await res.json();
+      if (Array.isArray(data)) {
+        setDocuments(data);
+        const names = data.map(doc => doc.collectionName).filter(name => name && typeof name === 'string');
+        setCollections([...new Set(names)]);
+      } else {
+        console.error('Données invalides:', data);
+        setDocuments([]);
+        setCollections([]);
+      }
+    } catch (err) {
+      console.error('Erreur chargement documents:', err);
+      setErrorMessage("Erreur d'autorisation ou de connexion.");
     }
   };
 
   useEffect(() => {
-    fetchArchives();
-  }, [currentPage, searchTerm, sortConfig, filters]);
+    fetchDocuments();
+    fetchUsers();
+    fetchGroups();
+  }, [token]);
 
-  // Sort data
-  const requestSort = (key) => {
-    let direction = 'asc';
-    if (sortConfig.key === key && sortConfig.direction === 'asc') {
-      direction = 'desc';
-    }
-    setSortConfig({ key, direction });
-  };
-
-  // Download report
-  const downloadReport = async (archive, fileFormat = 'pdf') => {
+  const fetchUsers = async () => {
     try {
-      if (fileFormat === 'pdf') {
-        await generateAndDownloadPdf(archive);
-      } else {
-        downloadTextReport(archive);
-      }
-    } catch (error) {
-      console.error('Error generating report:', error);
-      toast.error('Erreur lors de la génération du rapport');
+      const res = await axios.get('http://localhost:5000/api/auth/users/');
+      const formatted = res.data.map(u => ({ value: u.id, label: `${u.name} ${u.prenom}` }));
+      setUsers(formatted);
+      setAllUsers(formatted);
+    } catch (err) {
+      console.error('Erreur chargement des utilisateurs', err);
     }
   };
 
-  // Download text report
-  const downloadTextReport = (archive) => {
-    const content = archive.validation_report || 'Aucun rapport disponible';
-    const element = document.createElement('a');
-    const file = new Blob([content], {type: 'text/plain'});
-    element.href = URL.createObjectURL(file);
-    element.download = `rapport_${archive.document_id}_${format(parseISO(archive.completed_at), 'yyyy-MM-dd')}.txt`;
-    document.body.appendChild(element);
-    element.click();
-    setTimeout(() => {
-      URL.revokeObjectURL(element.href);
-      document.body.removeChild(element);
-    }, 100);
+  const fetchGroups = async () => {
+    try {
+      const res = await axios.get(GROUPS_API);
+      setAllGroups(res.data); // Remplir la liste des groupes
+    } catch (err) {
+      console.error('Erreur récupération groupes:', err);
+    }
   };
 
-  // Generate and download PDF report
-  const generateAndDownloadPdf = async (archive) => {
-    const doc = new jsPDF();
-    const marginLeft = 14;
-    let yPosition = 20;
-  
-    // Configuration générale
-    doc.setFont('Times', 'normal');
-    doc.setFontSize(18);
-    doc.text('RAPPORT DE VALIDATION', 105, yPosition, { align: 'center' });
-  
-    yPosition += 10;
-    doc.setFontSize(12);
-    if (archive.automated) {
-      doc.setTextColor(100);
-      doc.text('⚙️  Ce workflow a été complété automatiquement.', 105, yPosition, { align: 'center' });
-      doc.setTextColor(0, 0, 0);
-      yPosition += 10;
-    }
-  
-    // ✳️ Introduction
-    const intro = `
-  Le document intitulé "${archive.document?.name || 'Non spécifié'}" a été validé via le workflow "${archive.name}".
-  Ce processus, destiné à assurer la conformité et la traçabilité des actions réalisées, a été mené à son terme avec succès le ${format(parseISO(archive.completed_at), 'PPPP', { locale: fr })}.
-  Le présent rapport fournit une vue complète sur le document, son cheminement, et les actions effectuées.`;
-  
-    const splitIntro = doc.splitTextToSize(intro, 180);
-    doc.setFontSize(12);
-    doc.text(splitIntro, marginLeft, yPosition);
-    yPosition += splitIntro.length * 7;
-  
-    // 📌 Section 1 - Informations Générales
-    yPosition += 5;
-    doc.setFontSize(14);
-    doc.text('1. Informations Générales', marginLeft, yPosition);
-    doc.setFontSize(12);
-    yPosition += 8;
-  
-    const formatDate = (dateStr) => format(parseISO(dateStr), 'PPpp', { locale: fr });
-  
-    const infoLines = [
-      `🔹 Workflow : ${archive.name || 'Non spécifié'}`,
-      `🔹 ID Document : DOC-${archive.document_id}`,
-      `🔹 Statut : ${archive.status}`,
-      `🔹 Date de création : ${formatDate(archive.workflow_created_at)}`,
-      `🔹 Date d'achèvement : ${formatDate(archive.completed_at)}`,
-      `🔹 Durée totale : ${archive.stats?.workflow_duration || 'N/A'} jours`
-    ];
-    infoLines.forEach(line => {
-      doc.text(line, marginLeft, yPosition);
-      yPosition += 7;
-    });
-  
-    // 📄 Section 2 - Détails du Document
-    yPosition += 5;
-    doc.setFontSize(14);
-    doc.text('2. Détails du Document', marginLeft, yPosition);
-    doc.setFontSize(12);
-    yPosition += 8;
-  
-    const docDetails = [
-      `Nom : ${archive.document?.name || 'Non spécifié'}`,
-      `Type : ${archive.document?.category || 'Non spécifié'}`,
-      `Description : ${archive.document?.description || 'Non spécifié'}`,
-      `Priorité : ${archive.document?.priority || 'Non spécifié'}`,
-      `Tags : ${archive.document?.tags?.join(', ') || 'Aucun'}`
-    ];
-    docDetails.forEach(line => {
-      doc.text(line, marginLeft, yPosition);
-      yPosition += 7;
-    });
-  
-    // ✅ Section 3 - Parcours des Tâches
-    yPosition += 5;
-    doc.setFontSize(14);
-    doc.text('3. Parcours des Tâches', marginLeft, yPosition);
-    doc.setFontSize(12);
-    yPosition += 8;
-  
-    if (archive.tasks && archive.tasks.length > 0) {
-      archive.tasks.forEach((task, index) => {
-        if (yPosition > 250) {
-          doc.addPage();
-          yPosition = 20;
-        }
-  
-        doc.text(`🔸 Tâche ${index + 1} : ${task.title}`, marginLeft, yPosition);
-        yPosition += 7;
-        const taskLines = [
-          `- Statut : ${task.status}`,
-          `- Priorité : ${task.priority}`,
-          `- Assigné à : ${task.assigned_usernames || task.assigned_to?.join(', ') || 'Non assigné'}`,
-          `- Date de création : ${formatDate(task.created_at)}`,
-          `- Échéance : ${task.due_date ? formatDate(task.due_date) : 'Non spécifiée'}`,
-          `- Description : ${task.description || 'Aucune description'}`,
-          `- Note d'assignation : ${task.assignment_note || 'Aucune note'}`,
-          task.file_path ? `- Fichier joint : ${task.file_path}` : null
-        ];
-        taskLines.filter(Boolean).forEach(line => {
-          doc.text(line, marginLeft + 6, yPosition);
-          yPosition += 6;
-        });
-  
-        yPosition += 4;
+  const consultDocument = url => {
+    window.open(`http://localhost:5000${url}`, '_blank');
+  };
+
+  const handleDelete = async id => {
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce document ?')) return;
+    try {
+      await fetch(`http://localhost:5000/api/documents/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
       });
-    } else {
-      doc.text('Aucune tâche enregistrée pour ce workflow.', marginLeft, yPosition);
-      yPosition += 12;
+      setDocuments(docs => docs.filter(d => d.id !== id));
+      setSavedDocuments(docs => docs.filter(d => d.id !== id));
+    } catch (err) {
+      console.error('Erreur suppression:', err);
     }
-  
-    // 📌 Section 4 - Conclusion
-    yPosition += 5;
-    doc.setFontSize(14);
-    doc.text('4. Conclusion', marginLeft, yPosition);
-    yPosition += 8;
-    doc.setFontSize(12);
-  
-    const conclusion = `
-  Le présent document atteste de la validation officielle du workflow mentionné, selon les critères établis. Il peut être utilisé comme preuve en cas d’audit ou de contrôle de conformité interne.`;
-  
-    const splitConclusion = doc.splitTextToSize(conclusion, 180);
-    doc.text(splitConclusion, marginLeft, yPosition);
-  
-    // 💾 Sauvegarde
-    doc.save(`rapport_${archive.document_id}_${format(parseISO(archive.completed_at), 'yyyy-MM-dd')}.pdf`);
-  };
-  // Export all to CSV
-  const exportAllToCSV = () => {
-    const headers = ['ID', 'Document', 'Workflow', 'Date achèvement', 'Statut'];
-    const csvContent = [
-      headers.join(','),
-      ...archives.map(a => [
-        a.id,
-        `DOC-${a.document_id}`,
-        `"${a.name}"`,
-        format(parseISO(a.completed_at), 'yyyy-MM-dd'),
-        a.status
-      ].join(','))
-    ].join('\n');
-
-    const element = document.createElement('a');
-    const file = new Blob([csvContent], {type: 'text/csv'});
-    element.href = URL.createObjectURL(file);
-    element.download = `archives_${format(new Date(), 'yyyy-MM-dd')}.csv`;
-    document.body.appendChild(element);
-    element.click();
   };
 
-  // Restore archive
-  const restoreArchive = async (archiveId) => {
-    if (window.confirm('Voulez-vous vraiment restaurer ce workflow?')) {
-      try {
-        await axios.post(`/api/workflows/archives/${archiveId}/restore`, {}, {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
-        });
-        toast.success('Workflow restauré avec succès');
-        fetchArchives();
-      } catch (err) {
-        handleFetchError(err);
+  const handleUpload = async () => {
+    if (!pendingFile || !pendingName) {
+      setErrorMessage('Veuillez remplir tous les champs requis.');
+      return;
+    }
+
+    if (pendingFile.size > 100 * 1024 * 1024) {
+      setErrorMessage('La vidéo dépasse la limite de 100 Mo.');
+      return;
+    }
+
+
+    const existingDoc = documents.find(doc => doc.name === pendingName);
+
+    if (existingDoc && !forceUpload) {
+      const isAllowedToModify =
+
+        userRole === 'admin' ||
+        existingDoc.owner_id === userId ||
+        (existingDoc.permissions && existingDoc.permissions.can_modify);
+
+      if (isAllowedToModify) {
+        // Afficher le prompt de confirmation
+        setConflictingDocName(pendingName);
+        setConflictingDoc(existingDoc);
+        setShowConflictPrompt(true);
+        return;
+      } else {
+        setErrorMessage("⚠️ Un document avec ce nom existe déjà. Vous n'avez pas les droits pour le modifier.");
+        return;
       }
     }
+
+    const formData = new FormData();
+    formData.append('name', pendingName);
+    formData.append('file', pendingFile);
+    formData.append('visibility', accessType);
+    formData.append('access', accessType);
+    formData.append('collectionName', collectionName || '');
+    formData.append('summary', description || '');
+    formData.append('prio', priority || '');
+    formData.append('can_modify', permissions.modify);
+    formData.append('can_delete', permissions.delete);
+    formData.append('can_share', permissions.share);
+
+    const parsedTags =
+      Array.isArray(tags)
+        ? tags
+        : typeof tags === 'string'
+          ? tags.split(',').map(tag => tag.trim()).filter(Boolean)
+          : [];
+    formData.append('tags', JSON.stringify(parsedTags));
+
+    const allowedIds = allowedUsers.map(u => u?.id || u).filter(Boolean);
+    formData.append('id_share', JSON.stringify(allowedIds));
+
+    const groupIds = selectedGroup ? [selectedGroup] : [];
+    formData.append('id_group', JSON.stringify(groupIds));
+
+    if (forceUpload) {
+      formData.append('isNewVersion', 'true');
+    }
+
+    try {
+      const res = await fetch('http://localhost:5000/api/documents/', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (!res.ok) throw new Error(`Erreur : ${res.status}`);
+      const newDoc = await res.json();
+      setDocuments(prev => [newDoc, ...prev]);
+
+      // Réinitialisation
+      setPendingFile(null);
+      setPendingName('');
+      setCategory('');
+      setCollectionName('');
+      setForceUpload(false);
+      setShowConflictPrompt(false);
+      setConflictingDocName('');
+      setConflictingDoc(null);
+      setErrorMessage(null);
+
+    } catch (err) {
+      console.error('❌ Erreur upload :', err);
+      setErrorMessage("Erreur lors de l'envoi du document.");
+    }
   };
+
+  const handleNextStep = async () => {
+    if (!pendingFile) {
+      setErrorMessage('Veuillez sélectionner un fichier.');
+      return;
+    }
+
+    if (pendingFile.size > 100 * 1024 * 1024) {
+      setErrorMessage('La vidéo dépasse la limite de 100 Mo.');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', pendingFile);
+    formData.append('visibility', accessType);
+    formData.append('access', accessType);
+    formData.append('can_modify', permissions.modify);
+    formData.append('can_delete', permissions.delete);
+    formData.append('can_share', permissions.share);
+
+    const allowedIds = allowedUsers.map(u => u?.id || u).filter(Boolean);
+    formData.append('id_share', JSON.stringify(allowedIds));
+
+    const groupIds = selectedGroup ? [selectedGroup] : [];
+    formData.append('id_group', JSON.stringify(groupIds));
+
+    try {
+      const res = await fetch('http://localhost:5000/api/documents', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      if (!res.ok) throw new Error(`Erreur upload fichier : ${res.status}`);
+      const data = await res.json();
+
+      setDocumentId(data.id); // ou data.document_id selon ce que tu retournes
+      setStep(2); // Facultatif maintenant
+      setShowUploadForm(false); // ferme le modal
+
+      // Rediriger vers la page de complétion
+      navigate(`/document/${data.id}/complete`);
+    } catch (err) {
+      console.error("Erreur lors de l'envoi du fichier :", err);
+      setErrorMessage("Erreur lors de l'envoi du fichier.");
+    }
+  };
+
+
+  const latestDocs = Object.values(
+    documents.reduce((acc, doc) => {
+      // Utilise original_id s'il existe, sinon fallback sur name
+      const key = doc.original_id || doc.name.toLowerCase().trim();
+      if (!acc[key] || doc.version > acc[key].version) {
+        acc[key] = doc;
+      }
+      return acc;
+    }, {})
+  );
+
+  const filteredDocuments = latestDocs.filter((doc) => {
+    const docName = doc.name || '';
+    const docFilePath = doc.file_path || '';
+    const docDate = doc.date ? new Date(doc.date) : null;
+    const docContent = doc.text_content || '';
+    const docCategory = doc.category || '';
+    const docSummary = doc.summary || '';
+    const docDescription = doc.description || '';
+    const docTags = Array.isArray(doc.tags) ? doc.tags : [];
+    const docFolder = doc.folder || '';
+    const docAuthor = doc.author || '';
+
+    const fileExtension = docFilePath.split('.').pop().toLowerCase();
+
+    // Filtrage général par type (extension)
+    const matchesType =
+      filterType === 'Tous les documents' ||
+      fileExtension === filterType.toLowerCase();
+
+    // Filtrage général par date
+    const matchesDate =
+      (!startDate || (docDate && docDate >= new Date(startDate))) &&
+      (!endDate || (docDate && docDate <= new Date(endDate)));
+
+    // Recherche globale simple ou avancée (sur contenu, résumé, description, etc.)
+    const searchLower = searchQuery.toLowerCase();
+    const matchesSearch = useAdvancedFilter
+      ? (
+        docContent.toLowerCase().includes(searchLower) ||
+        docSummary.toLowerCase().includes(searchLower) ||
+        docDescription.toLowerCase().includes(searchLower) ||
+        docFolder.toLowerCase().includes(searchLower) ||
+        docAuthor.toLowerCase().includes(searchLower) ||
+        docTags.some(tag => tag.toLowerCase().includes(searchLower))
+      )
+      : docName.toLowerCase().includes(searchLower);
+
+    // Vérification de la catégorie sélectionnée
+    const matchesCategory =
+      !selectedCategory || selectedCategory === '' ||
+      (docCategory && docCategory.toLowerCase() === selectedCategory.toLowerCase());
+
+
+    console.log("nom_candidat ➡️", doc.metadata?.nom_candidat);
+
+    // Filtrage avancé spécifique aux catégories métier
+    const matchesAdvancedCategory = (() => {
+      if (selectedCategory === 'facture') {
+        const numeroMatch = !searchFilters.numero_facture || (doc.numero_facture && doc.numero_facture.includes(searchFilters.numero_facture));
+        const montantMatch = !searchFilters.montant || (doc.montant && Number(doc.montant) === Number(searchFilters.montant));
+        const dateFactureMatch = !searchFilters.date_facture || (doc.date_facture && new Date(doc.date_facture).toISOString().split('T')[0] === searchFilters.date_facture);
+        return numeroMatch && montantMatch && dateFactureMatch;
+      }
+
+      if (selectedCategory === 'cv') {
+        // Assure-toi que doc a bien les champs spécifiques au CV
+        const nomMatch = !searchFilters.nom_candidat || (doc.nom_candidat && doc.nom_candidat.toLowerCase().includes(searchFilters.nom_candidat.toLowerCase()));
+        const metierMatch = !searchFilters.metier || (doc.metier && doc.metier.toLowerCase().includes(searchFilters.metier.toLowerCase()));
+        const dateCvMatch = !searchFilters.date_cv || (doc.date_cv && new Date(doc.date_cv).toISOString().split('T')[0] === searchFilters.date_cv);
+        return nomMatch && metierMatch && dateCvMatch;
+      }
+
+      if (selectedCategory === 'demande_conge') {
+        const numDemandeMatch = !searchFilters.numdemande || (doc.numdemande && doc.numdemande.includes(searchFilters.numdemande));
+        const dateCongeMatch = !searchFilters.dateconge || (doc.dateconge && new Date(doc.dateconge).toISOString().split('T')[0] === searchFilters.dateconge);
+        return numDemandeMatch && dateCongeMatch;
+      }
+
+      // Si aucune catégorie spécifique, on passe
+      return true;
+    })();
+
+    // Résultat final, tous les filtres doivent passer
+    return matchesType && matchesDate && matchesSearch && matchesCategory && matchesAdvancedCategory;
+  });
+
+  const handleOpenConfirm = async (doc) => {
+    setModalDoc(doc);
+    setAutoWfName(`WF_${doc.name}`);
+
+    try {
+      const res = await axios.get(
+        `http://localhost:5000/api/workflows/document/${doc.id}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setExistingWorkflow(res.data.exists ? res.data.workflow : null);
+      setShowConfirmModal(true);
+
+    } catch (err) {
+      console.error('Erreur vérification workflow:', err);
+
+      if (err.response?.status === 500) {
+        toast.error("Erreur serveur lors de la vérification des workflows");
+      } else {
+        toast.error("Erreur de connexion");
+      }
+
+      setExistingWorkflow(null);
+      setShowConfirmModal(true);
+    }
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files.length > 0) {
+      setPendingFile(e.target.files[0]);
+    }
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    console.log('Form data:', formData);
+  };
+
+  const handleConfirmCreate = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const todayISO = new Date().toISOString().slice(0, 10);
+
+      // 1. Créer le workflow
+      const res = await axios.post(
+        'http://localhost:5000/api/workflows',
+        {
+          documentId: modalDoc.id,
+          name: autoWfName,
+          status: 'pending',
+          template: modalDoc.category,
+          created_by: userId,
+          echeance: todayISO
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      // 2. Générer les tâches selon le type de document
+      await axios.post(
+        `http://localhost:5000/api/workflows/${res.data.id}/generate-from-template`,
+        { documentType: modalDoc.category },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      toast.success('Workflow créé avec les tâches appropriées !');
+      setShowConfirmModal(false);
+      navigate(`/workflowz/${res.data.id}`, { state: { document: modalDoc } });
+    } catch (err) {
+      console.error(err);
+      toast.error('Erreur lors de la création du workflow');
+    }
+  };
+
+  const checkWorkflowExists = async () => {
+    const token = localStorage.getItem('token');
+    try {
+      const res = await axios.get(
+        `http://localhost:5000/api/workflows/document/${modalDoc.id}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.data.exists) {
+        setExistingWorkflow(res.data.workflow);
+      } else {
+        setExistingWorkflow(null);
+      }
+      setShowConfirmModal(true);
+    } catch (err) {
+      console.error(err);
+      toast.error("Erreur lors de la vérification du workflow");
+    }
+  };
+
+  const handleCategoryClick = async (category) => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/documents?category=${category}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) throw new Error(`Erreur : ${res.status}`);
+      const data = await res.json();
+      setDocuments(data); // Remplacer la liste actuelle par les documents filtrés
+    } catch (err) {
+      console.error('Erreur chargement catégorie :', err);
+      setErrorMessage('Impossible de charger les documents pour cette catégorie.');
+    }
+  };
+  
+  
+    const handleUpdatePermissions = async () => {
+      try {
+        const payload = {
+          visibility: shareAccessType === 'public' ? 'public' : 'custom',
+          id_share: selectedUsers.length > 0 ? selectedUsers[0] : null, // ou gérer plusieurs
+          id_group: selectedGroup || null
+        };
+  
+        await axios.post(`http://localhost:5000/api/documents/${docToShare.id}/share`, payload, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+  
+        toast.success('Permissions mises à jour avec succès !');
+        setShowShareModal(false);
+      } catch (error) {
+        console.error('Erreur de mise à jour des permissions :', error);
+        toast.error('Échec de mise à jour des permissions.');
+      }
+    };
+  
+    const handlePermissionChange = (type) => (e) => {
+      const checked = e.target.checked;
+      setPermissions((prev) => ({
+        ...prev,
+        consult: true,
+        [type]: checked,
+      }));
+    };
+
+
+  const [permissionsByDoc, setPermissionsByDoc] = useState({});
+
+  const fetchPermissions = async (documentId) => {
+    try {
+      const res = await fetch(`http://localhost:5000/api/documents/${documentId}/my-permissions`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+
+      if (!res.ok) throw new Error("Accès refusé");
+
+      const data = await res.json();
+
+      setPermissionsByDoc((prev) => ({
+        ...prev,
+        [documentId]: data,
+      }));
+    } catch (err) {
+      setPermissionsByDoc((prev) => ({
+        ...prev,
+        [documentId]: null,
+      }));
+    }
+  };
+  useEffect(() => {
+    documents.forEach(doc => {
+      if (!permissionsByDoc[doc.id]) {
+        fetchPermissions(doc.id);
+      }
+    });
+  }, [documents]);
+
+  const handleAdvancedSearch = async () => {
+    try {
+      const res = await axios.get(`http://localhost:5000/api/documents/search`, {
+        params: {
+          category: selectedCategory,
+          ...searchFilters
+        },
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      // ➕ setDocuments(res.data); // ou setFilteredDocuments
+      console.log('Résultats :', res.data);
+    } catch (err) {
+      console.error('Erreur recherche avancée :', err);
+    }
+  };
+
+  const handleCategoryButtonClick = (cat) => {
+    if (selectedCategory === cat) {
+      // Si on reclique sur la même catégorie
+      setShowAdvancedFilters(prev => !prev);
+    } else {
+      // Si on clique sur une autre catégorie, on change sans afficher le filtre
+      setSelectedCategory(cat);
+      setShowAdvancedFilters(false);
+    }
+  };
+
+  const handleFolderUpload = async () => {
+    const formData = new FormData();
+
+    folderFiles.forEach((file) => {
+      formData.append('files', file);
+    });
+
+    formData.append('name', folderName);           // ✔️ nom du dossier
+    formData.append('description', folderDescription); // ✔️ description
+    if (userId) {
+      formData.append('userId', userId);           // ✔️ optionnel mais utile
+    }
+
+    try {
+      const token = localStorage.getItem('token'); // si besoin
+      const res = await axios.post('http://localhost:5000/api/folders', formData, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      const { folderId } = res.data;
+      navigate(`/folder/${folderId}`);
+    } catch (error) {
+      console.error('Erreur upload dossier :', error);
+    }
+  };
+
+  const handleUnarchive = async (docId) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/documents/${docId}/affiche`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ is_archived: false }) // 👈 ici on désarchive
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error('Erreur API:', data);
+        throw new Error(data.message || 'Erreur lors du désarchivage');
+      }
+
+      alert('Document désarchivé avec succès ✅');
+    } catch (error) {
+      console.error('Erreur frontend:', error);
+      alert('Une erreur est survenue ❌');
+    }
+  };
+
+
 
   return (
-    <><Navbar />
-    <div className="container-fluid py-4">
-      <Card>
-        <Card.Header className="d-flex justify-content-between align-items-center flex-wrap">
-          <div className="d-flex align-items-center mb-2 mb-md-0">
-            <h4 className="mb-0 me-3">Archives des Workflows</h4>
-          </div>
-          
-          <div className="d-flex flex-wrap gap-2">
-            <div className="position-relative">
-              <FiSearch className="position-absolute top-50 start-0 translate-middle-y ms-3 text-muted" />
-              <Form.Control
-                type="search"
-                placeholder="Rechercher..."
-                style={{ width: '250px', paddingLeft: '2.5rem' }}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
-            </div>
-            
-            <Dropdown>
-              <Dropdown.Toggle variant="outline-secondary">
-                <FiFilter className="me-1" /> Filtres
-              </Dropdown.Toggle>
-              <Dropdown.Menu>
-                <Dropdown.ItemText>Filtrer par :</Dropdown.ItemText>
-                <Form.Group className="px-3 py-2">
-                  <Form.Label>Date</Form.Label>
-                  <Form.Control 
-                    type="date" 
-                    onChange={(e) => setFilters({...filters, dateRange: e.target.value})}
-                  />
-                </Form.Group>
-                <Form.Group className="px-3 py-2">
-                  <Form.Label>Type de rapport</Form.Label>
-                  <Form.Select 
-                    onChange={(e) => setFilters({...filters, reportType: e.target.value})}
-                  >
-                    <option value="all">Tous</option>
-                    <option value="with_report">Avec rapport</option>
-                    <option value="without_report">Sans rapport</option>
-                  </Form.Select>
-                </Form.Group>
-              </Dropdown.Menu>
-            </Dropdown>
-            
-            <Dropdown>
-              <Dropdown.Toggle variant="outline-primary">
-                <FiDownload className="me-1" /> Exporter
-              </Dropdown.Toggle>
-              <Dropdown.Menu>
-                <Dropdown.Item onClick={exportAllToCSV}>CSV complet</Dropdown.Item>
-                <Dropdown.Item onClick={() => exportAllToCSV()}>PDF sélection</Dropdown.Item>
-              </Dropdown.Menu>
-            </Dropdown>
-          </div>
-        </Card.Header>
-        
-        <Card.Body>
-          {loading ? (
-            <div className="text-center py-5">
-              <Spinner animation="border" variant="primary" />
-              <p className="mt-2">Chargement des archives...</p>
-            </div>
-          ) : archives.length === 0 ? (
-            <div className="text-center py-5">
-              <FiFileText size={48} className="text-muted mb-3" />
-              <h5>Aucune archive trouvée</h5>
-              <p className="text-muted">Aucun workflow n'a été archivé pour le moment</p>
-            </div>
-          ) : (
-            <>
-              <div className="table-responsive" style={{ overflow: 'visible', position: 'relative' }}>
+    <>
+      <Navbar />
+      <div className="container-fluid">
+        <Row className="my-3">
+          <Col md={4}><Form.Control type="text" placeholder="Rechercher..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} /></Col>
+          <Col md={2}>
+            <Form.Select value={filterType} onChange={e => setFilterType(e.target.value)}>
+              <option value="Tous les documents">Tous</option>
+              <option value="pdf">PDF</option>
+              <option value="docx">Word</option>
+              <option value="jpg">Images</option>
+              <option value="mp4">Vidéo (MP4)</option>
+              <option value="webm">Vidéo (WebM)</option>
+            </Form.Select>
 
-                <Table striped hover>
+          </Col>
+
+          <Col md={2}><Form.Control type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /></Col>
+          <Col md={2}><Form.Control type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></Col>
+          <Col md={2}><Button variant={useAdvancedFilter ? 'danger' : 'success'} onClick={() => setUseAdvancedFilter(!useAdvancedFilter)}>
+            {useAdvancedFilter ? 'Désactiver Avancé' : 'Recherche Avancée'}
+          </Button></Col>
+        </Row>
+        <br />
+
+        <Container fluid className="d-flex justify-content-center">
+          <Card className="w-100 border border-transparent">
+            <Card.Body>
+              <br />
+              {showAdvancedFilters && (
+                <div className="filter-container mt-3">
+                  <Card className="filter-card mt-3">
+                    {selectedCategory === 'demande_conge' && (
+                      <>
+                        <h5 className="mb-3">🔎 Recherche avancée - Demande de congé</h5>
+                        <Form>
+                          <div className="d-flex align-items-end gap-3 flex-wrap">
+                            <Form.Group className="mb-0">
+                              <Form.Label>Numéro demande</Form.Label>
+                              <Form.Control
+                                type="text"
+                                value={searchFilters.numdemande || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, numdemande: e.target.value })}
+                              />
+                            </Form.Group>
+                            <Form.Group className="mb-0">
+                              <Form.Label>Date congé</Form.Label>
+                              <Form.Control
+                                type="date"
+                                value={searchFilters.dateconge || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, dateconge: e.target.value })}
+                              />
+                            </Form.Group>
+                            <div className="d-flex align-items-end">
+                              <Button className="btn-purple" onClick={filteredDocuments}>
+                                Rechercher
+                              </Button>
+
+                            </div>
+                          </div>
+                        </Form>
+                      </>
+                    )}
+
+                    {selectedCategory === 'cv' && (
+                      <>
+                        <h5 className="mb-3">🔎 Recherche avancée - CV</h5>
+                        <Form>
+                          <div className="d-flex align-items-end gap-3 flex-wrap">
+                            <Form.Group className="mb-0">
+                              <Form.Label>Nom candidat</Form.Label>
+                              <Form.Control
+                                type="text"
+                                value={searchFilters.nom_candidat || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, nom_candidat: e.target.value })}
+                              />
+                            </Form.Group>
+                            <Form.Group className="mb-0">
+                              <Form.Label>Métier</Form.Label>
+                              <Form.Control
+                                type="text"
+                                value={searchFilters.metier || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, metier: e.target.value })}
+                              />
+                            </Form.Group>
+                            <Form.Group className="mb-0">
+                              <Form.Label>Date</Form.Label>
+                              <Form.Control
+                                type="date"
+                                value={searchFilters.date_cv || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, date_cv: e.target.value })}
+                              />
+                            </Form.Group>
+                            <div className="d-flex align-items-end">
+                              <Button className="btn-purple" onClick={filteredDocuments}>
+                                Rechercher
+                              </Button>
+
+                            </div>
+                          </div>
+                        </Form>
+                      </>
+                    )}
+
+                    {selectedCategory === 'facture' && (
+                      <>
+                        <h5 className="mb-3">🔎 Recherche avancée - Facture</h5>
+                        <Form>
+                          <div className="d-flex align-items-end gap-3 flex-wrap">
+                            <Form.Group className="mb-0">
+                              <Form.Label>Numéro Facture</Form.Label>
+                              <Form.Control
+                                type="text"
+                                value={searchFilters.numero_facture || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, numero_facture: e.target.value })}
+                              />
+                            </Form.Group>
+                            <Form.Group className="mb-0">
+                              <Form.Label>Montant</Form.Label>
+                              <Form.Control
+                                type="number"
+                                value={searchFilters.montant || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, montant: e.target.value })}
+                              />
+                            </Form.Group>
+                            <Form.Group className="mb-0">
+                              <Form.Label>Date Facture</Form.Label>
+                              <Form.Control
+                                type="date"
+                                value={searchFilters.date_facture || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, date_facture: e.target.value })}
+                              />
+                            </Form.Group>
+                            <div className="d-flex align-items-end">
+                              <Button className="btn-purple" onClick={filteredDocuments}>
+                                Rechercher
+                              </Button>
+
+                            </div>
+                          </div>
+                        </Form>
+                      </>
+                    )}
+                  </Card>
+                </div>
+              )}
+
+
+              <div className="container-fluid d-flex flex-column gap-4 mb-4">
+                <style>{`
+
+                .btn-purple {
+  background-color:rgb(83, 82, 99) !important;
+  border-color: rgb(83, 82, 99) !important;
+  color: #fff;
+  font-weight: 600;
+  transition: all 0.3s ease-in-out;
+  border-radius: 40px;
+}
+
+.btn-purple:hover {
+  background-color:rgb(33, 32, 39) !important;
+  border-color:rgb(33, 32, 39) !important;
+}
+
+.form-control {
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+  border-radius: 8px !important;
+  border: 1px solid #ddd !important;
+}
+.form-control:hover {
+  box-shadow: inset 0 4px 6px rgba(0, 0, 0, 0.1) !important;
+  border-radius: 8px !important;
+  border: 1px solid #ddd !important;
+}
+                .filter-card {
+  background: #f9f9f9;
+  border-radius: 40px;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.05);
+  border: none;
+  padding: 1.5rem;
+  transition: all 0.3s ease-in-out;
+}
+
+.category-container {
+  display: inline-flex;
+  gap: 0;
+  border-radius: 40px;
+  overflow: hidden;
+  background: #f9f9f9;
+  padding: 3px;
+  position: relative;
+  justify-content: center;
+  align-items: center;
+  box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+}
+
+.category-highlight {
+  position: absolute;
+  height: 100%;
+  top: 0;
+  left: 0;
+  background: #6c63ff;
+  border-radius: 40px;
+  z-index: 1;
+  transition: all 0.3s ease;
+  width: 0;
+}
+
+.category-btn {
+  position: relative;
+  border: none;
+  border-radius: 40px;
+  padding: 8px 18px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  background: transparent;
+  color: #555;
+  margin: 0 3px;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.category-btn.active {
+  color: #fff;
+}
+`}</style>
+                <div className="d-flex justify-content-center mt-3">
+                  <div className="category-container position-relative">
+                    <div className="category-highlight"></div>
+
+                    <button
+                      ref={(el) => (btnRefs.current[''] = el)}
+                      className={`category-btn ${selectedCategory === '' ? 'active' : ''}`}
+                      onClick={() => setSelectedCategory('')}
+                    >
+                      Toutes                    </button>
+
+                    {categories.map((cat) => (
+                      <button
+                        key={cat}
+                        ref={(el) => (btnRefs.current[cat] = el)}
+                        className={`category-btn ${selectedCategory === cat ? 'active' : ''}`}
+                        onClick={() => handleCategoryButtonClick(cat)}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+
+
+
+                <Table striped bordered hover responsive>
                   <thead>
                     <tr>
-                      <th onClick={() => requestSort('document_id')} className="cursor-pointer">
-                        Document {sortConfig.key === 'document_id' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th onClick={() => requestSort('name')} className="cursor-pointer">
-                        Workflow {sortConfig.key === 'name' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                      </th>
-                      <th onClick={() => requestSort('completed_at')} className="cursor-pointer">
-                        Date {sortConfig.key === 'completed_at' && (sortConfig.direction === 'asc' ? '↑' : '↓')}
-                      </th>
+                      <th>Document</th>
+                      <th>Date</th>
+                      <th>Catégorie</th>
                       <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {archives.map(archive => (
-                      <tr key={archive.id}>
-                        <td>DOC-{archive.document_id}</td>
-                        <td>{archive.name}</td>
-                        <td>{format(parseISO(archive.completed_at), 'PP', { locale: fr })}</td>
-                        <td>
-                          <div className="d-flex gap-2 align-items-center flex-wrap">
-                            <Button variant="outline-primary" size="sm" onClick={() => {
-                              setSelectedArchive(archive);
-                              setShowModal(true);
-                            }} style={{ 
-                              zIndex: 9999, 
-                              position: 'absolute', 
-                              right: 135
-                            }}>
-                              Détails
-                            </Button>
-                            <Dropdown  style={{ 
-    zIndex: 9999, 
-    position: 'absolute', 
-    right: 70
-  }}
-      >
-                              <Dropdown.Toggle variant="outline-secondary" size="sm" id="dropdown-actions" >
-                                Plus
-                              </Dropdown.Toggle>
-                              <Dropdown.Menu>
-                                <Dropdown.Item onClick={() => downloadReport(archive, 'txt')}>
-                                  <FiDownload className="me-2" /> Télécharger (TXT)
-                                </Dropdown.Item>
-                                <Dropdown.Item onClick={() => downloadReport(archive, 'pdf')}>
-                                  <FiDownload className="me-2" /> Télécharger (PDF)
-                                </Dropdown.Item>
-                                <Dropdown.Divider />
-                                <Dropdown.Item onClick={() => restoreArchive(archive.id)}>
-                                  Restaurer
-                                </Dropdown.Item>
-                              </Dropdown.Menu>
-                            </Dropdown>
-                          </div>
+                    {filteredDocuments.length > 0 ? (
+                      filteredDocuments
+                        .sort((a, b) => new Date(b.date) - new Date(a.date)) // tri du plus récent au plus ancien
+                        .map(doc => {
+                          const perms = permissionsByDoc[doc.id] || {};
+                          return (
+                            <tr key={doc.id}>
+                              <td>
+                                <span>
+                                  {doc.name} {doc.version && `(version ${doc.version})`}
+                                </span>
+
+                                <button
+                                  onClick={() => {
+                                    setSelectedDoc(doc);
+                                    navigate(`/docvoir/${doc.id}`);
+                                    setShowModal(false);
+                                  }}
+                                  className="p-0 m-0 bg-transparent border-0"
+                                  style={{ cursor: 'pointer' }}
+                                >
+                                  📄
+                                </button>
+                              </td>
+
+                              <td>{doc.date ? new Date(doc.date).toLocaleString() : 'Inconnue'}</td>
+                              <td>{doc.category || 'Non spécifiée'}</td>
+                              <td>
+                                {/* Détails (toujours actif) */}
+                                <Button
+                                  variant="info"
+                                  size="sm"
+                                  className="me-2"
+                                  onClick={() => navigate(`/documents/${doc.id}`)}
+                                  title="Voir les détails"
+                                >
+                                  <i className="bi bi-list-ul"></i>
+                                </Button>
+
+                                {/* Supprimer */}
+                                <Button
+                                  variant="danger"
+                                  size="sm"
+                                  className="me-2"
+                                  onClick={() => {
+                                    if (userRole === 'admin' || perms.can_delete || doc.owner_id === userId) {
+                                      handleDelete(doc.id);
+                                    }
+                                  }}
+                                  disabled={!(userRole === 'admin' || perms.can_delete || doc.owner_id === userId)}
+                                  title={
+                                    userRole === 'admin' || perms.can_delete || doc.owner_id === userId
+                                      ? 'Supprimer'
+                                      : 'Non autorisé à supprimer'
+                                  }
+                                  style={{
+                                    opacity: userRole === 'admin' || perms.can_delete || doc.owner_id === userId ? 1 : 0.15,
+                                    pointerEvents: userRole === 'admin' || perms.can_delete || doc.owner_id === userId ? 'auto' : 'none'
+                                  }}
+                                >
+                                  <i className="bi bi-trash"></i>
+                                </Button>
+
+                                {/* Partager 
+                                <Button
+                                  variant="light"
+                                  size="sm"
+                                  className="me-2"
+                                  onClick={() => {
+                                    if (userRole === 'admin' || perms.can_share || doc.owner_id === userId) {
+                                      openShareModal(doc);
+                                    }
+                                  }}
+                                  disabled={!(userRole === 'admin' || perms.can_share || doc.owner_id === userId)}
+                                  title={
+                                    userRole === 'admin' || perms.can_share || doc.owner_id === userId
+                                      ? 'Partager'
+                                      : 'Non autorisé à partager'
+                                  }
+                                  style={{
+                                    opacity: userRole === 'admin' || perms.can_share || doc.owner_id === userId ? 1 : 0.15,
+                                    pointerEvents: userRole === 'admin' || perms.can_share || doc.owner_id === userId ? 'auto' : 'none'
+                                  }}
+                                >
+                                  <img src={shareIcon} width="20" alt="Partager" />
+                                </Button>
+
+*/}
+
+                                {/* Archiver */}
+                                {userRole === 'admin' && (
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="me-2"
+                                    onClick={() => handleUnarchive(doc.id)}
+                                    title="Afficher le document"
+                                  >
+                                    <i className="bi bi-archive"></i>
+                                  </Button>
+                                )}
+
+
+                              </td>
+
+                            </tr>
+                          );
+                        })
+                    ) : (
+                      <tr>
+                        <td colSpan="4" className="text-center">
+                          Aucun document trouvé
                         </td>
                       </tr>
-                    ))}
+                    )}
+
                   </tbody>
                 </Table>
               </div>
-              <br/>
-              <div className="d-flex justify-content-between align-items-center mt-3">
-                <div className="text-muted">
-                  Affichage de {Math.min(archives.length, itemsPerPage)} sur {archives.length} archives
-                </div>
-                <Pagination>
-                  <Pagination.Prev 
-                    disabled={currentPage === 1} 
-                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))} 
-                  />
-                  {[...Array(Math.ceil(archives.length / itemsPerPage)).keys()].map(num => (
-                    <Pagination.Item
-                      key={num + 1}
-                      active={num + 1 === currentPage}
-                      onClick={() => setCurrentPage(num + 1)}
-                    >
-                      {num + 1}
-                    </Pagination.Item>
-                  ))}
-                  <Pagination.Next 
-                    disabled={currentPage === Math.ceil(archives.length / itemsPerPage)} 
-                    onClick={() => setCurrentPage(p => p + 1)} 
-                  />
-                </Pagination>
-              </div>
-            </>
-          )}
-        </Card.Body>
-      </Card>
 
-      {/* Modal de détails */}
-      <Modal show={showModal} onHide={() => setShowModal(false)} size="lg" centered style={{ zIndex: 1050, width: '100%' }}
-      >
-        <Modal.Header closeButton>
-          <Modal.Title>Détails de l'archive</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {selectedArchive && (
-            <Tabs defaultActiveKey="report" className="mb-3">
-              <Tab eventKey="report" title="Rapport">
-                <div className="mt-3">
-                  <h5>{selectedArchive.name}</h5>
-                  <div className="row mt-3">
-                    <div className="col-md-6">
-                      <p><strong>Document:</strong> DOC-{selectedArchive.document_id}</p>
-                      <p><strong>Créé par:</strong> {selectedArchive.creator}</p>
-                    </div>
-                    <div className="col-md-6">
-                      <p><strong>Date de création:</strong> {format(parseISO(selectedArchive.workflow_created_at), 'PPpp', { locale: fr })}</p>
-                      <p><strong>Date d'achèvement:</strong> {format(parseISO(selectedArchive.completed_at), 'PPpp', { locale: fr })}</p>
-                    </div>
-                  </div>
-                  
-                  <Card className="mt-3">
-                    <Card.Header className="d-flex justify-content-between align-items-center">
-                      <span>Rapport de validation</span>
-                      <Button 
-                        variant="outline-primary" 
-                        size="sm"
-                        onClick={() => downloadReport(selectedArchive)}
+
+              <Modal
+                show={showShareModal}
+                onHide={() => setShowShareModal(false)}
+                backdrop="static"
+                keyboard={false}
+                centered
+                style={{ zIndex: 1050 }}
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Partager le document : {docToShare?.name}</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                  <Form>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Type d'accès</Form.Label>
+                      <Form.Select
+                        value={shareAccessType}
+                        onChange={(e) => setShareAccessType(e.target.value)}
                       >
-                        <FiDownload className="me-1" /> Télécharger
+                        <option value="public">Public (Tous les utilisateurs)</option>
+                        <option value="custom">Sélectionner des utilisateurs ou des groupes</option>
+                      </Form.Select>
+                    </Form.Group>
+
+                    {shareAccessType === 'custom' && (
+                      <>
+                        <Form.Group as={Row} className="mb-3">
+                          <Col md={6}>
+                            <Form.Label>Utilisateurs</Form.Label>
+                            <Select
+                              isMulti
+                              options={allUsers}
+                              value={allUsers.filter(option => allowedUsers.includes(option.value))}
+                              onChange={(selectedOptions) => {
+                                const selectedUserIds = selectedOptions.map(opt => opt.value);
+                                setSelectedUsers(selectedUserIds);
+                                setAllowedUsers(selectedUserIds);
+                              }}
+                              placeholder="Select users..."
+                              classNamePrefix="select"
+                            />
+                          </Col>
+
+                          <Col md={6}>
+                            <Form.Label>Groupe</Form.Label>
+                            <Select
+                              value={
+                                selectedGroup
+                                  ? {
+                                    value: selectedGroup,
+                                    label: allGroups.find(group => group.id === selectedGroup)?.nom,
+                                  }
+                                  : null
+                              }
+                              options={allGroups.map(group => ({
+                                value: group.id,
+                                label: group.nom,
+                              }))}
+                              onChange={(selectedOption) => {
+                                setSelectedGroup(selectedOption ? selectedOption.value : null);
+                              }}
+                              placeholder="Sélectionner un groupe..."
+                              classNamePrefix="select"
+                            />
+                          </Col>
+                        </Form.Group>
+                      </>
+                    )}
+                  </Form>
+
+
+                  {(userId === docToShare?.owner_id || userRole === 'admin') && (
+                    <Col md={4} className="d-flex flex-column justify-content-start">
+                      <label><strong>Droits d'accès :</strong></label>
+
+                      <Form.Check
+                        type="checkbox"
+                        id="read-access"
+                        label="Consulter"
+                        checked={permissions.consult}
+                        disabled // toujours activé
+                      />
+
+                      <Form.Check
+                        type="checkbox"
+                        id="modify-access"
+                        label="Modifier"
+                        checked={permissions.modify}
+                        onChange={(e) =>
+                          setPermissions((prev) => ({ ...prev, modify: e.target.checked }))
+                        }
+                      />
+
+                      <Form.Check
+                        type="checkbox"
+                        id="delete-access"
+                        label="Supprimer"
+                        checked={permissions.delete}
+                        onChange={(e) =>
+                          setPermissions((prev) => ({ ...prev, delete: e.target.checked }))
+                        }
+                      />
+
+                      <Form.Check
+                        type="checkbox"
+                        id="share-access"
+                        label="Partager"
+                        checked={permissions.share}
+                        onChange={(e) =>
+                          setPermissions((prev) => ({ ...prev, share: e.target.checked }))
+                        }
+                      />
+                    </Col>
+                  )}
+
+
+                </Modal.Body>
+                <Modal.Footer>
+                  <Button variant="secondary" onClick={() => setShowShareModal(false)}>
+                    Annuler
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={async () => {
+                      const visibilityValue = shareAccessType === 'public' ? 'public' : 'custom';
+
+                      try {
+                        await axios.put(
+                          `http://localhost:5000/api/documents/${docToShare.id}`,
+                          {
+                            visibility: visibilityValue,
+                            id_share: selectedUsers.length > 0 ? selectedUsers : [],     // tableau d'IDs
+                            id_group: selectedGroup ? [selectedGroup] : [],              // tableau d'un seul élément ou vide
+                          },
+                          { headers: { Authorization: `Bearer ${token}` } }
+                        );
+
+                        setDocuments(docs =>
+                          docs.map(doc =>
+                            doc.id === docToShare.id
+                              ? {
+                                ...doc,
+                                visibility: visibilityValue,
+                                id_share: selectedUsers,
+                                id_group: selectedGroup ? [selectedGroup] : [],
+                              }
+                              : doc
+                          )
+                        );
+
+                        setShowShareModal(false);
+                      } catch (err) {
+                        console.error('Erreur de mise à jour des permissions', err);
+                      }
+                    }}
+                  >
+                    Enregistrer
+                  </Button>
+
+
+                </Modal.Footer>
+              </Modal>
+
+              <Modal
+                show={showConfirmModal}
+                onHide={() => setShowConfirmModal(false)}
+                centered
+                style={{ zIndex: 1050 }}
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Créer un nouveau workflow ?</Modal.Title>
+                </Modal.Header>
+                <Modal.Body>
+                  {existingWorkflow ? (
+                    <div className="text-center">
+                      <Alert variant="warning">
+                        Un workflow existe déjà pour ce document !
+                      </Alert>
+                      <p><strong>Nom:</strong> {existingWorkflow.name}</p>
+                      <p><strong>Statut:</strong> {existingWorkflow.status}</p>
+                      <Button
+                        variant="primary"
+                        onClick={() => {
+                          setShowConfirmModal(false);
+                          navigate(`/workflowz/${existingWorkflow.id}`);
+                        }}
+                      >
+                        Voir le workflow existant
                       </Button>
-                    </Card.Header>
-                  </Card>
-                </div>
-              </Tab>
-            </Tabs>
-          )}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowModal(false)}>
-            Fermer
-          </Button>
-          <Button variant="primary" onClick={() => {
-            downloadReport(selectedArchive);
-            setShowModal(false);
-          }}>
-            <FiPrinter className="me-1" /> Imprimer
-          </Button>
-        </Modal.Footer>
-      </Modal>
-    </div>
+                    </div>
+                  ) : (
+                    <>
+                      <p>Vous êtes sur le point de créer le workflow pour le document :</p>
+                      <strong>{modalDoc?.name}</strong>
+                      <hr />
+                      <Form.Group>
+                        <Form.Label>Nom du workflow</Form.Label>
+                        <Form.Control
+                          type="text"
+                          value={autoWfName}
+                          onChange={e => setAutoWfName(e.target.value)}
+                        />
+                      </Form.Group>
+                    </>
+                  )}
+                </Modal.Body>
+
+                <Modal.Footer>
+                  <Button variant="secondary" onClick={() => setShowConfirmModal(false)}>
+                    Annuler
+                  </Button>
+                  <Button
+                    variant="primary"
+                    onClick={handleConfirmCreate}
+                    disabled={!!existingWorkflow}
+                  >
+                    Créer
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+            </Card.Body>
+          </Card>
+        </Container>
+      </div>
     </>
+
   );
 };
 
-export default ArchivePage;
+export default Doc;

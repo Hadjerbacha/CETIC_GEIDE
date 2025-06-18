@@ -105,13 +105,13 @@ const classifyText = async (text, filePath) => {
     return 'autre';
   }
 };
-
 router.get('/:id/my-permissions', auth, async (req, res) => {
-  const documentId = req.params.id;
+  const documentId = parseInt(req.params.id);
   const userId = req.user.id;
 
   try {
-    const result = await pool.query(`
+    // Étape 1 : vérifier les permissions explicites dans document_permissions
+    const { rows: permRows } = await pool.query(`
       SELECT can_read, can_modify, can_delete, can_share, access_type
       FROM document_permissions
       WHERE document_id = $1 AND user_id = $2
@@ -126,16 +126,72 @@ router.get('/:id/my-permissions', auth, async (req, res) => {
       LIMIT 1;
     `, [documentId, userId]);
 
-    if (result.rowCount === 0) {
-      return res.status(403).json({ error: "Aucune permission trouvée pour ce document." });
+    if (permRows.length > 0) {
+      return res.status(200).json(permRows[0]);
     }
 
-    res.status(200).json(result.rows[0]);
+    // Étape 2 : récupérer document
+    const { rows: docRows } = await pool.query(`
+      SELECT visibility, owner_id, id_share, id_group
+      FROM documents
+      WHERE id = $1
+    `, [documentId]);
+
+    if (docRows.length === 0) {
+      return res.status(404).json({ error: "Document non trouvé." });
+    }
+
+    const document = docRows[0];
+
+    // Étape 3 : si public → lecture seule
+    if (document.visibility === 'public') {
+      return res.status(200).json({
+        can_read: true,
+        can_modify: false,
+        can_delete: false,
+        can_share: false,
+        access_type: 'public'
+      });
+    }
+
+    // Étape 4 : si user est dans id_share
+    if (document.id_share && document.id_share.includes(userId)) {
+      return res.status(200).json({
+        can_read: true,
+        can_modify: false,
+        can_delete: false,
+        can_share: false,
+        access_type: 'custom'
+      });
+    }
+
+    // Étape 5 : si user appartient à un groupe de id_group
+    if (document.id_group && document.id_group.length > 0) {
+      const { rows: groupRows } = await pool.query(
+        `SELECT 1 FROM user_groups WHERE user_id = $1 AND group_id = ANY($2) LIMIT 1`,
+        [userId, document.id_group]
+      );
+
+      if (groupRows.length > 0) {
+        return res.status(200).json({
+          can_read: true,
+          can_modify: false,
+          can_delete: false,
+          can_share: false,
+          access_type: 'group'
+        });
+      }
+    }
+
+    // Sinon : pas de droit
+    return res.status(403).json({ error: "Aucune permission trouvée pour ce document." });
+
   } catch (err) {
     console.error('Erreur récupération des permissions:', err.stack);
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
+
 
 // Initialisation des tables de la base de données
 async function initializeDatabase() {
@@ -376,7 +432,7 @@ router.get('/', auth, async (req, res) => {
       LEFT JOIN factures f ON f.document_id = d.id
       LEFT JOIN cv ON cv.document_id = d.id
       LEFT JOIN demande_conge dcg ON dcg.document_id = d.id
-      ${!isAdmin ? 'JOIN document_permissions dp ON dp.document_id = d.id' : ''}
+      ${!isAdmin ? 'LEFT JOIN document_permissions dp ON dp.document_id = d.id' : ''}
       WHERE true
     `;
 
@@ -385,10 +441,11 @@ router.get('/', auth, async (req, res) => {
 
     if (!isAdmin) {
       baseQuery += `
-        AND (
-          dp.access_type = 'public'
-          OR (dp.user_id = $1 AND dp.access_type IN ('custom', 'read', 'owner'))
-        )
+       AND (
+  d.visibility = 'public'
+  OR (dp.user_id = $1 AND dp.access_type IN ('custom', 'read', 'owner'))
+)
+
       `;
       params.push(userId);
       paramIndex++;
@@ -524,6 +581,40 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+router.get('/check-name', async (req, res) => {
+  const { name, currentDocId } = req.query; // Ajoutez currentDocId pour exclure le document actuel
+  
+  if (!name) return res.status(400).json({ error: 'Nom manquant' });
+
+  try {
+    let query;
+    let params = [name];
+    
+    if (currentDocId) {
+      query = 'SELECT * FROM documents WHERE name = $1 AND id != $2 ORDER BY version DESC LIMIT 1';
+      params.push(currentDocId);
+    } else {
+      query = 'SELECT * FROM documents WHERE name = $1 ORDER BY version DESC LIMIT 1';
+    }
+
+    const doc = await pool.query(query, params);
+
+    if (doc.rows.length > 0) {
+      return res.json({ 
+        exists: true, 
+        document: doc.rows[0],
+        canAddVersion: true // Vous pourriez ajouter cette info si nécessaire
+      });
+    } else {
+      return res.json({ exists: false });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+
 router.post('/', auth, upload.single('file'), async (req, res) => {
   let {
     name,
@@ -580,8 +671,6 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
   }
 }
 
-// Après avoir extrait le texte de la vidéo
-console.log('Texte extrait de la vidéo :', extractedText);
 
   const finalCategory = await classifyText(extractedText, req.file.originalname);
 
@@ -732,31 +821,145 @@ router.get('/latest', auth, async (req, res) => {
   const isAdmin = req.user.role === 'admin';
 
   try {
-    let result;
+    let query = `
+      SELECT DISTINCT ON (d.name) d.*,
+        f.id as facture_id, f.numero_facture, f.montant, f.date_facture, f.nom_entreprise, f.produit,
+        cv.id as cv_id, cv.nom_candidat, cv.experience, cv.domaine, cv.num_cv, cv.metier, cv.lieu, cv.date_cv,
+        dc.id as demande_conge_id, dc.num_demande, dc.date_debut, dc.date_fin, dc.motif,
+        co.id as contrat_id, co.numero_contrat, co.type_contrat, co.partie_prenante, 
+        co.date_signature, co.date_echeance, co.montant as montant_contrat, co.statut,
+        r.id as rapport_id, r.type_rapport, r.auteur, r.date_rapport, r.periode_couverte, r.destinataire
+      FROM documents d
+      LEFT JOIN factures f ON f.document_id = d.id
+      LEFT JOIN cv cv ON cv.document_id = d.id
+      LEFT JOIN demande_conge dc ON dc.document_id = d.id
+      LEFT JOIN contrats co ON co.document_id = d.id
+      LEFT JOIN rapports r ON r.document_id = d.id
+      WHERE d.is_completed = true
+      AND d.is_archived = false
+    `;
 
-    if (isAdmin) {
-      result = await pool.query(`
-        SELECT DISTINCT ON (name) d.*
-        FROM documents d
-        WHERE d.is_completed = true
-        AND d.is_archived = false
-        ORDER BY name, version DESC
-      `);
-    } else {
-      result = await pool.query(`
-        SELECT DISTINCT ON (d.name) d.*
-        FROM documents d
-        JOIN document_permissions dp ON dp.document_id = d.id
-        WHERE
-          dp.user_id = $1
-          AND dp.can_read = true
-          AND d.is_completed = true
-          AND d.is_archived = false
-        ORDER BY d.name, d.version DESC
-      `, [userId]);
+    if (!isAdmin) {
+      query += `
+        AND (
+          d.visibility = 'public'
+          OR EXISTS (
+            SELECT 1 FROM document_permissions dp 
+            WHERE dp.document_id = d.id AND dp.user_id = $1 AND dp.can_read = true
+          )
+          OR ($1 = ANY(d.id_share))
+          OR EXISTS (
+            SELECT 1 FROM user_groups ug
+            WHERE ug.user_id = $1 AND ug.group_id = ANY(d.id_group)
+          )
+        )
+      `;
     }
 
-    res.status(200).json(result.rows);
+    query += ` ORDER BY d.name, d.version DESC`;
+
+    const result = await pool.query(query, isAdmin ? [] : [userId]);
+    
+    // Normalisation des données
+    const normalizedRows = result.rows.map(row => ({
+      ...row,
+      summary: row.summary || '',
+      category: row.category || 'autre',
+      // Fusion des métadonnées spécifiques
+      ...(row.contrat_id ? {
+        numero_contrat: row.numero_contrat,
+        type_contrat: row.type_contrat,
+        partie_prenante: row.partie_prenante,
+        date_signature: row.date_signature,
+        date_echeance: row.date_echeance,
+        montant_contrat: row.montant_contrat,
+        statut_contrat: row.statut
+      } : {}),
+      ...(row.rapport_id ? {
+        type_rapport: row.type_rapport,
+        auteur: row.auteur,
+        date_rapport: row.date_rapport,
+        periode_couverte: row.periode_couverte,
+        destinataire: row.destinataire
+      } : {})
+    }));
+
+    res.status(200).json(normalizedRows);
+  } catch (err) {
+    console.error('Erreur récupération dernières versions :', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+router.get('/incomplete', auth, async (req, res) => {
+  const userId = req.user.id;
+  const isAdmin = req.user.role === 'admin';
+
+  try {
+    let query = `
+      SELECT DISTINCT ON (d.name) d.*,
+        f.id as facture_id, f.numero_facture, f.montant, f.date_facture, f.nom_entreprise, f.produit,
+        cv.id as cv_id, cv.nom_candidat, cv.experience, cv.domaine, cv.num_cv, cv.metier, cv.lieu, cv.date_cv,
+        dc.id as demande_conge_id, dc.num_demande, dc.date_debut, dc.date_fin, dc.motif,
+        co.id as contrat_id, co.numero_contrat, co.type_contrat, co.partie_prenante, 
+        co.date_signature, co.date_echeance, co.montant as montant_contrat, co.statut,
+        r.id as rapport_id, r.type_rapport, r.auteur, r.date_rapport, r.periode_couverte, r.destinataire
+      FROM documents d
+      LEFT JOIN factures f ON f.document_id = d.id
+      LEFT JOIN cv cv ON cv.document_id = d.id
+      LEFT JOIN demande_conge dc ON dc.document_id = d.id
+      LEFT JOIN contrats co ON co.document_id = d.id
+      LEFT JOIN rapports r ON r.document_id = d.id
+      WHERE d.is_completed = false
+      AND d.is_archived = false
+    `;
+
+    if (!isAdmin) {
+      query += `
+        AND (
+          d.visibility = 'public'
+          OR EXISTS (
+            SELECT 1 FROM document_permissions dp 
+            WHERE dp.document_id = d.id AND dp.user_id = $1 AND dp.can_read = true
+          )
+          OR ($1 = ANY(d.id_share))
+          OR EXISTS (
+            SELECT 1 FROM user_groups ug
+            WHERE ug.user_id = $1 AND ug.group_id = ANY(d.id_group)
+          )
+        )
+      `;
+    }
+
+    query += ` ORDER BY d.name, d.version DESC`;
+
+    const result = await pool.query(query, isAdmin ? [] : [userId]);
+    
+    // Normalisation des données
+    const normalizedRows = result.rows.map(row => ({
+      ...row,
+      summary: row.summary || '',
+      category: row.category || 'autre',
+      // Fusion des métadonnées spécifiques
+      ...(row.contrat_id ? {
+        numero_contrat: row.numero_contrat,
+        type_contrat: row.type_contrat,
+        partie_prenante: row.partie_prenante,
+        date_signature: row.date_signature,
+        date_echeance: row.date_echeance,
+        montant_contrat: row.montant_contrat,
+        statut_contrat: row.statut
+      } : {}),
+      ...(row.rapport_id ? {
+        type_rapport: row.type_rapport,
+        auteur: row.auteur,
+        date_rapport: row.date_rapport,
+        periode_couverte: row.periode_couverte,
+        destinataire: row.destinataire
+      } : {})
+    }));
+
+    res.status(200).json(normalizedRows);
   } catch (err) {
     console.error('Erreur récupération dernières versions :', err);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -878,191 +1081,179 @@ router.get('/archived', auth, async (req, res) => {
 //complete upload
 router.put('/:id', auth, async (req, res) => {
   const documentId = parseInt(req.params.id, 10);
+  const userId = req.user.id;
   const {
     name,
     summary = '',
     tags = [],
-    prio = 'moyenne',
+    priority = 'moyenne',
     collection_name = '',
     metadata = {},
+    diff_version = '',
+    is_completed = false,
     ...extraFields
   } = req.body;
 
   try {
+    // 1. Validation
     if (!name) {
       return res.status(400).json({ error: 'Le nom du document est requis.' });
     }
 
-    // 1. Récupération de la catégorie
-    const catRes = await pool.query(`SELECT category FROM documents WHERE id = $1`, [documentId]);
-    const category = catRes.rows[0]?.category;
+    // 2. Récupération du document original
+    const { rows: [originalDoc] } = await pool.query(
+      'SELECT id, name, category, version FROM documents WHERE id = $1',
+      [documentId]
+    );
 
-    // 2. Déduction de is_completed selon la catégorie
-    let is_completed = req.body.is_completed ?? false;
-
-    if (category === 'facture') {
-      const {
-        num_facture = '',
-        nom_entreprise = '',
-        produit = '',
-        montant = 0,
-        date_facture = null
-      } = req.body;
-
-      is_completed = Boolean(num_facture && nom_entreprise && produit && montant && date_facture);
+    if (!originalDoc) {
+      return res.status(404).json({ error: 'Document introuvable' });
     }
 
-    if (category === 'cv') {
-      const {
-        num_cv = '',
-        nom_candidat = '',
-        metier = '',
-        lieu = '',
-        experience = '',
-        domaine = ''
-      } = req.body;
+    // 3. Vérification des permissions
+    const { rows: [permission] } = await pool.query(
+      'SELECT can_modify FROM document_permissions WHERE user_id = $1 AND document_id = $2',
+      [userId, documentId]
+    );
 
-      is_completed = Boolean(num_cv && nom_candidat && metier && lieu && experience && domaine);
+    if (!permission?.can_modify && req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Permission de modification refusée' });
     }
 
-    if (category === 'demande_conge') {
-      const {
-        numDemande = '',
-        dateConge = null
-      } = extraFields;
+    // 4. Détection de nouvelle version
+    const isNewVersion = originalDoc.name !== name && is_completed;
+    let newVersion = originalDoc.version;
 
-      is_completed = Boolean(numDemande && dateConge);
+    if (isNewVersion) {
+      const { rows: [{ max_version }] } = await pool.query(
+        'SELECT MAX(version) as max_version FROM documents WHERE name = $1 AND id != $2',
+        [name, documentId]
+      );
+      newVersion = (max_version || 0) + 1;
     }
 
-    // 3. Mise à jour de la table documents
-    await pool.query(`
-      UPDATE documents 
-      SET 
+    // 5. Mise à jour du document (sans updated_at)
+    const { rows: [updatedDoc] } = await pool.query(
+      `UPDATE documents SET
         name = $1,
         summary = $2,
         tags = $3,
         priority = $4,
         metadata = $5,
-        is_completed = $6
-      WHERE id = $7
-    `, [name, summary, tags, prio, metadata, is_completed, documentId]);
+        diff_version = $6,
+        is_completed = $7,
+        version = $8
+       WHERE id = $9
+       RETURNING *`,
+      [
+        name,
+        summary,
+        tags,
+        priority,
+        metadata,
+        diff_version,
+        is_completed,
+        newVersion,
+        documentId
+      ]
+    );
 
-    // 4. Si le document vient juste d’être complété, on lui attribue une version
-    if (is_completed) {
-      const versionRes = await pool.query(`
-        SELECT MAX(version) as max_version 
-        FROM documents 
-        WHERE name = $1 AND version IS NOT NULL AND id != $2
-      `, [name, documentId]);
-
-      const lastVersion = versionRes.rows[0].max_version || 0;
-
-      await pool.query(`
-        UPDATE documents SET version = $1 WHERE id = $2
-      `, [lastVersion + 1, documentId]);
+    // 6. Gestion des métadonnées spécifiques (exemple pour facture)
+    if (originalDoc.category === 'facture') {
+      await pool.query(
+        `INSERT INTO factures (
+          document_id, numero_facture, nom_entreprise, produit, montant, date_facture
+        ) VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (document_id) DO UPDATE SET
+          numero_facture = $2,
+          nom_entreprise = $3,
+          produit = $4,
+          montant = $5,
+          date_facture = $6`,
+        [
+          documentId,
+          extraFields.num_facture || '',
+          extraFields.nom_entreprise || '',
+          extraFields.produit || '',
+          extraFields.montant || 0,
+          extraFields.date_facture || null
+        ]
+      );
     }
 
-    // 5. Ajout/MAJ dans la table spécialisée
-    switch (category) {
-      case 'facture':
-        await pool.query(`
-          INSERT INTO factures (document_id, numero_facture, nom_entreprise, produit, montant, date_facture)
-          VALUES ($1, $2, $3, $4, $5, $6)
-          ON CONFLICT (document_id) DO UPDATE 
-          SET numero_facture = $2,
-              nom_entreprise = $3,
-              produit = $4,
-              montant = $5,
-              date_facture = $6;
-        `, [
-          documentId,
-          req.body.num_facture || '',
-          req.body.nom_entreprise || '',
-          req.body.produit || '',
-          req.body.montant || 0,
-          req.body.date_facture || null
-        ]);
-        break;
-
-      case 'cv':
-        await pool.query(`
-          INSERT INTO cv (document_id, num_cv, nom_candidat, metier, lieu, experience, domaine)
-          VALUES ($1, $2, $3, $4, $5, $6, $7)
-          ON CONFLICT (document_id) DO UPDATE SET
-            num_cv = $2,
-            nom_candidat = $3,
-            metier = $4,
-            lieu = $5,
-            experience = $6,
-            domaine = $7
-        `, [
-          documentId,
-          req.body.num_cv || '',
-          req.body.nom_candidat || '',
-          req.body.metier || '',
-          req.body.lieu || '',
-          req.body.experience || '',
-          req.body.domaine || ''
-        ]);
-        break;
-
-      case 'demande_conge':
-        await pool.query(`
-          INSERT INTO demande_conges (document_id, numDemande, dateConge)
-          VALUES ($1, $2, $3)
-          ON CONFLICT (document_id) DO UPDATE 
-          SET numDemande = $2, dateConge = $3;
-        `, [
-          documentId,
-          extraFields.numDemande || '',
-          extraFields.dateConge || null
-        ]);
-        break;
-
-      default:
-        break;
-    }
-
-    // 6. Gestion des collections (optionnelle)
+    // 7. Gestion des collections
     if (collection_name) {
-      const resCollection = await pool.query(
-        `SELECT id FROM collections WHERE name = $1 AND user_id = $2`,
-        [collection_name, req.user.id]
+      const { rows: [collection] } = await pool.query(
+        `INSERT INTO collections (name, user_id)
+         VALUES ($1, $2)
+         ON CONFLICT (name, user_id) DO UPDATE SET name = $1
+         RETURNING id`,
+        [collection_name, userId]
       );
 
-      let collectionId = resCollection.rows[0]?.id;
-      if (!collectionId) {
-        const insert = await pool.query(
-          `INSERT INTO collections (name, user_id) VALUES ($1, $2) RETURNING id`,
-          [collection_name, req.user.id]
-        );
-        collectionId = insert.rows[0].id;
-      }
-
-      await pool.query(`
-        INSERT INTO document_collections (document_id, collection_id, is_saved, collection_name)
-        VALUES ($1, $2, true, $3)
-        ON CONFLICT (document_id, collection_id) DO UPDATE 
-        SET is_saved = true, collection_name = $3
-      `, [documentId, collectionId, collection_name]);
+      await pool.query(
+        `INSERT INTO document_collections (document_id, collection_id)
+         VALUES ($1, $2)
+         ON CONFLICT (document_id, collection_id) DO NOTHING`,
+        [documentId, collection.id]
+      );
     }
 
-    // 7. Renvoi du document mis à jour
-    const updated = await pool.query('SELECT * FROM documents WHERE id = $1', [documentId]);
-    res.status(200).json(updated.rows[0]);
+    res.status(200).json({
+      ...updatedDoc,
+      is_new_version: isNewVersion
+    });
 
   } catch (err) {
-    console.error('❌ Erreur update document :', err);
-    res.status(500).json({ error: 'Erreur serveur', details: err.message });
+    console.error('❌ Erreur:', err.stack);
+    res.status(500).json({ 
+      error: 'Erreur serveur',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 });
+// Renommez la route pour correspondre à ce que le frontend appelle
+router.get('/:id/metadata', auth, async (req, res) => {
+  const documentId = req.params.id;
 
+  try {
+    const docRes = await pool.query('SELECT category FROM documents WHERE id = $1', [documentId]);
+    
+    if (docRes.rowCount === 0) {
+      return res.status(404).json({ error: 'Document non trouvé' });
+    }
+
+    const category = docRes.rows[0].category;
+    let meta = {};
+
+    switch (category) {
+      case 'contrat':
+        const contratRes = await pool.query('SELECT * FROM contrats WHERE document_id = $1', [documentId]);
+        meta = contratRes.rows[0] || {};
+        break;
+      // ... autres cas ...
+    }
+
+    res.json(meta);
+
+  } catch (err) {
+    console.error('Erreur récupération métadonnées:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
 
 router.get('/:id/details', auth, async (req, res) => {
   const documentId = req.params.id;
 
   try {
-    const docRes = await pool.query('SELECT * FROM documents WHERE id = $1', [documentId]);
+    // Récupération du document de base
+    const docRes = await pool.query(`
+      SELECT d.*, 
+             EXTRACT(EPOCH FROM (NOW() - d.date)) as age_seconds,
+             pg_size_pretty(d.size) as size_formatted
+      FROM documents d 
+      WHERE id = $1
+    `, [documentId]);
 
     if (docRes.rowCount === 0) {
       return res.status(404).json({ error: 'Document non trouvé' });
@@ -1070,7 +1261,9 @@ router.get('/:id/details', auth, async (req, res) => {
 
     const doc = docRes.rows[0];
     let meta = {};
+    let technicalInfo = {};
 
+    // Récupération des métadonnées spécifiques
     switch (doc.category) {
       case 'cv':
         const cv = await pool.query('SELECT * FROM cv WHERE document_id = $1', [documentId]);
@@ -1087,42 +1280,141 @@ router.get('/:id/details', auth, async (req, res) => {
         meta = conge.rows[0] || {};
         break;
 
+      case 'contrat':
+        const contrat = await pool.query(`
+          SELECT numero_contrat, type_contrat, partie_prenante, 
+                 date_signature, date_echeance, montant, statut
+          FROM contrats 
+          WHERE document_id = $1
+        `, [documentId]);
+        meta = contrat.rows[0] || {};
+        break;
+
+      case 'rapport':
+        const rapport = await pool.query(`
+          SELECT type_rapport, auteur, date_rapport, periode_couverte, destinataire
+          FROM rapports 
+          WHERE document_id = $1
+        `, [documentId]);
+        meta = rapport.rows[0] || {};
+        break;
+
       default:
         meta = {};
     }
 
+    // Informations techniques pour les médias
+    const fileExt = doc.name.split('.').pop().toLowerCase();
+    if (['jpg', 'jpeg', 'png', 'gif', 'bmp', 'mp4', 'mov', 'avi', 'webm'].includes(fileExt)) {
+      try {
+        const techRes = await pool.query(`
+          SELECT width, height, duration 
+          FROM media_metadata 
+          WHERE document_id = $1
+        `, [documentId]);
+        
+        technicalInfo = techRes.rows[0] || {};
+      } catch (err) {
+        console.log('Aucune métadonnée technique trouvée pour ce média');
+      }
+    }
+
     res.json({
-      document: doc,
-      details: meta
+      document: {
+        ...doc,
+        // Formatage des dates pour le frontend
+        date: new Date(doc.date).toISOString(),
+        date_signature: meta.date_signature ? new Date(meta.date_signature).toISOString() : null,
+        date_echeance: meta.date_echeance ? new Date(meta.date_echeance).toISOString() : null
+      },
+      details: meta,
+      technicalInfo
     });
 
   } catch (err) {
     console.error('Erreur récupération détails document :', err.stack);
-    res.status(500).json({ error: 'Erreur serveur' });
+    res.status(500).json({ 
+      error: 'Erreur serveur',
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 });
-
-
-
 router.post('/:id/share', auth, async (req, res) => {
-  const documentId = req.params.id;
-  const { visibility, id_group, id_share } = req.body;
+  const documentId = parseInt(req.params.id);
+  const userId = req.user.id;
+
+  const {
+    visibility,
+    id_share = [],
+    id_group = [],
+    can_modify = false,
+    can_delete = false,
+    can_share = false
+  } = req.body;
 
   try {
-    const query = `
-      UPDATE documents 
-      SET visibility = $1, id_group = $2, id_share = $3
-      WHERE id = $4
-    `;
-    await pool.query(query, [visibility, id_group || null, id_share || null, documentId]);
+    console.log("📩 Reçu pour partage :", {
+      visibility, id_share, id_group, can_modify, can_delete, can_share
+    });
 
-    res.status(200).json({ message: 'Partage mis à jour avec succès.' });
-  } catch (error) {
-    console.error('Erreur lors du partage du document :', error);
-    res.status(500).json({ error: 'Erreur lors du partage du document.' });
-    console.error('Erreur:', err.stack);
-    if (req.file) fs.unlink(req.file.path, () => { });
-    res.status(500).json({ error: 'Erreur lors de l\'ajout', details: err.message });
+    // 1. Mettre à jour la visibilité dans la table documents
+    await pool.query(`
+      UPDATE documents
+      SET visibility = $1, id_share = $2, id_group = $3
+      WHERE id = $4
+    `, [visibility, id_share, id_group, documentId]);
+
+    // 2. Gérer les permissions pour les utilisateurs partagés
+    if (visibility === 'custom' && id_share.length > 0) {
+      // Supprimer toutes les permissions custom existantes
+      await pool.query(`
+        DELETE FROM document_permissions 
+        WHERE document_id = $1 AND access_type = 'custom'
+      `, [documentId]);
+
+      // Ajouter les nouvelles permissions
+      const insertValues = id_share.map(targetId => 
+        `(${targetId}, ${documentId}, 'custom', true, ${can_modify}, ${can_delete}, ${can_share})`
+      ).join(',');
+
+      await pool.query(`
+        INSERT INTO document_permissions 
+        (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
+        VALUES ${insertValues}
+      `);
+    }
+
+    // 3. Gérer les permissions pour les groupes
+    if (visibility === 'custom' && id_group.length > 0) {
+      // Supprimer toutes les permissions de groupe existantes
+      await pool.query(`
+        DELETE FROM document_permissions 
+        WHERE document_id = $1 AND access_type = 'group'
+      `, [documentId]);
+
+      // Ajouter les permissions pour les membres des groupes
+      const { rows: members } = await pool.query(`
+        SELECT DISTINCT user_id FROM user_groups WHERE group_id = ANY($1)
+      `, [id_group]);
+
+      if (members.length > 0) {
+        const groupInsertValues = members.map(member => 
+          `(${member.user_id}, ${documentId}, 'group', true, false, false, false)`
+        ).join(',');
+
+        await pool.query(`
+          INSERT INTO document_permissions 
+          (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
+          VALUES ${groupInsertValues}
+        `);
+      }
+    }
+
+    res.status(200).json({ message: "Partage mis à jour avec succès." });
+
+  } catch (err) {
+    console.error("❌ Erreur dans partage :", err);
+    res.status(500).json({ error: "Erreur lors du partage", details: err.message });
   }
 });
 
@@ -1148,43 +1440,34 @@ router.get('/stats', async (req, res) => {
 });
 router.get('/:id/versions', auth, async (req, res) => {
   const id = parseInt(req.params.id, 10);
-
-  // Vérification que l'id est un entier valide
-  if (isNaN(id)) {
-    return res.status(400).json({ error: 'ID de document invalide' });
-  }
-
+  
   try {
-    // Récupération du nom du document de base
-    const result = await pool.query(`
-      SELECT name
+    // 1. Récupérer le nom original
+    const { rows: [doc] } = await pool.query(
+      'SELECT name FROM documents WHERE id = $1', 
+      [id]
+    );
+    if (!doc) return res.status(404).json({ error: 'Document introuvable' });
+
+    // 2. Récupérer toutes les versions
+    const { rows: versions } = await pool.query(`
+      SELECT 
+        id, name, version, diff_version
       FROM documents
-      WHERE id = $1
-    `, [id]);
+      WHERE name = $1 AND is_completed = true
+      ORDER BY version DESC
+    `, [doc.name]);
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Document introuvable' });
-    }
-
-    const { name } = result.rows[0];
-
-    // Récupération de toutes les versions avec le même nom, version complète uniquement
-    const versions = await pool.query(`
-      SELECT *
-      FROM documents
-      WHERE name = $1
-      AND is_completed = true
-      ORDER BY version DESC NULLS LAST, created_at DESC
-    `, [name]);
-
-    res.status(200).json(versions.rows);
+    res.status(200).json(versions);
 
   } catch (err) {
-    console.error('Erreur récupération des versions :', err.stack);
-    res.status(500).json({ error: 'Erreur serveur', details: err.message });
+    console.error('❌ Erreur:', err);
+    res.status(500).json({ 
+      error: 'Erreur serveur', 
+      details: err.message 
+    });
   }
 });
-
 
 
 // GET : récupérer un document spécifique par ID
@@ -1222,7 +1505,7 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
-
+//doc detail
 router.get('/:id', auth, async (req, res) => {
   const documentId = req.params.id;
 
@@ -1463,30 +1746,6 @@ router.post('/check-duplicate', async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
-router.post('/messages', auth, async (req, res) => {
-  const userId = req.user.id;
-  const { content, recipient_id, group_id } = req.body;
-
-  try {
-    if (!content || (!recipient_id && !group_id)) {
-      return res.status(400).json({ message: 'Contenu et destinataire requis' });
-    }
-
-    const result = await pool.query(
-      `INSERT INTO messages (sender_id, recipient_id, group_id, content, sent_at)
-       VALUES ($1, $2, $3, $4, NOW())
-       RETURNING *`,
-      [userId, recipient_id || null, group_id || null, content]
-    );
-
-    res.status(201).json(result.rows[0]);
-  } catch (err) {
-    console.error('Erreur lors de l\'envoi du message :', err);
-    res.status(500).json({ message: 'Erreur serveur lors de l\'envoi du message' });
-  }
-});
-
-
 // Initialisation des tables
 initializeDatabase();
 

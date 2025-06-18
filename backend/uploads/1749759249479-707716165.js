@@ -56,7 +56,7 @@ const Doc = () => {
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [existingWorkflow, setExistingWorkflow] = useState(null);
-  const categories = ['Contrat', 'Mémoire', 'Article', 'Rapport', 'facture', 'cv', 'demande_conge'];
+  const categories = ['Contrat', 'Mémoire', 'Article', 'Rapport', 'facture', 'cv', 'demande_conge', 'photo', 'video'];
   const [selectedCategory, setSelectedCategory] = useState('');
   const [categoryClickCount, setCategoryClickCount] = useState(0);
   const [summary, setSummary] = useState('');
@@ -166,7 +166,7 @@ const Doc = () => {
 
   const fetchDocuments = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/documents/archive', {
+      const res = await fetch('http://localhost:5000/api/documents/latest', {
         headers: { Authorization: `Bearer ${token}` }
       });
 
@@ -384,6 +384,16 @@ const Doc = () => {
       return acc;
     }, {})
   );
+  const isMediaFile = (doc) => {
+    const extension = doc.file_path?.split('.').pop().toLowerCase() || '';
+    const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp'];
+    const videoExtensions = ['mp4', 'avi', 'mkv', 'mov', 'webm'];
+
+    return {
+      isPhoto: imageExtensions.includes(extension),
+      isVideo: videoExtensions.includes(extension)
+    };
+  };
 
   const filteredDocuments = latestDocs.filter((doc) => {
     const docName = doc.name || '';
@@ -426,7 +436,6 @@ const Doc = () => {
     const matchesCategory =
       !selectedCategory || selectedCategory === '' ||
       (docCategory && docCategory.toLowerCase() === selectedCategory.toLowerCase());
-
 
     console.log("nom_candidat ➡️", doc.metadata?.nom_candidat);
 
@@ -696,31 +705,29 @@ const Doc = () => {
     }
   };
 
-  const handleUnarchive = async (docId) => {
+  const handleArchive = async (docId) => {
     try {
-      const response = await fetch(`http://localhost:5000/api/documents/${docId}/affiche`, {
+      const response = await fetch(`http://localhost:5000/api/documents/${docId}/archive`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${token}`, // Très important !
         },
-        body: JSON.stringify({ is_archived: false }) // 👈 ici on désarchive
       });
 
-      const data = await response.json();
+      const data = await response.json(); // On lit la réponse pour voir le message
 
       if (!response.ok) {
         console.error('Erreur API:', data);
-        throw new Error(data.message || 'Erreur lors du désarchivage');
+        throw new Error(data.message || 'Erreur lors de l’archivage');
       }
 
-      alert('Document désarchivé avec succès ✅');
+      alert('Document archivé avec succès ✅');
     } catch (error) {
       console.error('Erreur frontend:', error);
       alert('Une erreur est survenue ❌');
     }
   };
-
 
 
   return (
@@ -753,6 +760,147 @@ const Doc = () => {
           <Card className="w-100 border border-transparent">
             <Card.Body>
               <br />
+              <Dropdown as={ButtonGroup} className="mb-3 float-end">
+                <Dropdown.Toggle variant="light" size="sm" title="Importer">
+                  <FaUpload className="me-1" />
+                  Importer
+                </Dropdown.Toggle>
+                <Dropdown.Menu>
+                  <Dropdown.Item onClick={() => setShowUploadForm(prev => !prev)}>
+                    <FaFileUpload className="me-2" />
+                    Télécharger un document
+                  </Dropdown.Item>
+                  <Dropdown.Item onClick={() => setShowUploadFolderForm(true)}>
+                    <FaFolderOpen className="me-2" />
+                    Télécharger un dossier
+                  </Dropdown.Item>
+                </Dropdown.Menu>
+              </Dropdown>
+
+              <Modal
+                show={showUploadFolderForm}
+                onHide={() => setShowUploadFolderForm(false)}
+                centered
+                backdrop="static"
+                style={{ zIndex: 1050 }}
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Importer un dossier</Modal.Title>
+                </Modal.Header>
+
+                <Modal.Body>
+                  <Form>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Nom du dossier</Form.Label>
+                      <Form.Control
+                        type="text"
+                        placeholder="Nom du dossier"
+                        value={folderName}
+                        onChange={(e) => setFolderName(e.target.value)}
+                      />
+                    </Form.Group>
+
+                    <Form.Group className="mb-3">
+                      <Form.Label>Description du dossier</Form.Label>
+                      <Form.Control
+                        as="textarea"
+                        rows={2}
+                        placeholder="Description"
+                        value={folderDescription}
+                        onChange={(e) => setFolderDescription(e.target.value)}
+                      />
+                    </Form.Group>
+
+                    <Form.Group className="mb-3">
+                      <Form.Label>Fichiers</Form.Label>
+                      <Form.Control
+                        type="file"
+                        webkitdirectory="true"
+                        directory=""
+                        multiple
+                        onChange={(e) => {
+                          const files = Array.from(e.target.files);
+                          setFolderFiles(files);
+                          console.log('📁 Fichiers du dossier sélectionné :', files);
+                        }}
+                      />
+                    </Form.Group>
+                  </Form>
+                </Modal.Body>
+
+                <Modal.Footer>
+                  <Button variant="secondary" onClick={() => setShowUploadFolderForm(false)}>
+                    Annuler
+                  </Button>
+                  <Button
+                    variant="primary"
+                    disabled={!folderFiles.length || !folderName}
+                    onClick={handleFolderUpload}
+                  >
+                    Suivant
+                  </Button>
+                </Modal.Footer>
+              </Modal>
+
+              <Modal
+                show={showUploadForm}
+                onHide={() => setShowUploadForm(false)}
+                centered
+                backdrop="static"
+                style={{ zIndex: 1050 }}
+              >
+                <Modal.Header closeButton>
+                  <Modal.Title>Importer un fichier</Modal.Title>
+                </Modal.Header>
+
+                <Modal.Body>
+                  {errorMessage && <Alert variant="danger">{errorMessage}</Alert>}
+
+                  <div className="text-center">
+                    <input
+                      type="file"
+                      id="file-upload"
+                      style={{ display: 'none' }}
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.gif,.bmp,.mp3,.mp4,.avi,.mkv,.zip,.rar,.7z,.py,.js"
+                      onChange={(e) => setPendingFile(e.target.files[0])}
+                    />
+
+                    <Button
+                      variant="outline-primary"
+                      onClick={() => document.getElementById('file-upload').click()}
+                      className="d-flex align-items-center justify-content-center mx-auto"
+                      style={{
+                        height: '45px',
+                        width: '100%',
+                        maxWidth: '350px',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        borderRadius: '8px'
+                      }}
+                    >
+                      <FaCloudUploadAlt size={20} className="me-2" />
+                      {pendingFile ? pendingFile.name : 'Choisir un fichier'}
+                    </Button>
+                  </div>
+                </Modal.Body>
+
+                <Modal.Footer>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setShowUploadForm(false)}
+                  >
+                    Annuler
+                  </Button>
+                  <Button
+                    variant="primary"
+                    disabled={!pendingFile}
+                    onClick={handleNextStep}
+                  >
+                    Suivant
+                  </Button>
+                </Modal.Footer>
+              </Modal>
               {showAdvancedFilters && (
                 <div className="filter-container mt-3">
                   <Card className="filter-card mt-3">
@@ -960,7 +1108,8 @@ const Doc = () => {
                       className={`category-btn ${selectedCategory === '' ? 'active' : ''}`}
                       onClick={() => setSelectedCategory('')}
                     >
-                      Toutes                    </button>a
+                      Toutes
+                    </button>
 
                     {categories.map((cat) => (
                       <button
@@ -1075,22 +1224,55 @@ const Doc = () => {
                                   <img src={shareIcon} width="20" alt="Partager" />
                                 </Button>
 
-
-
+                                {/* Créer un workflow */}
+                                <Button
+                                  variant="dark"
+                                  size="sm"
+                                  className="ms-2"
+                                  onClick={() => {
+                                    if (userRole === 'admin' || doc.owner_id === userId) {
+                                      handleOpenConfirm(doc);
+                                    }
+                                  }}
+                                  disabled={
+                                    !(userRole === 'admin' || doc.owner_id === userId) ||
+                                    isMediaFile(doc).isPhoto ||
+                                    isMediaFile(doc).isVideo
+                                  }
+                                  title={
+                                    isMediaFile(doc).isPhoto || isMediaFile(doc).isVideo
+                                      ? 'Workflow non disponible pour les médias'
+                                      : userRole === 'admin' || doc.owner_id === userId
+                                        ? 'Créer un workflow'
+                                        : 'Non autorisé à créer un workflow'
+                                  }
+                                  style={{
+                                    opacity: (userRole === 'admin' || doc.owner_id === userId) &&
+                                      !isMediaFile(doc).isPhoto &&
+                                      !isMediaFile(doc).isVideo
+                                      ? 1
+                                      : 0.15,
+                                    pointerEvents: (userRole === 'admin' || doc.owner_id === userId) &&
+                                      !isMediaFile(doc).isPhoto &&
+                                      !isMediaFile(doc).isVideo
+                                      ? 'auto'
+                                      : 'none'
+                                  }}
+                                >
+                                  <i className="bi bi-play-fill me-1"></i>
+                                </Button>
                                 {/* Archiver */}
                                 {userRole === 'admin' && (
                                   <Button
                                     variant="secondary"
                                     size="sm"
-                                    className="me-2"
-                                    onClick={() => handleUnarchive(doc.id)}
-                                    title="Afficher le document"
+                                    className="ms-2"
+                                    onClick={() => handleArchive(doc.id)}
+                                    title="Archiver le document"
                                   >
                                     <i className="bi bi-archive"></i>
                                   </Button>
                                 )}
-
-
                               </td>
 
                             </tr>
@@ -1236,12 +1418,14 @@ const Doc = () => {
                       const visibilityValue = shareAccessType === 'public' ? 'public' : 'custom';
 
                       try {
-                        await axios.put(
-                          `http://localhost:5000/api/documents/${docToShare.id}`,
+                       await axios.post(`http://localhost:5000/api/documents/${docToShare.id}/share`,
                           {
                             visibility: visibilityValue,
-                            id_share: selectedUsers.length > 0 ? selectedUsers : [],     // tableau d'IDs
-                            id_group: selectedGroup ? [selectedGroup] : [],              // tableau d'un seul élément ou vide
+                            id_share: selectedUsers.length > 0 ? selectedUsers : [],
+                            id_group: selectedGroup ? [selectedGroup] : [],
+                            can_modify: permissions.modify,
+                            can_delete: permissions.delete,
+                            can_share: permissions.share,
                           },
                           { headers: { Authorization: `Bearer ${token}` } }
                         );

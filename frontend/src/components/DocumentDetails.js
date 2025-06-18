@@ -24,23 +24,41 @@ const DocumentDetails = () => {
   const [notifications, setNotifications] = useState([]);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [details, setDetails] = useState({});
+  const [permissions, setPermissions] = useState({ can_modify: false });
 
-
-useEffect(() => {
-  const fetchData = async () => {
+  const fetchPermissions = async () => {
     try {
-      const res = await axios.get(`http://localhost:5000/api/documents/${id}/details`, {
+      const res = await axios.get(`http://localhost:5000/api/documents/${id}/my-permissions`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setDocument(res.data.document);
-      setDetails(res.data.details || {});
+      setPermissions(res.data);
     } catch (error) {
-      console.error('Erreur chargement des détails du document :', error);
+      console.error("Erreur lors de la récupération des permissions:", error);
     }
   };
 
-  if (id && token) fetchData();
-}, [id, token]);
+  useEffect(() => {
+    if (id && token) {
+      fetchPermissions();
+    }
+  }, [id, token]);
+
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const res = await axios.get(`http://localhost:5000/api/documents/${id}/details`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        setDocument(res.data.document);
+        setDetails(res.data.details || {});
+      } catch (error) {
+        console.error('Erreur chargement des détails du document :', error);
+      }
+    };
+
+    if (id && token) fetchData();
+  }, [id, token]);
 
   useEffect(() => {
     const fetchDocument = async () => {
@@ -58,7 +76,7 @@ useEffect(() => {
       }
     };
 
-    
+
 
 
     const fetchVersions = async () => {
@@ -318,46 +336,83 @@ useEffect(() => {
                     <Button variant="secondary" size="sm" onClick={handleBack}>
                       ⬅️ Retour
                     </Button>
+                   {(permissions.can_modify || currentUser?.role === 'admin') && (
+                      <Button 
+                        variant="primary" 
+                        size="sm" 
+                        onClick={() => navigate(`/document/${id}/complete`)}
+                        className="ms-2"
+                      >
+                        ✏️ Modifier les infos
+                      </Button>
+                    )}
                   </div>
 
                   <h4 className="mt-3">📌 Détails</h4>
-                  {document && (
-                    <>
-                      <p><strong>Nom :</strong> {document.name}</p>
-                      <p><strong>Catégorie :</strong> {document.category}</p>
-                      <p><strong>Date d’upload :</strong> {new Date(document.date).toLocaleString()}</p>
-                      <p><strong>Visibilité :</strong> {document.visibility}</p>
+            {document && (
+  <>
+    <p><strong>Nom :</strong> {document.name}</p>
+    <p><strong>Catégorie :</strong> {document.category}</p>
+    <p><strong>Date d'upload :</strong> {new Date(document.date).toLocaleString()}</p>
+    <p><strong>Visibilité :</strong> {document.visibility}</p>
 
-                      {document.category === 'cv' && (
-                        <>
-                          <p><strong>Numéro CV :</strong> {details.num_cv}</p>
-                          <p><strong>Nom candidat :</strong> {details.nom_candidat}</p>
-                          <p><strong>Métier :</strong> {details.metier}</p>
-                          <p><strong>Lieu :</strong> {details.lieu}</p>
-                          <p><strong>Expérience :</strong> {details.experience}</p>
-                          <p><strong>Domaine :</strong> {details.domaine}</p>
-                        </>
-                      )}
+    {/* Détails spécifiques par catégorie */}
+    {document.category === 'cv' && (
+      <>
+        <p><strong>Numéro CV :</strong> {details.num_cv}</p>
+        <p><strong>Nom candidat :</strong> {details.nom_candidat}</p>
+        {/* ... autres champs CV ... */}
+      </>
+    )}
 
-                      {document.category === 'facture' && (
-                        <>
-                          <p><strong>Numéro Facture :</strong> {details.numero_facture}</p>
-                          <p><strong>Nom entreprise :</strong> {details.nom_entreprise}</p>
-                          <p><strong>Produit :</strong> {details.produit}</p>
-                          <p><strong>Montant :</strong> {details.montant}</p>
-                          <p><strong>Date Facture :</strong> {details.date_facture}</p>
-                        </>
-                      )}
+    {document.category === 'facture' && (
+      <>
+        <p><strong>Numéro Facture :</strong> {details.numero_facture}</p>
+        {/* ... autres champs facture ... */}
+      </>
+    )}
 
-                      {document.category === 'demande_conge' && (
-                        <>
-                          <p><strong>Numéro demande :</strong> {details.numdemande}</p>
-                          <p><strong>Date congé :</strong> {details.dateconge}</p>
-                        </>
-                      )}
-                    </>
-                  )}
+    {document.category === 'demande_conge' && (
+      <>
+        <p><strong>Numéro demande :</strong> {details.numdemande}</p>
+        {/* ... autres champs demande congé ... */}
+      </>
+    )}
 
+    {document.category === 'contrat' && details && (
+      <>
+        <p><strong>Numéro contrat :</strong> {details.numero_contrat}</p>
+        <p><strong>Type :</strong> {details.type_contrat}</p>
+        <p><strong>Partie prenante :</strong> {details.partie_prenante}</p>
+        <p><strong>Date signature :</strong> {details.date_signature}</p>
+        <p><strong>Date échéance :</strong> {details.date_echeance}</p>
+        <p><strong>Montant :</strong> {details.montant}</p>
+        <p><strong>Statut :</strong> {details.statut}</p>
+      </>
+    )}
+
+    {document.category === 'rapport' && details && (
+      <>
+        <p><strong>Type rapport :</strong> {details.type_rapport}</p>
+        <p><strong>Auteur :</strong> {details.auteur}</p>
+        <p><strong>Date rapport :</strong> {details.date_rapport}</p>
+        <p><strong>Période couverte :</strong> {details.periode_couverte}</p>
+        <p><strong>Destinataire :</strong> {details.destinataire}</p>
+      </>
+    )}
+
+    {/* Détails communs pour les médias (photos/vidéos) */}
+    {['jpg', 'jpeg', 'png', 'mp4', 'webm', 'ogg'].includes(document.file_path?.split('.').pop().toLowerCase()) && (
+      <>
+        <p><strong>Taille :</strong> {document.size} octets</p>
+        <p><strong>Type :</strong> {document.file_path?.split('.').pop().toUpperCase()}</p>
+        {document.text_content && (
+          <p><strong>Texte extrait :</strong> {document.text_content.substring(0, 100)}...</p>
+        )}
+      </>
+    )}
+  </>
+)}
 
                   {document.version !== undefined && document.version !== null && (
                     <p className="mt-4">
