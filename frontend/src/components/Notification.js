@@ -13,6 +13,7 @@ const NotificationsPage = () => {
   const [userRole, setUserRole] = useState("");
   const [currentUser, setCurrentUser] = useState(null);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const token = localStorage.getItem('token');
   const [activeTab, setActiveTab] = useState('notifications');
 
   const handleDecision = async (id, decision, userId, senderId) => {
@@ -39,6 +40,7 @@ const NotificationsPage = () => {
     }
   };
 
+  
   useEffect(() => {
     const token = localStorage.getItem('token');
     if (token) {
@@ -143,6 +145,79 @@ const NotificationsPage = () => {
     return user ? `${user.prenom} ${user.name}` : 'Utilisateur inconnu';
   };
 
+  const formatNotificationMessage = (notif) => {
+  if (notif.type === 'archive_request') {
+    return `
+      <div class="notification-message">
+        <p>${notif.message.split('<br>')[0]}</p>
+        <small>${new Date(notif.created_at).toLocaleString('fr-FR')}</small>
+        <small>Envoyée par: ${getUserName(notif.sender_id)}</small>
+      </div>
+    `;
+  }
+  return notif.message; // Pour les autres types de notifications
+};
+
+ const handleArchive = async (docId) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/documents/${docId}/archive`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`, // Très important !
+        },
+      });
+
+      const data = await response.json(); // On lit la réponse pour voir le message
+
+      if (!response.ok) {
+        console.error('Erreur API:', data);
+        throw new Error(data.message || 'Erreur lors de l’archivage');
+      }
+
+      alert('Document archivé avec succès ✅');
+    } catch (error) {
+      console.error('Erreur frontend:', error);
+      alert('Une erreur est survenue ❌');
+    }
+  };
+
+const handleArchiveDecision = async (notif, decision) => {
+  try {
+    // 1. Effectuer l'action d'archivage/désarchivage
+    const endpoint = `http://localhost:5000/api/documents/${notif.document_id}/archive`;
+    await axios.put(endpoint, {}, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+
+    // 2. Marquer la notification comme lue
+    await markAsRead(notif.id); // Utilisez la fonction existante markAsRead
+    
+    // 3. Envoyer la notification appropriée
+    const message = decision 
+      ? `Votre demande d'archivage pour le document #${notif.document_id} a été approuvée.`
+      : `Votre demande d'archivage pour le document #${notif.document_id} a été refusée.`;
+
+    await axios.post('http://localhost:5000/api/notifications', {
+      user_id: notif.sender_id,
+      sender_id: currentUser.id,
+      message: message,
+      type: 'info',
+      document_id: notif.document_id,
+      decision: decision,
+      is_read: false
+    });
+
+    // 4. Afficher un message et rafraîchir
+    alert(`Demande ${decision ? 'approuvée' : 'refusée'} avec succès`);
+    fetchNotifications();
+
+  } catch (error) {
+    console.error('Erreur:', error);
+    alert(`Erreur lors du traitement: ${error.response?.data?.message || error.message}`);
+  }
+};
+
   return (
     <>
       <Navbar />
@@ -169,90 +244,93 @@ const NotificationsPage = () => {
           </div>
         </div>
 
-        {activeTab === 'notifications' && (
-          <div className="notifications-section">
-            {notifications.length === 0 ? (
-              <div className="empty-state">
-                <i className="bi bi-bell-slash"></i>
-                <p>Aucune notification système</p>
+    {activeTab === 'notifications' && (
+  <div className="notifications-section">
+    {notifications.length === 0 ? (
+      <div className="empty-state">
+        <i className="bi bi-bell-slash"></i>
+        <p>Aucune notification système</p>
+      </div>
+    ) : (
+      notifications.map(notif => (
+        <Card key={notif.id} className={`notification-card ${!notif.is_read ? 'unread' : ''}`}>
+          <Card.Body>
+            <div className="notification-content">
+              <div className="notification-icon">
+                {notif.type === 'task' ? (
+                  <i className="bi bi-clipboard-check"></i>
+                ) : notif.type === 'archive_request' ? (
+                  <i className="bi bi-archive"></i>
+                ) : (
+                  <i className="bi bi-info-circle"></i>
+                )}
               </div>
-            ) : (
-              notifications.map(notif => (
-                <Card key={notif.id} className={`notification-card ${!notif.is_read ? 'unread' : ''}`}>
-                  <Card.Body>
-                    <div className="notification-content">
-                      <div className="notification-icon">
-                        {notif.type === 'task' ? (
-                          <i className="bi bi-clipboard-check"></i>
-                        ) : (
-                          <i className="bi bi-info-circle"></i>
-                        )}
-                      </div>
-                      <div className="notification-details">
-                        <Card.Title>{notif.type === 'task' ? 'Tâche' : 'Information'}</Card.Title>
-                        <Card.Text>{notif.message}</Card.Text>
-                        <div className="notification-meta">
-                          <small>{new Date(notif.created_at).toLocaleString()}</small>
-                          {currentUser?.role === 'admin' && notif.sender_id && (
-                            <small>Envoyée par: {getUserName(notif.sender_id)}</small>
-                          )}
-                        </div>
-                      </div>
-                      <div className="notification-actions">
-  {notif.type === 'task' && notif.related_task_id &&  (
+              <div className="notification-details">
+                <Card.Title>
+                  {notif.type === 'task' ? 'Tâche' : 
+                   notif.type === 'archive_request' ? 'Demande d\'archivage' : 
+                   'Information'}
+                </Card.Title>
+                <div 
+                  className="notification-message"
+                  dangerouslySetInnerHTML={{ __html: formatNotificationMessage(notif) }}
+                />
+              </div>
+              <div className="notification-actions">
+            {notif.document_id && (
+  (currentUser?.role === 'admin' || document?.is_archived) && (
     <Button
       variant="outline-primary"
       size="sm"
       className="action-btn"
-      href={`/details_taches/${notif.related_task_id}`}
-      title="Voir la tâche"
+      href={`/documents/${notif.document_id}`}
+      title="Voir le document"
+      disabled={document?.is_archived && currentUser?.role !== 'admin'}
     >
-      <i className="bi bi-eye"></i>
+      <i className="bi bi-file-earmark"></i>
     </Button>
-  )}
-  {!notif.is_read  && (
+  )
+)}
+                {!notif.is_read && (
+                  <Button
+                    variant="outline-success"
+                    size="sm"
+                    className="action-btn"
+                    onClick={() => markAsRead(notif.id)}
+                    title="Marquer comme lu"
+                  >
+                    <i className="bi bi-check2"></i>
+                  </Button>
+                )}
+   {currentUser?.role === 'admin' && notif.type === 'archive_request' && !notif.is_read && (
+  <ButtonGroup>
     <Button
       variant="outline-success"
       size="sm"
-      className="action-btn"
-      onClick={() => markAsRead(notif.id)}
-      title="Marquer comme lu"
+      onClick={() => handleArchiveDecision(notif, true)}
+      title="Archiver le document"
     >
-      <i className="bi bi-check2"></i>
+      <i className="bi bi-archive"></i> Archiver
     </Button>
-  )}
-  {currentUser?.role === 'admin' && (
-    <>
-      <Button
-        variant="outline-success"
-        size="sm"
-        className="action-btn"
-        onClick={() => handleDecision(notif.document_id, true, notif.user_id, currentUser?.id)}
-        title="Approuver"
-      >
-        <i className="bi bi-check-lg"></i>
-      </Button>
-      <Button
-        variant="outline-danger"
-        size="sm"
-        className="action-btn"
-        onClick={() => handleDecision(notif.document_id, false, notif.user_id, currentUser?.id)}
-        title="Refuser"
-      >
-        <i className="bi bi-x-lg"></i>
-      </Button>
-    </>
-  )}
-  
-</div>
-                    </div>
-                  </Card.Body>
-                </Card>
-              ))
-            )}
-          </div>
-        )}
-
+    <Button
+      variant="outline-danger"
+      size="sm"
+      className="action-btn"
+      onClick={() => handleArchiveDecision(notif, false)}
+      title="Refuser"
+    >
+      <i className="bi bi-x-lg"></i>
+    </Button>
+  </ButtonGroup>
+)}
+              </div>
+            </div>
+          </Card.Body>
+        </Card>
+      ))
+    )}
+  </div>
+)}
         {activeTab === 'reminders' && (
           <div className="reminders-section">
             {reminders.length === 0 ? (

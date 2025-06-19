@@ -973,25 +973,27 @@ router.get('/archive', auth, async (req, res) => {
     let result;
 
     if (isAdmin) {
-      // Tous les documents archivés complétés (toutes les versions)
+      // Tous les documents archivés complétés avec date_archive
       result = await pool.query(`
-        SELECT d.*
+        SELECT d.*, 
+               TO_CHAR(d.date_archive, 'DD/MM/YYYY HH24:MI') as formatted_date_archive
         FROM documents d
         WHERE d.is_completed = true
         AND d.is_archived = true
-        ORDER BY d.name, d.version DESC
+        ORDER BY d.date_archive DESC, d.name, d.version DESC
       `);
     } else {
-      // Uniquement les documents archivés visibles par l'utilisateur
+      // Documents archivés visibles par l'utilisateur avec date_archive
       result = await pool.query(`
-        SELECT d.*
+        SELECT d.*,
+               TO_CHAR(d.date_archive, 'DD/MM/YYYY HH24:MI') as formatted_date_archive
         FROM documents d
         JOIN document_permissions dp ON dp.document_id = d.id
         WHERE dp.user_id = $1
         AND dp.can_read = true
         AND d.is_completed = true
         AND d.is_archived = true
-        ORDER BY d.name, d.version DESC
+        ORDER BY d.date_archive DESC, d.name, d.version DESC
       `, [userId]);
     }
 
@@ -1013,38 +1015,60 @@ router.put('/:id/archive', auth, async (req, res) => {
 
   try {
     await pool.query(
-      'UPDATE documents SET is_archived = true WHERE id = $1',
+      'UPDATE documents SET is_archived = true, date_archive = NOW() WHERE id = $1 RETURNING *',
       [id]
     );
-    res.status(200).json({ message: 'Document archivé avec succès.' });
+    
+    const updatedDoc = await pool.query(
+      'SELECT *, TO_CHAR(date_archive, \'DD/MM/YYYY HH24:MI\') as formatted_date_archive FROM documents WHERE id = $1',
+      [id]
+    );
+    
+    res.status(200).json({ 
+      message: 'Document archivé avec succès.',
+      document: updatedDoc.rows[0]
+    });
   } catch (error) {
     console.error('Erreur lors de l’archivage :', error);
     res.status(500).json({ error: 'Erreur serveur lors de l’archivage.' });
   }
 });
-
 // routes/documents.js
 router.put('/:id/affiche', auth, async (req, res) => {
   const docId = req.params.id;
-  const isArchived = req.body.is_archived; // doit être true ou false
+  const isArchived = req.body.is_archived;
+  const userRole = req.user.role;
+
+  if (isArchived && userRole !== 'admin') {
+    return res.status(403).json({ message: 'Seul un administrateur peut archiver.' });
+  }
 
   try {
-    const result = await pool.query(
-      'UPDATE documents SET is_archived = $1 WHERE id = $2 RETURNING *',
-      [isArchived, docId]
-    );
+    const query = isArchived 
+      ? 'UPDATE documents SET is_archived = true, date_archive = NOW() WHERE id = $1 RETURNING *'
+      : 'UPDATE documents SET is_archived = false, date_archive = NULL WHERE id = $1 RETURNING *';
+
+    const result = await pool.query(query, [docId]);
 
     if (result.rowCount === 0) {
       return res.status(404).json({ message: 'Document introuvable' });
     }
 
-    res.json({ message: isArchived ? 'Document archivé' : 'Document désarchivé', document: result.rows[0] });
+    // Récupérer le document avec la date formatée
+    const updatedDoc = await pool.query(
+      'SELECT *, TO_CHAR(date_archive, \'DD/MM/YYYY HH24:MI\') as formatted_date_archive FROM documents WHERE id = $1',
+      [docId]
+    );
+
+    res.json({ 
+      message: isArchived ? 'Document archivé' : 'Document désarchivé', 
+      document: updatedDoc.rows[0] 
+    });
   } catch (err) {
     console.error('Erreur SQL :', err);
     res.status(500).json({ message: 'Erreur lors de la mise à jour de l’archivage' });
   }
 });
-
 
 router.get('/archived', auth, async (req, res) => {
   const userId = req.user.id;
@@ -1315,7 +1339,6 @@ router.get('/:id/details', auth, async (req, res) => {
         
         technicalInfo = techRes.rows[0] || {};
       } catch (err) {
-        console.log('Aucune métadonnée technique trouvée pour ce média');
       }
     }
 
@@ -1418,6 +1441,253 @@ router.post('/:id/share', auth, async (req, res) => {
   }
 });
 
+// routes/documents.js
+
+router.post('/archive-requests', auth, async (req, res) => {
+  const { documentId } = req.body;
+  const requesterId = req.user.id;
+  const requesterName = req.user.prenom && req.user.name 
+    ? `${req.user.prenom} ${req.user.name}`
+    : 'Utilisateur inconnu';
+  const currentDate = new Date().toLocaleString('fr-FR');
+
+  if (!documentId) {
+    return res.status(400).json({
+      success: false,
+      error: "L'ID du document est requis",
+      received: req.body
+    });
+  }
+
+  try {
+    const docQuery = await pool.query(
+      `SELECT d.id, d.name, d.file_path, d.is_archived 
+       FROM documents d
+       WHERE d.id = $1`,
+      [documentId]
+    );
+
+    if (!docQuery.rows.length) {
+      return res.status(404).json({
+        success: false,
+        error: `Document ${documentId} non trouvé`
+      });
+    }
+
+    const document = docQuery.rows[0];
+
+    if (document.is_archived) {
+      return res.status(400).json({
+        success: false,
+        error: "Le document est déjà archivé",
+        document: {
+          id: document.id,
+          name: document.name
+        }
+      });
+    }
+
+    const newRequest = await pool.query(
+      `INSERT INTO archive_requests 
+       (document_id, requester_id)
+       VALUES ($1, $2)
+       RETURNING *`,
+      [documentId, requesterId]
+    );
+
+    const admins = await pool.query(
+      `SELECT id FROM users WHERE role = 'admin'`
+    );
+
+    const notificationPromises = admins.rows.map(admin => {
+      const message = `Demande d'archivage pour le document "${document.name}"` ;
+
+      return pool.query(
+        `INSERT INTO notifications
+         (user_id, title, message, type, document_id, sender_id, related_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          admin.id,
+          'Nouvelle demande d\'archivage',
+          message,
+          'archive_request',
+          document.id,
+          requesterId,
+          newRequest.rows[0].id
+        ]
+      );
+    });
+
+    await Promise.all(notificationPromises);
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        request: newRequest.rows[0],
+        document: {
+          id: document.id,
+          name: document.name,
+          url: `/documents/${document.id}`
+        },
+        notifications_sent: admins.rows.length
+      }
+    });
+
+  } catch (error) {
+    console.error('Erreur base de données:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Erreur lors de la création de la demande',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+// documentsRoutes.js
+router.put('/:requestId/decision', auth, async (req, res) => {
+  const { requestId } = req.params; // Utilisez requestId au lieu de documentId
+  const { decision } = req.body;
+  const processedBy = req.user.id;
+
+  try {
+    // 1. Vérifier que la demande existe
+    const request = await pool.query(
+      `SELECT ar.*, d.id as document_id, d.name as document_name,
+              u.prenom, u.name as requester_name
+       FROM archive_requests ar
+       JOIN documents d ON ar.document_id = d.id
+       JOIN users u ON ar.requester_id = u.id
+       WHERE ar.id = $1 AND ar.status = 'pending'`,
+      [requestId] // Recherche par requestId
+    );
+
+    if (request.rows.length === 0) {
+      return res.status(404).json({ 
+        error: 'Demande non trouvée ou déjà traitée',
+        requestId
+      });
+    }
+
+    const documentId = request.rows[0].document_id;
+    const requesterId = request.rows[0].requester_id;
+
+    // 2. Mettre à jour la demande
+    await pool.query(
+      `UPDATE archive_requests
+       SET status = $1,
+           processed_by = $2,
+           processed_at = NOW()
+       WHERE id = $3`,
+      [decision ? 'approved' : 'rejected', processedBy, requestId]
+    );
+
+    // 3. Si approbation, archiver le document
+    if (decision) {
+      await pool.query(
+        `UPDATE documents
+         SET is_archived = true,
+             archived_at = NOW()
+         WHERE id = $1`,
+        [documentId]
+      );
+    }
+
+    res.status(200).json({
+      success: true,
+      requestId,
+      documentId,
+      isArchived: decision
+    });
+
+  } catch (error) {
+    console.error('Erreur:', error);
+    res.status(500).json({
+      error: 'Erreur serveur',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+// Route pour approuver/rejeter une demande d'archivage (admin seulement)
+router.put('/archive-requests/:id/process', auth, async (req, res) => {
+  const { id } = req.params;
+  const { action } = req.body; // 'approve' ou 'reject'
+  const adminId = req.user.id;
+
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Accès refusé' });
+  }
+
+  try {
+    // Récupérer la demande
+    const request = await pool.query(
+      'SELECT * FROM archive_requests WHERE id = $1 AND status = $2',
+      [id, 'pending']
+    );
+
+    if (request.rowCount === 0) {
+      return res.status(404).json({ message: 'Demande non trouvée ou déjà traitée' });
+    }
+
+    if (action === 'approve') {
+      // Archiver le document
+      await pool.query(
+        'UPDATE documents SET is_archived = true WHERE id = $1',
+        [request.rows[0].document_id]
+      );
+
+      // Mettre à jour la demande
+      await pool.query(
+        `UPDATE archive_requests 
+         SET status = 'approved', processed_at = NOW(), processed_by = $1
+         WHERE id = $2`,
+        [adminId, id]
+      );
+
+      // Notifier le demandeur
+      await pool.query(
+        `INSERT INTO notifications 
+         (user_id, type, message, related_id)
+         VALUES ($1, 'archive_approved', $2, $3)`,
+        [
+          request.rows[0].requester_id,
+          `Votre demande d'archivage a été approuvée`,
+          request.rows[0].document_id
+        ]
+      );
+
+      res.json({ message: 'Document archivé avec succès' });
+
+    } else if (action === 'reject') {
+      // Rejeter la demande
+      await pool.query(
+        `UPDATE archive_requests 
+         SET status = 'rejected', processed_at = NOW(), processed_by = $1
+         WHERE id = $2`,
+        [adminId, id]
+      );
+
+      // Notifier le demandeur
+      await pool.query(
+        `INSERT INTO notifications 
+         (user_id, type, message, related_id)
+         VALUES ($1, 'archive_rejected', $2, $3)`,
+        [
+          request.rows[0].requester_id,
+          `Votre demande d'archivage a été rejetée`,
+          request.rows[0].document_id
+        ]
+      );
+
+      res.json({ message: 'Demande rejetée' });
+    } else {
+      res.status(400).json({ message: 'Action invalide' });
+    }
+
+  } catch (error) {
+    console.error('Erreur traitement demande:', error);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
 router.get('/stats', async (req, res) => {
   try {
     const usersResult = await pool.query('SELECT COUNT(*) FROM users');
@@ -1442,19 +1712,19 @@ router.get('/:id/versions', auth, async (req, res) => {
   const id = parseInt(req.params.id, 10);
   
   try {
-    // 1. Récupérer le nom original
+    // 1. Récupérer le document original
     const { rows: [doc] } = await pool.query(
       'SELECT name FROM documents WHERE id = $1', 
       [id]
     );
     if (!doc) return res.status(404).json({ error: 'Document introuvable' });
 
-    // 2. Récupérer toutes les versions
+    // 2. Récupérer toutes les versions avec toutes les infos nécessaires
     const { rows: versions } = await pool.query(`
       SELECT 
-        id, name, version, diff_version
+        id, name, version, date, category, file_path
       FROM documents
-      WHERE name = $1 AND is_completed = true
+      WHERE name = $1 AND is_completed =true 
       ORDER BY version DESC
     `, [doc.name]);
 
@@ -1468,7 +1738,6 @@ router.get('/:id/versions', auth, async (req, res) => {
     });
   }
 });
-
 
 // GET : récupérer un document spécifique par ID
 router.get('/', auth, async (req, res) => {
@@ -1724,6 +1993,66 @@ router.post('/categories', auth, async (req, res) => {
   }
 });
 
+// Partage avec un utilisateur
+router.post('/folders/:id/share/user', auth, async (req, res) => {
+    try {
+        const { userId, permissions } = req.body;
+        const folder = await Folder.findByPk(req.params.id);
+        
+        if (!folder) {
+            return res.status(404).json({ error: 'Dossier non trouvé' });
+        }
+
+        const permission = await FolderPermission.create({
+            folder_id: req.params.id,
+            user_id: userId,
+            ...permissions
+        });
+
+        res.status(201).json(permission);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Partage avec un groupe
+router.post('/folders/:id/share/group', auth, async (req, res) => {
+    try {
+        const { groupId, permissions } = req.body;
+        const folder = await Folder.findByPk(req.params.id);
+        
+        if (!folder) {
+            return res.status(404).json({ error: 'Dossier non trouvé' });
+        }
+
+        const permission = await FolderPermission.create({
+            folder_id: req.params.id,
+            group_id: groupId,
+            ...permissions
+        });
+
+        res.status(201).json(permission);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Récupérer les permissions d'un dossier
+router.get('/folders/:id/permissions', auth, async (req, res) => {
+    try {
+        const permissions = await FolderPermission.findAll({
+            where: { folder_id: req.params.id },
+            include: [
+                { model: User, attributes: ['id', 'name', 'email'] },
+                { model: Group, attributes: ['id', 'nom'] }
+            ]
+        });
+        
+        res.json(permissions);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // POST /api/documents/check-duplicate
 router.post('/check-duplicate', async (req, res) => {
