@@ -1420,113 +1420,206 @@ router.post('/:id/share', auth, async (req, res) => {
 
 // routes/documents.js
 
-// Route pour créer une demande d'archivage
 router.post('/archive-requests', auth, async (req, res) => {
-  // 1. Validation améliorée
-  const { documentId, requesterId } = req.body;
-  
-  console.log('Received data:', req.body); // Debug log
+  const { documentId } = req.body;
+  const requesterId = req.user.id;
+  const requesterName = req.user.prenom && req.user.name 
+    ? `${req.user.prenom} ${req.user.name}`
+    : 'Utilisateur inconnu';
+  const currentDate = new Date().toLocaleString('fr-FR');
 
-  if (documentId === undefined || requesterId === undefined) {
+  if (!documentId) {
     return res.status(400).json({
       success: false,
-      error: "documentId et requesterId sont requis",
-      received: req.body,
-      problem: "Certains champs sont undefined"
+      error: "L'ID du document est requis",
+      received: req.body
     });
   }
 
-  if (typeof documentId !== 'number' || typeof requesterId !== 'number') {
-    return res.status(400).json({
-      success: false,
-      error: "Les IDs doivent être des nombres",
-      received: {
-        documentId: {
-          value: documentId,
-          type: typeof documentId
-        },
-        requesterId: {
-          value: requesterId,
-          type: typeof requesterId
-        }
-      }
-    });
-  }
-
-  // 2. Vérification de l'existence des entités
   try {
-    const docExists = await pool.query(
-      'SELECT 1 FROM documents WHERE id = $1', 
+    const docQuery = await pool.query(
+      `SELECT d.id, d.name, d.file_path, d.is_archived 
+       FROM documents d
+       WHERE d.id = $1`,
       [documentId]
     );
-    
-    if (!docExists.rows.length) {
+
+    if (!docQuery.rows.length) {
       return res.status(404).json({
         success: false,
         error: `Document ${documentId} non trouvé`
       });
     }
 
-    const userExists = await pool.query(
-      'SELECT 1 FROM users WHERE id = $1',
-      [requesterId]
-    );
+    const document = docQuery.rows[0];
 
-    if (!userExists.rows.length) {
-      return res.status(404).json({
+    if (document.is_archived) {
+      return res.status(400).json({
         success: false,
-        error: `Utilisateur ${requesterId} non trouvé`
+        error: "Le document est déjà archivé",
+        document: {
+          id: document.id,
+          name: document.name
+        }
       });
     }
 
-    // Récupérer les administrateurs qui doivent recevoir la notification
-    const admins = await pool.query(
-      'SELECT id FROM users WHERE role = $1',
-      ['admin']
-    );
-
-    // 3. Création de la demande
     const newRequest = await pool.query(
       `INSERT INTO archive_requests 
-       (document_id, requester_id) 
+       (document_id, requester_id)
        VALUES ($1, $2)
        RETURNING *`,
       [documentId, requesterId]
     );
 
-    // 4. Création des notifications pour les administrateurs
-    if (admins.rows.length > 0) {
-      const notificationPromises = admins.rows.map(admin => {
-        return pool.query(
-          `INSERT INTO notifications 
-           (user_id, title, message, type, document_id, sender_id, related_id) 
-           VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-          [
-            admin.id,
-            'Nouvelle demande d\'archivage',
-            `Une demande d'archivage a été soumise pour le document #${documentId}`,
-            'archive_request',
-            documentId,
-            requesterId,
-            newRequest.rows[0].id // ID de la demande d'archive
-          ]
-        );
-      });
+    const admins = await pool.query(
+      `SELECT id FROM users WHERE role = 'admin'`
+    );
 
-      await Promise.all(notificationPromises);
-    }
+    const notificationPromises = admins.rows.map(admin => {
+      const message = `Demande d'archivage pour le document "${document.name}"` ;
+
+      return pool.query(
+        `INSERT INTO notifications
+         (user_id, title, message, type, document_id, sender_id, related_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [
+          admin.id,
+          'Nouvelle demande d\'archivage',
+          message,
+          'archive_request',
+          document.id,
+          requesterId,
+          newRequest.rows[0].id
+        ]
+      );
+    });
+
+    await Promise.all(notificationPromises);
 
     return res.status(201).json({
       success: true,
-      data: newRequest.rows[0],
-      notifications_sent: admins.rows.length
+      data: {
+        request: newRequest.rows[0],
+        document: {
+          id: document.id,
+          name: document.name,
+          url: `/documents/${document.id}`
+        },
+        notifications_sent: admins.rows.length
+      }
     });
 
   } catch (error) {
-    console.error('Database error:', error);
+    console.error('Erreur base de données:', error);
     return res.status(500).json({
       success: false,
-      error: 'Erreur de base de données',
+      error: 'Erreur lors de la création de la demande',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+router.put('/archive-requests/:id/decision', auth, async (req, res) => {
+  const { id } = req.params;
+  const { decision, reason } = req.body;
+  const processedBy = req.user.id;
+  const processedByName = req.user.prenom && req.user.name 
+    ? `${req.user.prenom} ${req.user.name}`
+    : 'Administrateur';
+  const currentDate = new Date().toLocaleString('fr-FR');
+
+  try {
+    const requestQuery = await pool.query(
+      `SELECT ar.*, 
+              d.name AS document_name,
+              d.is_archived,
+              u.prenom AS requester_prenom,
+              u.name AS requester_name
+       FROM archive_requests ar
+       JOIN documents d ON ar.document_id = d.id
+       JOIN users u ON ar.requester_id = u.id
+       WHERE ar.id = $1 AND ar.status = 'pending'`,
+      [id]
+    );
+
+    if (!requestQuery.rows.length) {
+      return res.status(404).json({
+        success: false,
+        error: 'Demande non trouvée ou déjà traitée'
+      });
+    }
+
+    const request = requestQuery.rows[0];
+    const status = decision ? 'approved' : 'rejected';
+    const requesterName = request.requester_prenom && request.requester_name
+      ? `${request.requester_prenom} ${request.requester_name}`
+      : 'Utilisateur inconnu';
+
+    const updateRequest = await pool.query(
+      `UPDATE archive_requests
+       SET status = $1,
+           processed_by = $2,
+           processed_at = NOW()
+       WHERE id = $3
+       RETURNING *`,
+      [status, processedBy, id]
+    );
+
+    if (decision) {
+      await pool.query(
+        `UPDATE documents
+         SET is_archived = true,
+             archived_at = NOW()
+         WHERE id = $1`,
+        [request.document_id]
+      );
+    }
+
+    const message = `Votre demande pour "<strong>${request.document_name}</strong>" a été ` +
+                   `<strong>${decision ? 'approuvée' : 'rejetée'}</strong><br>` +
+                   `<small>${currentDate}</small><br>` +
+                   `Traité par: <strong>${processedByName}</strong><br>` +
+                   `${reason ? `Motif: <em>${reason}</em><br>` : ''}` +
+                   `Lien: <a href="http://localhost:3000/documents/${request.document_id}" target="_blank">Ouvrir le document</a>`;
+
+    await pool.query(
+      `INSERT INTO notifications
+       (user_id, title, message, type, document_id, sender_id, related_id, decision)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        request.requester_id,
+        `Demande d'archivage ${decision ? 'approuvée' : 'rejetée'}`,
+        message,
+        'archive_decision',
+        request.document_id,
+        processedBy,
+        id,
+        decision
+      ]
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        request: updateRequest.rows[0],
+        document: {
+          id: request.document_id,
+          name: request.document_name,
+          is_archived: decision,
+          url: `/documents/${request.document_id}`
+        },
+        requester: {
+          id: request.requester_id,
+          name: requesterName
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Erreur base de données:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Erreur lors du traitement de la demande',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }

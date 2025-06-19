@@ -143,6 +143,19 @@ const NotificationsPage = () => {
     return user ? `${user.prenom} ${user.name}` : 'Utilisateur inconnu';
   };
 
+  const formatNotificationMessage = (notif) => {
+  if (notif.type === 'archive_request') {
+    return `
+      <div class="notification-message">
+        <p>${notif.message.split('<br>')[0]}</p>
+        <small>${new Date(notif.created_at).toLocaleString('fr-FR')}</small>
+        <small>Envoyée par: ${getUserName(notif.sender_id)}</small>
+      </div>
+    `;
+  }
+  return notif.message; // Pour les autres types de notifications
+};
+
   return (
     <>
       <Navbar />
@@ -169,90 +182,91 @@ const NotificationsPage = () => {
           </div>
         </div>
 
-        {activeTab === 'notifications' && (
-          <div className="notifications-section">
-            {notifications.length === 0 ? (
-              <div className="empty-state">
-                <i className="bi bi-bell-slash"></i>
-                <p>Aucune notification système</p>
+    {activeTab === 'notifications' && (
+  <div className="notifications-section">
+    {notifications.length === 0 ? (
+      <div className="empty-state">
+        <i className="bi bi-bell-slash"></i>
+        <p>Aucune notification système</p>
+      </div>
+    ) : (
+      notifications.map(notif => (
+        <Card key={notif.id} className={`notification-card ${!notif.is_read ? 'unread' : ''}`}>
+          <Card.Body>
+            <div className="notification-content">
+              <div className="notification-icon">
+                {notif.type === 'task' ? (
+                  <i className="bi bi-clipboard-check"></i>
+                ) : notif.type === 'archive_request' ? (
+                  <i className="bi bi-archive"></i>
+                ) : (
+                  <i className="bi bi-info-circle"></i>
+                )}
               </div>
-            ) : (
-              notifications.map(notif => (
-                <Card key={notif.id} className={`notification-card ${!notif.is_read ? 'unread' : ''}`}>
-                  <Card.Body>
-                    <div className="notification-content">
-                      <div className="notification-icon">
-                        {notif.type === 'task' ? (
-                          <i className="bi bi-clipboard-check"></i>
-                        ) : (
-                          <i className="bi bi-info-circle"></i>
-                        )}
-                      </div>
-                      <div className="notification-details">
-                        <Card.Title>{notif.type === 'task' ? 'Tâche' : 'Information'}</Card.Title>
-                        <Card.Text>{notif.message}</Card.Text>
-                        <div className="notification-meta">
-                          <small>{new Date(notif.created_at).toLocaleString()}</small>
-                          {currentUser?.role === 'admin' && notif.sender_id && (
-                            <small>Envoyée par: {getUserName(notif.sender_id)}</small>
-                          )}
-                        </div>
-                      </div>
-                      <div className="notification-actions">
-  {notif.type === 'task' && notif.related_task_id &&  (
-    <Button
-      variant="outline-primary"
-      size="sm"
-      className="action-btn"
-      href={`/details_taches/${notif.related_task_id}`}
-      title="Voir la tâche"
-    >
-      <i className="bi bi-eye"></i>
-    </Button>
-  )}
-  {!notif.is_read  && (
-    <Button
-      variant="outline-success"
-      size="sm"
-      className="action-btn"
-      onClick={() => markAsRead(notif.id)}
-      title="Marquer comme lu"
-    >
-      <i className="bi bi-check2"></i>
-    </Button>
-  )}
-  {currentUser?.role === 'admin' && (
-    <>
-      <Button
-        variant="outline-success"
-        size="sm"
-        className="action-btn"
-        onClick={() => handleDecision(notif.document_id, true, notif.user_id, currentUser?.id)}
-        title="Approuver"
-      >
-        <i className="bi bi-check-lg"></i>
-      </Button>
-      <Button
-        variant="outline-danger"
-        size="sm"
-        className="action-btn"
-        onClick={() => handleDecision(notif.document_id, false, notif.user_id, currentUser?.id)}
-        title="Refuser"
-      >
-        <i className="bi bi-x-lg"></i>
-      </Button>
-    </>
-  )}
-  
-</div>
-                    </div>
-                  </Card.Body>
-                </Card>
-              ))
-            )}
-          </div>
-        )}
-
+              <div className="notification-details">
+                <Card.Title>
+                  {notif.type === 'task' ? 'Tâche' : 
+                   notif.type === 'archive_request' ? 'Demande d\'archivage' : 
+                   'Information'}
+                </Card.Title>
+                <div 
+                  className="notification-message"
+                  dangerouslySetInnerHTML={{ __html: formatNotificationMessage(notif) }}
+                />
+              </div>
+              <div className="notification-actions">
+                {notif.document_id && (
+                  <Button
+                    variant="outline-primary"
+                    size="sm"
+                    className="action-btn"
+                    href={`/documents/${notif.document_id}`}
+                    title="Voir le document"
+                  >
+                    <i className="bi bi-file-earmark"></i>
+                  </Button>
+                )}
+                {!notif.is_read && (
+                  <Button
+                    variant="outline-success"
+                    size="sm"
+                    className="action-btn"
+                    onClick={() => markAsRead(notif.id)}
+                    title="Marquer comme lu"
+                  >
+                    <i className="bi bi-check2"></i>
+                  </Button>
+                )}
+                {currentUser?.role === 'admin' && notif.type === 'archive_request' && (
+                  <ButtonGroup>
+                    <Button
+                      variant="outline-success"
+                      size="sm"
+                      className="action-btn"
+                      onClick={() => handleDecision(notif.related_id, true, notif.user_id, currentUser.id)}
+                      title="Accepter"
+                    >
+                      <i className="bi bi-check-lg"></i>
+                    </Button>
+                    <Button
+                      variant="outline-danger"
+                      size="sm"
+                      className="action-btn"
+                      onClick={() => handleDecision(notif.related_id, false, notif.user_id, currentUser.id)}
+                      title="Refuser"
+                    >
+                      <i className="bi bi-x-lg"></i>
+                    </Button>
+                  </ButtonGroup>
+                )}
+              </div>
+            </div>
+          </Card.Body>
+        </Card>
+      ))
+    )}
+  </div>
+)}
         {activeTab === 'reminders' && (
           <div className="reminders-section">
             {reminders.length === 0 ? (
