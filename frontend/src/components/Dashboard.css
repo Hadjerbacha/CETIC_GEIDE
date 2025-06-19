@@ -544,3 +544,117 @@
   width: 270px; /* ou ajuster selon le besoin */
   height: auto;
 }
+/* Styles spécifiques pour les tâches assignées */
+.task-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.task-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid #eee;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.task-item:last-child {
+  border-bottom: none;
+}
+
+.task-item:hover {
+  background-color: #f8f9fa;
+}
+
+.task-icon {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 15px;
+  flex-shrink: 0;
+}
+
+.task-icon .completed {
+  color: #28a745;
+  font-size: 18px;
+}
+
+.task-icon .pending {
+  color: #ffc107;
+  font-size: 18px;
+}
+
+.task-info {
+  flex-grow: 1;
+}
+
+.task-info h4 {
+  font-size: 15px;
+  font-weight: 500;
+  margin: 0 0 3px;
+  color: #2c3e50;
+}
+
+.task-info p {
+  font-size: 13px;
+  color: #7f8c8d;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.task-meta {
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+
+.task-status {
+  font-size: 12px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 12px;
+  text-transform: capitalize;
+}
+
+.task-status.completed {
+  background-color: #e6f7eb;
+  color: #28a745;
+}
+
+.task-status.pending, 
+.task-status['en cours'] {
+  background-color: #fff8e6;
+  color: #ffc107;
+}
+
+.task-status.overdue {
+  background-color: #feeaea;
+  color: #dc3545;
+}
+
+.chevron {
+  color: #bdc3c7;
+  font-size: 12px;
+}
+
+.task-item:hover .chevron {
+  color: #4e73df;
+}
+
+/* Styles pour l'état vide des tâches */
+.empty-state {
+  text-align: center;
+  padding: 30px;
+  color: #95a5a6;
+  font-size: 14px;
+}
+
+.empty-state p {
+  margin: 0;
+}

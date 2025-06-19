@@ -505,7 +505,6 @@ const completeStep = async (step) => {
   return (
     <>
       <Navbar />
-      <Chatbot />
       
       <div className="container-fluid py-4">
         <motion.div 

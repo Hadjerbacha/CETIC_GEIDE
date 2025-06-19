@@ -229,23 +229,25 @@ const AdminUsers = () => {
                                             <td>{user.email}</td>
                                             <td>{getRoleBadge(user.role)}</td>
                                             <td className="text-end">
-                                                <Button
-                                                    variant="outline-warning"
-                                                    size="sm"
-                                                    className="action-btn me-2"
-                                                    onClick={() => handleEditUser(user)}
-                                                >
-                                                    <FiEdit2 />
-                                                </Button>
-                                                <Button 
-                                                    variant="outline-danger" 
-                                                    size="sm" 
-                                                    className="action-btn"
-                                                    onClick={() => handleDeleteClick(user)}
-                                                >
-                                                    <FiTrash2 />
-                                                </Button>
-                                            </td>
+  <div className="d-inline-flex">
+    <Button
+      variant="outline-warning"
+      size="sm"
+      className="me-2"
+      onClick={() => handleEditUser(user)}
+    >
+      <FiEdit2 />
+    </Button>
+    <Button
+      variant="outline-danger"
+      size="sm"
+      onClick={() => handleDeleteClick(user)}
+    >
+      <FiTrash2 />
+    </Button>
+  </div>
+</td>
+
                                         </tr>
                                     ))}
                                 </tbody>

@@ -55,36 +55,42 @@ const Statistique = () => {
     '#e91e63', '#9c27b0', '#673ab7', '#607d8b'
   ];
 
-  useEffect(() => {
-    const fetchAllStats = async () => {
-      try {
-        const endpoints = [
-          '/api/stats/global',
-          '/api/stats/tasks',
-          '/api/stats/documents',
-          '/api/stats/users',
-          '/api/stats/workflows'
-        ];
-        
-        const responses = await Promise.all(
-          endpoints.map(endpoint => axios.get(endpoint))
-        );
+ useEffect(() => {
+  const fetchAllStats = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      // Utiliser Promise.allSettled pour éviter que toute la requête échoue si une seule API échoue
+      const results = await Promise.allSettled([
+        axios.get('/api/stats/global'),
+        axios.get('/api/stats/tasks'),
+        axios.get('/api/stats/documents'),
+        axios.get('/api/stats/users'),
+        axios.get('/api/stats/workflows')
+      ]);
 
-        setGlobalStats(responses[0].data);
-        setTaskStats(responses[1].data);
-        setDocStats(responses[2].data);
-        setUserStats(responses[3].data);
-        setWorkflowStats(responses[4].data);
-      } catch (err) {
-        console.error('Error fetching statistics:', err);
-        setError('Failed to load statistics. Please try again later.');
-      } finally {
-        setLoading(false);
+      // Traiter chaque résultat individuellement
+      setGlobalStats(results[0].status === 'fulfilled' ? results[0].value.data : null);
+      setTaskStats(results[1].status === 'fulfilled' ? results[1].value.data : null);
+      setDocStats(results[2].status === 'fulfilled' ? results[2].value.data : null);
+      setUserStats(results[3].status === 'fulfilled' ? results[3].value.data : null);
+      setWorkflowStats(results[4].status === 'fulfilled' ? results[4].value.data : null);
+
+      // Vérifier si toutes les requêtes ont échoué
+      if (results.every(r => r.status === 'rejected')) {
+        throw new Error('All API requests failed');
       }
-    };
+    } catch (err) {
+      console.error('Error fetching statistics:', err);
+      setError('Failed to load some statistics. Partial data may be displayed.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
-    fetchAllStats();
-  }, []);
+  fetchAllStats();
+}, []);
 
   const formatGlobalStats = () => {
     if (!globalStats) return [];
@@ -94,9 +100,11 @@ const Statistique = () => {
       { name: 'Documents', value: globalStats.totalDocuments, color: COLORS[1] },
       { name: 'Tasks', value: globalStats.totalTasks, color: COLORS[2] },
       { name: 'Workflows', value: globalStats.totalWorkflows, color: COLORS[3] },
-      { name: 'Invoices', value: globalStats.totalInvoices, color: COLORS[4] },
-      { name: 'Leave Requests', value: globalStats.totalLeaveRequests, color: COLORS[6] },
+      { name: 'factures', value: globalStats.totalInvoices, color: COLORS[4] },
+      { name: 'contrats', value: globalStats.totalContractRequests, color: COLORS[8] },
+      { name: 'demande_conge', value: globalStats.totalLeaveRequests, color: COLORS[6] },
       { name: 'CVs', value: globalStats.totalCVs, color: COLORS[7] },
+      { name: 'rapport', value: globalStats.totalPurchaseRequests, color: COLORS[9] },
       { name: 'Folders', value: globalStats.totalFolders, color: COLORS[5] }
     ];
   };
@@ -120,7 +128,7 @@ const Statistique = () => {
   const StatsSummary = () => (
     <Row className="g-4 mb-4">
       {formatGlobalStats().map((item, index) => (
-        <Col key={index} xs={6} md={4} lg={3} xl={2}>
+        <Col key={index} xs={6} sm={2} md={2} lg={2} xl={2}>
           <Card className="h-100 stats-card-hover">
             <Card.Body className="text-center py-3">
               <div className="stats-icon mb-2" style={{ backgroundColor: `${item.color}20` }}>
@@ -513,7 +521,7 @@ const Statistique = () => {
 
   return (
     <>
-      <Navbar />
+      
       <Container fluid className="stat-container">
         {loading ? (
           <LoadingIndicator />

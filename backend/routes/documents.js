@@ -9,6 +9,7 @@ const Tesseract = require('tesseract.js');
 const { auth } = require('../middleware/auth');
 const router = express.Router();
 const axios = require('axios');
+const { transcribeAudio } = require('../whisperTranscribe');
 const NLP_SERVICE_URL = 'http://localhost:5001/classify';
 const NLP_TIMEOUT = 3000; // 3 secondes timeout
 
