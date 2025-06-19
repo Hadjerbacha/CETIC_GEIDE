@@ -1519,112 +1519,70 @@ router.post('/archive-requests', auth, async (req, res) => {
     });
   }
 });
-router.put('/archive-requests/:id/decision', auth, async (req, res) => {
-  const { id } = req.params;
-  const { decision, reason } = req.body;
+// documentsRoutes.js
+router.put('/:requestId/decision', auth, async (req, res) => {
+  const { requestId } = req.params; // Utilisez requestId au lieu de documentId
+  const { decision } = req.body;
   const processedBy = req.user.id;
-  const processedByName = req.user.prenom && req.user.name 
-    ? `${req.user.prenom} ${req.user.name}`
-    : 'Administrateur';
-  const currentDate = new Date().toLocaleString('fr-FR');
 
   try {
-    const requestQuery = await pool.query(
-      `SELECT ar.*, 
-              d.name AS document_name,
-              d.is_archived,
-              u.prenom AS requester_prenom,
-              u.name AS requester_name
+    // 1. Vérifier que la demande existe
+    const request = await pool.query(
+      `SELECT ar.*, d.id as document_id, d.name as document_name,
+              u.prenom, u.name as requester_name
        FROM archive_requests ar
        JOIN documents d ON ar.document_id = d.id
        JOIN users u ON ar.requester_id = u.id
        WHERE ar.id = $1 AND ar.status = 'pending'`,
-      [id]
+      [requestId] // Recherche par requestId
     );
 
-    if (!requestQuery.rows.length) {
-      return res.status(404).json({
-        success: false,
-        error: 'Demande non trouvée ou déjà traitée'
+    if (request.rows.length === 0) {
+      return res.status(404).json({ 
+        error: 'Demande non trouvée ou déjà traitée',
+        requestId
       });
     }
 
-    const request = requestQuery.rows[0];
-    const status = decision ? 'approved' : 'rejected';
-    const requesterName = request.requester_prenom && request.requester_name
-      ? `${request.requester_prenom} ${request.requester_name}`
-      : 'Utilisateur inconnu';
+    const documentId = request.rows[0].document_id;
+    const requesterId = request.rows[0].requester_id;
 
-    const updateRequest = await pool.query(
+    // 2. Mettre à jour la demande
+    await pool.query(
       `UPDATE archive_requests
        SET status = $1,
            processed_by = $2,
            processed_at = NOW()
-       WHERE id = $3
-       RETURNING *`,
-      [status, processedBy, id]
+       WHERE id = $3`,
+      [decision ? 'approved' : 'rejected', processedBy, requestId]
     );
 
+    // 3. Si approbation, archiver le document
     if (decision) {
       await pool.query(
         `UPDATE documents
          SET is_archived = true,
              archived_at = NOW()
          WHERE id = $1`,
-        [request.document_id]
+        [documentId]
       );
     }
 
-    const message = `Votre demande pour "<strong>${request.document_name}</strong>" a été ` +
-                   `<strong>${decision ? 'approuvée' : 'rejetée'}</strong><br>` +
-                   `<small>${currentDate}</small><br>` +
-                   `Traité par: <strong>${processedByName}</strong><br>` +
-                   `${reason ? `Motif: <em>${reason}</em><br>` : ''}` +
-                   `Lien: <a href="http://localhost:3000/documents/${request.document_id}" target="_blank">Ouvrir le document</a>`;
-
-    await pool.query(
-      `INSERT INTO notifications
-       (user_id, title, message, type, document_id, sender_id, related_id, decision)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [
-        request.requester_id,
-        `Demande d'archivage ${decision ? 'approuvée' : 'rejetée'}`,
-        message,
-        'archive_decision',
-        request.document_id,
-        processedBy,
-        id,
-        decision
-      ]
-    );
-
-    return res.status(200).json({
+    res.status(200).json({
       success: true,
-      data: {
-        request: updateRequest.rows[0],
-        document: {
-          id: request.document_id,
-          name: request.document_name,
-          is_archived: decision,
-          url: `/documents/${request.document_id}`
-        },
-        requester: {
-          id: request.requester_id,
-          name: requesterName
-        }
-      }
+      requestId,
+      documentId,
+      isArchived: decision
     });
 
   } catch (error) {
-    console.error('Erreur base de données:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Erreur lors du traitement de la demande',
+    console.error('Erreur:', error);
+    res.status(500).json({
+      error: 'Erreur serveur',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 });
-
 // Route pour approuver/rejeter une demande d'archivage (admin seulement)
 router.put('/archive-requests/:id/process', auth, async (req, res) => {
   const { id } = req.params;

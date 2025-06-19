@@ -427,9 +427,6 @@ const Doc = () => {
       !selectedCategory || selectedCategory === '' ||
       (docCategory && docCategory.toLowerCase() === selectedCategory.toLowerCase());
 
-
-    console.log("nom_candidat ➡️", doc.metadata?.nom_candidat);
-
     // Filtrage avancé spécifique aux catégories métier
     const matchesAdvancedCategory = (() => {
       if (selectedCategory === 'facture') {
