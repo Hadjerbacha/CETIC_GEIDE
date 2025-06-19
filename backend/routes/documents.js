@@ -1381,79 +1381,142 @@ router.get('/:id/details', auth, async (req, res) => {
   }
 });
 router.post('/:id/share', auth, async (req, res) => {
-  const documentId = parseInt(req.params.id);
-  const userId = req.user.id;
+    const documentId = parseInt(req.params.id);
+    const userId = req.user.id;
 
-  const {
-    visibility,
-    id_share = [],
-    id_group = [],
-    can_modify = false,
-    can_delete = false,
-    can_share = false
-  } = req.body;
+    const {
+        visibility,
+        id_share = [],
+        id_group = [],
+        can_modify = false,
+        can_delete = false,
+        can_share = false
+    } = req.body;
 
-  try {
-    console.log("📩 Reçu pour partage :", {
-      visibility, id_share, id_group, can_modify, can_delete, can_share
-    });
-
-    // 1. Mettre à jour la visibilité dans la table documents
-    await pool.query(`
-      UPDATE documents
-      SET visibility = $1, id_share = $2, id_group = $3
-      WHERE id = $4
-    `, [visibility, id_share, id_group, documentId]);
-
-    // 2. Gérer les permissions pour les utilisateurs partagés
-    if (visibility === 'custom' && id_share.length > 0) {
-      // Supprimer toutes les permissions custom existantes
-      await pool.query(`
-        DELETE FROM document_permissions 
-        WHERE document_id = $1 AND access_type = 'custom'
-      `, [documentId]);
-
-      // Ajouter les nouvelles permissions
-      const insertValues = id_share.map(targetId => 
-        `(${targetId}, ${documentId}, 'custom', true, ${can_modify}, ${can_delete}, ${can_share})`
-      ).join(',');
-
-      await pool.query(`
-        INSERT INTO document_permissions 
-        (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
-        VALUES ${insertValues}
-      `);
+    // Validation des entrées
+    if (!['public', 'private', 'custom'].includes(visibility)) {
+        return res.status(400).json({ error: "Type de visibilité invalide" });
     }
 
-    // 3. Gérer les permissions pour les groupes
-    if (visibility === 'custom' && id_group.length > 0) {
-      // Supprimer toutes les permissions de groupe existantes
-      await pool.query(`
-        DELETE FROM document_permissions 
-        WHERE document_id = $1 AND access_type = 'group'
-      `, [documentId]);
+    try {
+        // 1. Récupérer les infos du document et de l'utilisateur
+        const { rows: [document] } = await pool.query(
+            'SELECT id, name FROM documents WHERE id = $1',
+            [documentId]
+        );
 
-      // Ajouter les permissions pour les membres des groupes
-      const { rows: members } = await pool.query(`
-        SELECT DISTINCT user_id FROM user_groups WHERE group_id = ANY($1)
-      `, [id_group]);
+        const { rows: [sharer] } = await pool.query(
+            'SELECT name, prenom FROM users WHERE id = $1',
+            [userId]
+        );
 
-      if (members.length > 0) {
-        const groupInsertValues = members.map(member => 
-          `(${member.user_id}, ${documentId}, 'group', true, false, false, false)`
-        ).join(',');
+        if (!document) {
+            return res.status(404).json({ error: "Document non trouvé" });
+        }
 
-        await pool.query(`
-          INSERT INTO document_permissions 
-          (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
-          VALUES ${groupInsertValues}
-        `);
-      }
-    }
+        const sharerName = `${sharer.prenom} ${sharer.name}`;
+        const shareDate = new Date().toLocaleString('fr-FR', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
 
-    res.status(200).json({ message: "Partage mis à jour avec succès." });
+        // 2. Mettre à jour le document
+        await pool.query(
+            'UPDATE documents SET visibility = $1, id_share = $2, id_group = $3 WHERE id = $4',
+            [visibility, id_share, id_group, documentId]
+        );
 
-    // Ajoutez ceci après la mise à jour des permissions
+        // 3. Gestion des notifications
+        const notificationsToInsert = [];
+
+        // Cas 1: Document public
+        if (visibility === 'public') {
+            const { rows: allUsers } = await pool.query(
+                'SELECT id FROM users WHERE id != $1',
+                [userId]
+            );
+
+            allUsers.forEach(user => {
+                notificationsToInsert.push({
+                    user_id: user.id,
+                    title: 'Nouveau document public partagé',
+                    message: `Le document "${document.name}" a été rendu public par ${sharerName} le ${shareDate}`,
+                    type: 'document_shared',
+                    document_id: documentId,
+                    is_read: false,
+                    created_at: new Date(),
+                    sender_id: userId  // Ajout de l'ID de l'expéditeur
+                });
+            });
+        }
+        // Cas 2: Partage personnalisé
+        else if (visibility === 'custom') {
+            // Notifier les utilisateurs directs
+            for (const targetId of id_share) {
+                if (targetId !== userId) {
+                    notificationsToInsert.push({
+                        user_id: targetId,
+                        title: 'Document partagé avec vous',
+                        message: `${sharerName} vous a partagé le document "${document.name}" le ${shareDate}`,
+                        type: 'document_shared',
+                        document_id: documentId,
+                        is_read: false,
+                        created_at: new Date(),
+                        sender_id: userId
+                    });
+                }
+            }
+
+            // Notifier les membres des groupes
+            if (id_group.length > 0) {
+                const { rows: groupMembers } = await pool.query(
+                    'SELECT DISTINCT user_id FROM user_groups WHERE group_id = ANY($1) AND user_id != $2',
+                    [id_group, userId]
+                );
+
+                groupMembers.forEach(member => {
+                    notificationsToInsert.push({
+                        user_id: member.user_id,
+                        title: 'Document partagé avec votre groupe',
+                        message: `${sharerName} a partagé le document "${document.name}" avec votre groupe le ${shareDate}`,
+                        type: 'document_shared',
+                        document_id: documentId,
+                        is_read: false,
+                        created_at: new Date(),
+                        sender_id: userId
+                    });
+                });
+            }
+        }
+
+        // 4. Insertion en masse des notifications
+        if (notificationsToInsert.length > 0) {
+            const queryText = `
+                INSERT INTO notifications 
+                (user_id, title, message, type, document_id, is_read, created_at, sender_id)
+                VALUES ${notificationsToInsert.map((_, i) => 
+                    `($${i*8 + 1}, $${i*8 + 2}, $${i*8 + 3}, $${i*8 + 4}, $${i*8 + 5}, $${i*8 + 6}, $${i*8 + 7}, $${i*8 + 8})`
+                ).join(', ')}
+            `;
+            
+            const queryValues = notificationsToInsert.flatMap(notif => [
+                notif.user_id,
+                notif.title,
+                notif.message,
+                notif.type,
+                notif.document_id,
+                notif.is_read,
+                notif.created_at,
+                notif.sender_id
+            ]);
+
+            await pool.query(queryText, queryValues);
+            console.log(`Notifications créées: ${notificationsToInsert.length}`);
+        }
+ // Ajoutez ceci après la mise à jour des permissions
     await logActivity(req.user.id, 'share', 'document', documentId, {
       visibility: visibility,
       shared_with_users: id_share,
@@ -1464,13 +1527,27 @@ router.post('/:id/share', auth, async (req, res) => {
         can_share
       }
     });
-    
-  } catch (err) {
-    console.error("❌ Erreur dans partage :", err);
-    res.status(500).json({ error: "Erreur lors du partage", details: err.message });
-  }
-});
+        res.status(200).json({
+            success: true,
+            message: `Document ${visibility === 'public' ? 'rendu public' : 'partagé'} avec succès`,
+            notifications: {
+                count: notificationsToInsert.length,
+                type: visibility,
+                sharer: sharerName,
+                date: shareDate
+            }
+        });
 
+    } catch (error) {
+        console.error("Erreur lors du partage:", error);
+        res.status(500).json({
+            success: false,
+            error: "Échec de l'opération de partage",
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
+    }
+
+});
 // routes/documents.js
 
 router.post('/archive-requests', auth, async (req, res) => {

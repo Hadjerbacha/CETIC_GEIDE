@@ -688,6 +688,47 @@ const Doc = () => {
     }
   };
 
+  const handleShareDocument = async () => {
+    const visibilityValue = shareAccessType === 'custom' ? 'custom' : 'public';
+
+    try {
+      const response = await axios.post(
+        `http://localhost:5000/api/documents/${docToShare.id}/share`,
+        {
+          visibility: visibilityValue,
+          id_share: selectedUsers.length > 0 ? selectedUsers : [],
+          id_group: selectedGroup ? [selectedGroup] : [],
+          can_modify: permissions.modify,
+          can_delete: permissions.delete,
+          can_share: permissions.share,
+        },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      // Afficher un toast de succès
+      toast.success('Document partagé avec succès ! Les utilisateurs ont été notifiés.');
+
+      // Mettre à jour l'état local
+      setDocuments(docs =>
+        docs.map(doc =>
+          doc.id === docToShare.id
+            ? {
+              ...doc,
+              visibility: visibilityValue,
+              id_share: selectedUsers,
+              id_group: selectedGroup ? [selectedGroup] : [],
+            }
+            : doc
+        )
+      );
+
+      setShowShareModal(false);
+    } catch (err) {
+      console.error('Erreur de mise à jour des permissions', err);
+      toast.error('Erreur lors du partage du document');
+    }
+  };
+
   const handleCategoryClick = async (category) => {
     try {
       const res = await fetch(`http://localhost:5000/api/documents?category=${category}`, {
@@ -851,6 +892,7 @@ const Doc = () => {
       alert('Une erreur est survenue ❌');
     }
   };
+
 
 
   return (
