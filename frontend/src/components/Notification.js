@@ -182,15 +182,18 @@ const NotificationsPage = () => {
     }
   };
 
- const handleArchiveDecision = async (notif, decision) => {
+const handleArchiveDecision = async (notif, decision) => {
   try {
     // 1. Effectuer l'action d'archivage/désarchivage
-    const endpoint = `http://localhost:5000/api/documents/${notif.document_id}/${decision ? 'archive' : 'unarchive'}`;
+    const endpoint = `http://localhost:5000/api/documents/${notif.document_id}/archive`;
     await axios.put(endpoint, {}, {
       headers: { Authorization: `Bearer ${token}` }
     });
 
-    // 2. Envoyer la notification appropriée
+    // 2. Marquer la notification comme lue
+    await markAsRead(notif.id); // Utilisez la fonction existante markAsRead
+    
+    // 3. Envoyer la notification appropriée
     const message = decision 
       ? `Votre demande d'archivage pour le document #${notif.document_id} a été approuvée.`
       : `Votre demande d'archivage pour le document #${notif.document_id} a été refusée.`;
@@ -205,7 +208,7 @@ const NotificationsPage = () => {
       is_read: false
     });
 
-    // 3. Rafraîchir les notifications et afficher un message
+    // 4. Afficher un message et rafraîchir
     alert(`Demande ${decision ? 'approuvée' : 'refusée'} avec succès`);
     fetchNotifications();
 
@@ -214,7 +217,6 @@ const NotificationsPage = () => {
     alert(`Erreur lors du traitement: ${error.response?.data?.message || error.message}`);
   }
 };
-
 
   return (
     <>
@@ -300,12 +302,12 @@ const NotificationsPage = () => {
                     <i className="bi bi-check2"></i>
                   </Button>
                 )}
-     {currentUser?.role === 'admin' && notif.type === 'archive_request' && (
+   {currentUser?.role === 'admin' && notif.type === 'archive_request' && !notif.is_read && (
   <ButtonGroup>
     <Button
       variant="outline-success"
       size="sm"
-      onClick={() => handleArchiveDecision(notif, true)} // Approuver l'archivage
+      onClick={() => handleArchiveDecision(notif, true)}
       title="Archiver le document"
     >
       <i className="bi bi-archive"></i> Archiver
@@ -314,7 +316,7 @@ const NotificationsPage = () => {
       variant="outline-danger"
       size="sm"
       className="action-btn"
-      onClick={() => handleArchiveDecision(notif, false)} // Refuser l'archivage
+      onClick={() => handleArchiveDecision(notif, false)}
       title="Refuser"
     >
       <i className="bi bi-x-lg"></i>

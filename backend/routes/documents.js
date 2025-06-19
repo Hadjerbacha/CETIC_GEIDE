@@ -973,25 +973,27 @@ router.get('/archive', auth, async (req, res) => {
     let result;
 
     if (isAdmin) {
-      // Tous les documents archivés complétés (toutes les versions)
+      // Tous les documents archivés complétés avec date_archive
       result = await pool.query(`
-        SELECT d.*
+        SELECT d.*, 
+               TO_CHAR(d.date_archive, 'DD/MM/YYYY HH24:MI') as formatted_date_archive
         FROM documents d
         WHERE d.is_completed = true
         AND d.is_archived = true
-        ORDER BY d.name, d.version DESC
+        ORDER BY d.date_archive DESC, d.name, d.version DESC
       `);
     } else {
-      // Uniquement les documents archivés visibles par l'utilisateur
+      // Documents archivés visibles par l'utilisateur avec date_archive
       result = await pool.query(`
-        SELECT d.*
+        SELECT d.*,
+               TO_CHAR(d.date_archive, 'DD/MM/YYYY HH24:MI') as formatted_date_archive
         FROM documents d
         JOIN document_permissions dp ON dp.document_id = d.id
         WHERE dp.user_id = $1
         AND dp.can_read = true
         AND d.is_completed = true
         AND d.is_archived = true
-        ORDER BY d.name, d.version DESC
+        ORDER BY d.date_archive DESC, d.name, d.version DESC
       `, [userId]);
     }
 
@@ -1013,38 +1015,60 @@ router.put('/:id/archive', auth, async (req, res) => {
 
   try {
     await pool.query(
-      'UPDATE documents SET is_archived = true WHERE id = $1',
+      'UPDATE documents SET is_archived = true, date_archive = NOW() WHERE id = $1 RETURNING *',
       [id]
     );
-    res.status(200).json({ message: 'Document archivé avec succès.' });
+    
+    const updatedDoc = await pool.query(
+      'SELECT *, TO_CHAR(date_archive, \'DD/MM/YYYY HH24:MI\') as formatted_date_archive FROM documents WHERE id = $1',
+      [id]
+    );
+    
+    res.status(200).json({ 
+      message: 'Document archivé avec succès.',
+      document: updatedDoc.rows[0]
+    });
   } catch (error) {
     console.error('Erreur lors de l’archivage :', error);
     res.status(500).json({ error: 'Erreur serveur lors de l’archivage.' });
   }
 });
-
 // routes/documents.js
 router.put('/:id/affiche', auth, async (req, res) => {
   const docId = req.params.id;
-  const isArchived = req.body.is_archived; // doit être true ou false
+  const isArchived = req.body.is_archived;
+  const userRole = req.user.role;
+
+  if (isArchived && userRole !== 'admin') {
+    return res.status(403).json({ message: 'Seul un administrateur peut archiver.' });
+  }
 
   try {
-    const result = await pool.query(
-      'UPDATE documents SET is_archived = $1 WHERE id = $2 RETURNING *',
-      [isArchived, docId]
-    );
+    const query = isArchived 
+      ? 'UPDATE documents SET is_archived = true, date_archive = NOW() WHERE id = $1 RETURNING *'
+      : 'UPDATE documents SET is_archived = false, date_archive = NULL WHERE id = $1 RETURNING *';
+
+    const result = await pool.query(query, [docId]);
 
     if (result.rowCount === 0) {
       return res.status(404).json({ message: 'Document introuvable' });
     }
 
-    res.json({ message: isArchived ? 'Document archivé' : 'Document désarchivé', document: result.rows[0] });
+    // Récupérer le document avec la date formatée
+    const updatedDoc = await pool.query(
+      'SELECT *, TO_CHAR(date_archive, \'DD/MM/YYYY HH24:MI\') as formatted_date_archive FROM documents WHERE id = $1',
+      [docId]
+    );
+
+    res.json({ 
+      message: isArchived ? 'Document archivé' : 'Document désarchivé', 
+      document: updatedDoc.rows[0] 
+    });
   } catch (err) {
     console.error('Erreur SQL :', err);
     res.status(500).json({ message: 'Erreur lors de la mise à jour de l’archivage' });
   }
 });
-
 
 router.get('/archived', auth, async (req, res) => {
   const userId = req.user.id;

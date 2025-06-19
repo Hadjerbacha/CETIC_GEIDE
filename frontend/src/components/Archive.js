@@ -21,6 +21,9 @@ import { FaUpload, FaFileUpload, FaFolderOpen } from 'react-icons/fa';
 
 const Doc = () => {
   const [errorMessage, setErrorMessage] = useState('');
+  const [archiveStartDate, setArchiveStartDate] = useState('');
+  const [archiveEndDate, setArchiveEndDate] = useState('');
+  const [showArchiveFilter, setShowArchiveFilter] = useState(false);
   const [documents, setDocuments] = useState([]);
   const [savedDocuments, setSavedDocuments] = useState([]);
   const [pendingName, setPendingName] = useState('');
@@ -450,6 +453,14 @@ const Doc = () => {
         return numDemandeMatch && dateCongeMatch;
       }
 
+      if (showArchiveFilter) {
+        if (archiveStartDate && (!doc.date_archive || new Date(doc.date_archive) < new Date(archiveStartDate))) {
+          return false;
+        }
+        if (archiveEndDate && (!doc.date_archive || new Date(doc.date_archive) > new Date(archiveEndDate + 'T23:59:59'))) {
+          return false;
+        }
+      }
       // Si aucune catégorie spécifique, on passe
       return true;
     })();
@@ -568,38 +579,38 @@ const Doc = () => {
       setErrorMessage('Impossible de charger les documents pour cette catégorie.');
     }
   };
-  
-  
-    const handleUpdatePermissions = async () => {
-      try {
-        const payload = {
-          visibility: shareAccessType === 'public' ? 'public' : 'custom',
-          id_share: selectedUsers.length > 0 ? selectedUsers[0] : null, // ou gérer plusieurs
-          id_group: selectedGroup || null
-        };
-  
-        await axios.post(`http://localhost:5000/api/documents/${docToShare.id}/share`, payload, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
-  
-        toast.success('Permissions mises à jour avec succès !');
-        setShowShareModal(false);
-      } catch (error) {
-        console.error('Erreur de mise à jour des permissions :', error);
-        toast.error('Échec de mise à jour des permissions.');
-      }
-    };
-  
-    const handlePermissionChange = (type) => (e) => {
-      const checked = e.target.checked;
-      setPermissions((prev) => ({
-        ...prev,
-        consult: true,
-        [type]: checked,
-      }));
-    };
+
+
+  const handleUpdatePermissions = async () => {
+    try {
+      const payload = {
+        visibility: shareAccessType === 'public' ? 'public' : 'custom',
+        id_share: selectedUsers.length > 0 ? selectedUsers[0] : null, // ou gérer plusieurs
+        id_group: selectedGroup || null
+      };
+
+      await axios.post(`http://localhost:5000/api/documents/${docToShare.id}/share`, payload, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      toast.success('Permissions mises à jour avec succès !');
+      setShowShareModal(false);
+    } catch (error) {
+      console.error('Erreur de mise à jour des permissions :', error);
+      toast.error('Échec de mise à jour des permissions.');
+    }
+  };
+
+  const handlePermissionChange = (type) => (e) => {
+    const checked = e.target.checked;
+    setPermissions((prev) => ({
+      ...prev,
+      consult: true,
+      [type]: checked,
+    }));
+  };
 
 
   const [permissionsByDoc, setPermissionsByDoc] = useState({});
@@ -727,7 +738,7 @@ const Doc = () => {
       <Navbar />
       <div className="container-fluid">
         <Row className="my-3">
-          <Col md={4}><Form.Control type="text" placeholder="Rechercher..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} /></Col>
+          <Col md={3}><Form.Control type="text" placeholder="Rechercher..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} /></Col>
           <Col md={2}>
             <Form.Select value={filterType} onChange={e => setFilterType(e.target.value)}>
               <option value="Tous les documents">Tous</option>
@@ -737,15 +748,78 @@ const Doc = () => {
               <option value="mp4">Vidéo (MP4)</option>
               <option value="webm">Vidéo (WebM)</option>
             </Form.Select>
-
           </Col>
 
-          <Col md={2}><Form.Control type="date" value={startDate} onChange={e => setStartDate(e.target.value)} /></Col>
-          <Col md={2}><Form.Control type="date" value={endDate} onChange={e => setEndDate(e.target.value)} /></Col>
-          <Col md={2}><Button variant={useAdvancedFilter ? 'danger' : 'success'} onClick={() => setUseAdvancedFilter(!useAdvancedFilter)}>
-            {useAdvancedFilter ? 'Désactiver Avancé' : 'Recherche Avancée'}
-          </Button></Col>
+          <Col md={2}>
+            <Form.Control
+              type="date"
+              value={startDate}
+              onChange={e => setStartDate(e.target.value)}
+              placeholder="Date création début"
+            />
+          </Col>
+          <Col md={2}>
+            <Form.Control
+              type="date"
+              value={endDate}
+              onChange={e => setEndDate(e.target.value)}
+              placeholder="Date création fin"
+            />
+          </Col>
+
+          {/* Nouveau bouton pour afficher/masquer le filtre d'archivage */}
+          <Col md={1}>
+            <Button
+              variant={showArchiveFilter ? 'info' : 'secondary'}
+              onClick={() => setShowArchiveFilter(!showArchiveFilter)}
+              title="Filtrer par date d'archivage"
+            >
+              <i className={`bi bi-archive${showArchiveFilter ? '-fill' : ''}`}></i>
+            </Button>
+          </Col>
+
+          <Col md={2}>
+            <Button
+              variant={useAdvancedFilter ? 'danger' : 'success'}
+              onClick={() => setUseAdvancedFilter(!useAdvancedFilter)}
+            >
+              {useAdvancedFilter ? 'Désactiver Avancé' : 'Recherche Avancée'}
+            </Button>
+          </Col>
         </Row>
+
+        {/* Nouvelle ligne pour les filtres d'archivage */}
+        {showArchiveFilter && (
+          <Row className="my-2">
+            <Col md={{ span: 2, offset: 3 }}>
+              <Form.Control
+                type="date"
+                value={archiveStartDate}
+                onChange={e => setArchiveStartDate(e.target.value)}
+                placeholder="Archive depuis"
+              />
+            </Col>
+            <Col md={2}>
+              <Form.Control
+                type="date"
+                value={archiveEndDate}
+                onChange={e => setArchiveEndDate(e.target.value)}
+                placeholder="Archive jusqu'à"
+              />
+            </Col>
+            <Col md={2}>
+              <Button
+                variant="outline-secondary"
+                onClick={() => {
+                  setArchiveStartDate('');
+                  setArchiveEndDate('');
+                }}
+              >
+                Réinitialiser
+              </Button>
+            </Col>
+          </Row>
+        )}
         <br />
 
         <Container fluid className="d-flex justify-content-center">
@@ -982,6 +1056,7 @@ const Doc = () => {
                     <tr>
                       <th>Document</th>
                       <th>Date</th>
+                      <th>Date Archivage</th>
                       <th>Catégorie</th>
                       <th>Actions</th>
                     </tr>
@@ -989,7 +1064,7 @@ const Doc = () => {
                   <tbody>
                     {filteredDocuments.length > 0 ? (
                       filteredDocuments
-                        .sort((a, b) => new Date(b.date) - new Date(a.date)) // tri du plus récent au plus ancien
+                        .sort((a, b) => new Date(b.date_archive) - new Date(a.date_archive)) // tri du plus récent au plus ancien
                         .map(doc => {
                           const perms = permissionsByDoc[doc.id] || {};
                           return (
@@ -1013,6 +1088,7 @@ const Doc = () => {
                               </td>
 
                               <td>{doc.date ? new Date(doc.date).toLocaleString() : 'Inconnue'}</td>
+                              <td>{doc.date_archive ? new Date(doc.date_archive).toLocaleString() : 'Inconnue'}</td>
                               <td>{doc.category || 'Non spécifiée'}</td>
                               <td>
                                 {/* Détails (toujours actif) */}
