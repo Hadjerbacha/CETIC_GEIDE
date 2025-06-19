@@ -82,6 +82,15 @@ const Doc = () => {
   const [parentId, setParentId] = useState(null);
   const btnRefs = useRef({});
 
+  const [archivedRequests, setArchivedRequests] = useState({});
+
+  const handleClick = (docId) => {
+    handleArchiveRequest(docId);
+    setArchivedRequests((prev) => ({
+      ...prev,
+      [docId]: true,
+    }));
+  };
   useEffect(() => {
     const activeBtn = btnRefs.current[selectedCategory || ''];
     const highlight = document.querySelector('.category-highlight');
@@ -374,50 +383,50 @@ const Doc = () => {
   };
 
   const handleArchiveRequest = async (docId) => {
-  try {
-    // Vérifiez que docId et userId sont valides
-    if (!docId || !userId) {
-      throw new Error("ID de document ou utilisateur manquant");
-    }
+    try {
+      // Vérifiez que docId et userId sont valides
+      if (!docId || !userId) {
+        throw new Error("ID de document ou utilisateur manquant");
+      }
 
-    const response = await axios.post(
-      'http://localhost:5000/api/documents/archive-requests',
-      {
-        documentId: Number(docId), // Assurez-vous que c'est un nombre
-        requesterId: Number(userId) // Assurez-vous que c'est un nombre
-      },
-      {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
+      const response = await axios.post(
+        'http://localhost:5000/api/documents/archive-requests',
+        {
+          documentId: Number(docId), // Assurez-vous que c'est un nombre
+          requesterId: Number(userId) // Assurez-vous que c'est un nombre
         },
-        timeout: 5000
-      }
-    );
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+          },
+          timeout: 5000
+        }
+      );
 
-    toast.success(response.data.message || "Demande envoyée avec succès");
-  } catch (error) {
-    let errorMessage = "Échec de l'envoi de la demande";
-    
-    if (error.response) {
-      // Messages d'erreur spécifiques du serveur
-      errorMessage = error.response.data?.message || errorMessage;
-      
-      // Cas particuliers
-      if (error.response.status === 400) {
-        errorMessage = error.response.data?.error || "Données de requête invalides";
+      toast.success(response.data.message || "Demande envoyée avec succès");
+    } catch (error) {
+      let errorMessage = "Échec de l'envoi de la demande";
+
+      if (error.response) {
+        // Messages d'erreur spécifiques du serveur
+        errorMessage = error.response.data?.message || errorMessage;
+
+        // Cas particuliers
+        if (error.response.status === 400) {
+          errorMessage = error.response.data?.error || "Données de requête invalides";
+        }
       }
+
+      console.error("Détails de l'erreur:", {
+        config: error.config,
+        response: error.response?.data
+      });
+
+      toast.error(errorMessage);
     }
-
-    console.error("Détails de l'erreur:", {
-      config: error.config,
-      response: error.response?.data
-    });
-
-    toast.error(errorMessage);
-  }
-};
+  };
 
 
   const latestDocs = Object.values(
@@ -1580,6 +1589,7 @@ const Doc = () => {
                                   <i className="bi bi-play-fill me-1"></i>
                                 </Button>
                                 {/* Archiver */}
+
                                 {userRole === 'admin' ? (
                                   // Bouton Archive pour l'admin (archive directe)
                                   <Button
@@ -1594,11 +1604,16 @@ const Doc = () => {
                                 ) : (
                                   // Bouton pour les non-admins (envoie une demande)
                                   <Button
-                                    variant="secondary"
+                                    variant={archivedRequests[doc.id] ? "warning" : "secondary"}
                                     size="sm"
                                     className="ms-2"
-                                    onClick={() => handleArchiveRequest(doc.id)}
-                                    title="Demander l'archivage"
+                                    onClick={() => handleClick(doc.id)}
+                                    disabled={archivedRequests[doc.id]}
+                                    title={
+                                      archivedRequests[doc.id]
+                                        ? "Demande d'archivage envoyée"
+                                        : "Demander l'archivage"
+                                    }
                                   >
                                     <i className="bi bi-archive"></i>
                                   </Button>

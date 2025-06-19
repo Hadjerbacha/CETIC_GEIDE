@@ -1315,7 +1315,6 @@ router.get('/:id/details', auth, async (req, res) => {
         
         technicalInfo = techRes.rows[0] || {};
       } catch (err) {
-        console.log('Aucune métadonnée technique trouvée pour ce média');
       }
     }
 
