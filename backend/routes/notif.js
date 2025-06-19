@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { Pool } = require('pg');
 const jwt = require('jsonwebtoken');
-
+const { logActivity } = require('./historique');
 // Connexion à la base PostgreSQL
 const pool = new Pool({
   user: process.env.PG_USER || 'postgres',
@@ -76,7 +76,17 @@ router.post('/', async (req, res) => {
         parsedDecision
       ]
     );
-
+// Log de la création de notification
+    await logActivity(
+      sender_id,
+      'notification_send',
+      'notification',
+      result.rows[0].id,
+      {
+        recipient_id: user_id,
+        notification_type: type
+      }
+    );
     res.status(201).json(result.rows[0]);
   } catch (err) {
     console.error("Erreur lors de l'ajout de la notification :", err);
@@ -148,7 +158,15 @@ router.put('/read/:id', async (req, res) => {
     if (result.rowCount === 0) {
       return res.status(404).json({ message: 'Notification non trouvée' });
     }
-
+if (result.rowCount > 0) {
+      // Log de la lecture
+      await logActivity(
+        result.rows[0].user_id,
+        'notification_read',
+        'notification',
+        notificationId
+      );
+    }
     res.status(200).json({ message: 'Notification marquée comme lue' });
   } catch (err) {
     console.error('Erreur lors de la mise à jour de la notification', err);

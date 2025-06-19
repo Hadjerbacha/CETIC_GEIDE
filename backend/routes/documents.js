@@ -12,7 +12,7 @@ const axios = require('axios');
 const { transcribeAudio } = require('../whisperTranscribe');
 const NLP_SERVICE_URL = 'http://localhost:5001/classify';
 const NLP_TIMEOUT = 3000; // 3 secondes timeout
-
+const { logActivity } = require("./historique");
 
 // PostgreSQL Pool configuration
 const pool = new Pool({
@@ -809,6 +809,12 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
       message: 'Document créé (étape 1)',
     });
 
+      await logActivity(req.user.id, 'upload', 'document', documentId, {
+      fileName: name,
+      fileType: mimeType,
+      category: finalCategory
+    });
+
   } catch (err) {
     console.error('❌ Erreur upload étape 1 :', err.stack);
     if (req.file) fs.unlink(req.file.path, () => { });
@@ -1028,6 +1034,12 @@ router.put('/:id/archive', auth, async (req, res) => {
       message: 'Document archivé avec succès.',
       document: updatedDoc.rows[0]
     });
+
+    // Ajoutez ceci
+    await logActivity(req.user.id, 'archive', 'document', id, {
+      action: 'archive'
+    });
+
   } catch (error) {
     console.error('Erreur lors de l’archivage :', error);
     res.status(500).json({ error: 'Erreur serveur lors de l’archivage.' });
@@ -1222,6 +1234,12 @@ router.put('/:id', auth, async (req, res) => {
         [documentId, collection.id]
       );
     }
+
+    // Ajoutez ceci après la mise à jour
+    await logActivity(req.user.id, 'update', 'document', documentId, {
+      changes: Object.keys(req.body).filter(k => k !== 'diff_version'),
+      new_version: updatedDoc.version
+    });
 
     res.status(200).json({
       ...updatedDoc,
@@ -1435,6 +1453,18 @@ router.post('/:id/share', auth, async (req, res) => {
 
     res.status(200).json({ message: "Partage mis à jour avec succès." });
 
+    // Ajoutez ceci après la mise à jour des permissions
+    await logActivity(req.user.id, 'share', 'document', documentId, {
+      visibility: visibility,
+      shared_with_users: id_share,
+      shared_with_groups: id_group,
+      permissions: {
+        can_modify,
+        can_delete,
+        can_share
+      }
+    });
+    
   } catch (err) {
     console.error("❌ Erreur dans partage :", err);
     res.status(500).json({ error: "Erreur lors du partage", details: err.message });
@@ -1880,6 +1910,13 @@ router.delete('/:id', auth, async (req, res) => {
     await pool.query('DELETE FROM documents WHERE id = $1', [id]);
 
     res.status(200).json({ message: 'Document supprimé avec succès' });
+
+    // Ajoutez ceci AVANT la suppression
+    await logActivity(req.user.id, 'delete', 'document', id, {
+      file_name: document.name,
+      file_type: document.file_path.split('.').pop()
+    });
+
   } catch (err) {
     console.error('Erreur lors de la suppression du document:', err.stack);
     res.status(500).json({ error: 'Erreur lors de la suppression', details: err.message });

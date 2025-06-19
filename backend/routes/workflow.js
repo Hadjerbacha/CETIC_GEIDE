@@ -6,7 +6,7 @@ const fs = require('fs');
 const router = express.Router();
 const authMiddleware = require('../middleware/authMiddleware'); // Assurez-vous que le chemin est correct
 const taskController = require('../controllers/taskController');
-
+const { logActivity } = require("./historique");
 const pool = new Pool({
   user: process.env.PG_USER || 'postgres',
   host: process.env.PG_HOST || 'localhost',
@@ -100,6 +100,14 @@ router.post('/', authMiddleware, upload.single('file'), async (req, res) => {
     }
 
     res.status(201).json(task);
+
+    // Ajoutez ceci après la création
+    await logActivity(req.user.id, 'create', 'task', task.id, {
+      task_title: title,
+      assigned_to: userIds,
+      workflow_id: workflow_id
+    });
+
   } catch (err) {
     console.error('Error during task insertion:', err);
     if (req.file) fs.unlink(req.file.path, () => {});
@@ -250,6 +258,16 @@ router.put('/:id',authMiddleware, upload.single('file'), async (req, res) => {
   
       logger.info(`Task updated: ${taskId}`);
       res.json(result.rows[0]);
+
+      // Ajoutez ceci
+    await logActivity(req.user.id, 'update', 'task', taskId, {
+      changes: {
+        title: title !== oldTask.title,
+        description: description !== oldTask.description,
+        assigned_to: JSON.stringify(assigned_to) !== JSON.stringify(oldTask.assigned_to)
+      }
+    });
+
     } catch (err) {
       logger.error(`Error updating task ${taskId}: ${err.message}`);
       if (req.file) fs.unlink(req.file.path, () => {});
@@ -269,6 +287,12 @@ router.delete('/:id',authMiddleware, async (req, res) => {
     }
     logger.info(`Task deleted: ${taskId}`);
     res.json({ message: 'Tâche supprimée' });
+    // Ajoutez ceci
+    await logActivity(req.user.id, 'delete', 'task', taskId, {
+      task_title: task.title,
+      workflow_id: task.workflow_id
+    });
+
   } catch (err) {
     logger.error(`Error deleting task: ${err.message}`);
     console.error(err);
@@ -320,6 +344,13 @@ router.patch('/:id/status', authMiddleware, async (req, res) => {
     }
 
     res.json(result.rows[0]);
+
+     // Ajoutez ceci
+    await logActivity(req.user.id, 'status_change', 'task', taskId, {
+      old_status: oldTask.status,
+      new_status: status,
+      rejection_reason: rejection_reason
+    });
   } catch (err) {
     console.error('Erreur SQL:', err);
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
@@ -413,6 +444,12 @@ router.patch('/:id/comment', authMiddleware, async (req, res) => {
     }
 
     res.json(task);
+    await logActivity(userId, 'comment', 'task', id, {
+      task_title: task.title,
+      comment_length: assignment_note.length,
+      comment_changed: oldComment !== assignment_note,
+      previous_comment_length: oldComment.length
+    });
   } catch (err) {
     console.error('Erreur lors de l\'ajout du commentaire :', err);
     res.status(500).json({ message: 'Erreur serveur' });
@@ -470,6 +507,11 @@ router.post('/:taskId/upload-response', authMiddleware, upload.single('responseF
     );
 
     res.status(201).json(result.rows[0]);
+    // Ajoutez ceci
+    await logActivity(req.user.id, 'task_response', 'task', taskId, {
+      has_file: !!file_path,
+      comment_length: comment?.length || 0
+    });
   } catch (err) {
     console.error('Erreur lors de l\'enregistrement de la réponse:', err);
     if (req.file) fs.unlink(req.file.path, () => {});
@@ -547,7 +589,9 @@ router.post('/:id/complete', authMiddleware, async (req, res) => {
       message: 'Tâche complétée avec succès',
       unlockedTasks: dependentTasks.rowCount
     });
-
+ await logActivity(req.user.id, 'complete', 'task', id, {
+      unlocked_tasks_count: dependentTasks.rowCount
+    });
   } catch (err) {
     console.error('Erreur lors de la complétion de la tâche:', err);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -593,6 +637,10 @@ router.post('/:id/notify-rejection', authMiddleware, async (req, res) => {
     );
 
     res.json({ success: true });
+    // Ajoutez ceci
+    await logActivity(req.user.id, 'task_rejection', 'task', id, {
+      rejection_reason: reason
+    });
   } catch (err) {
     console.error('Erreur notification de refus:', err);
     res.status(500).json({ error: 'Erreur serveur' });

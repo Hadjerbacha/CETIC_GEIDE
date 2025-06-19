@@ -7,7 +7,7 @@ const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { analyzeWorkflowWithGemini } = require('./gimini');
 const { getWorkflowFromDB } = require('./service');
 const { assignTasksAutomatically} = require('../controllers/authController');
-
+const { logActivity } = require('./historique');
 
 // ➕ Ajouter un workflow
 router.post('/', async (req, res) => {
@@ -17,6 +17,14 @@ router.post('/', async (req, res) => {
       `INSERT INTO workflow (name, description, echeance, status, priorite, created_by, document_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
       [name, description, echeance, status, priorite, created_by, documentId]
+    );
+    // Log de l'action
+    await logActivity(
+      created_by,
+      'create',
+      'workflow',
+      result.rows[0].id,
+      { name, description }
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -36,6 +44,14 @@ router.put('/:id', async (req, res) => {
        WHERE id = $6 RETURNING *`,
       [name, description, echeance, status, priorite, id]
     );
+    // Log de l'action
+    await logActivity(
+      req.user?.id, // ou l'ID de l'utilisateur qui modifie
+      'update',
+      'workflow',
+      id,
+      { changes: { name, description, echeance, status, priorite } }
+    );
     res.json(result.rows[0]);
   } catch (err) {
     console.error(err);
@@ -49,6 +65,16 @@ router.delete('/:id', async (req, res) => {
   try {
     await pool.query('DELETE FROM workflow WHERE id = $1', [id]);
     res.json({ message: 'Workflow supprimé avec succès' });
+    // Log de l'action
+    if (workflow.rows.length > 0) {
+      await logActivity(
+        req.user?.id,
+        'delete',
+        'workflow',
+        id,
+        { workflow: workflow.rows[0] }
+      );
+    }
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Erreur lors de la suppression du workflow' });
@@ -358,6 +384,19 @@ router.post('/:workflowId/tasks/:taskId/reassign', authMiddleware, async (req, r
       [[newAssigneeId], `\nRéassignée le ${new Date().toLocaleString()} par ${userId}. Raison: ${reason || 'non spécifiée'}\n`, taskId]
     );
 
+     // 4. Journaliser l'action
+    await logActivity(
+      userId,
+      'reassign',
+      'task',
+      taskId,
+      {
+        old_assignee: taskRes.rows[0].assigned_to,
+        new_assignee: newAssigneeId,
+        reason: reason
+      }
+    );
+
     // 4. Journaliser l'action
     await logWorkflowAction(
       workflowId,
@@ -491,6 +530,14 @@ router.post('/:id/steps/:stepId/complete', authMiddleware, async (req, res) => {
       message: 'Étape complétée avec succès.',
       workflowStatus: workflowStatus || 'unchanged'
     });
+     // Log de l'action
+    await logActivity(
+      userId,
+      'complete',
+      'task',
+      stepId,
+      { workflow_id: id }
+    );
   } catch (err) {
     console.error('Erreur lors de la complétion de l\'étape :', err);
     res.status(500).json({ error: 'Impossible de compléter l\'étape.' });
@@ -644,6 +691,14 @@ router.post("/:id/generate-tasks", authMiddleware, async (req, res) => {
     const result = await pool.query(
       `UPDATE workflow SET status = $1 WHERE id = $2 RETURNING *`,
       [status, id]
+    );
+    // Log de l'action
+    await logActivity(
+      req.user.id,
+      'MAJ_status',
+      'workflow',
+      id,
+      { new_status: status }
     );
     res.json({ workflowStatus: result.rows[0].status });
   } catch (err) {
@@ -970,7 +1025,14 @@ router.post('/:id/archive', authMiddleware, async (req, res) => {
       'UPDATE documents SET is_archived = true WHERE id = $1',
       [workflowRes.rows[0].document_id]
     );
-
+// Log de l'action
+    await logActivity(
+      req.user.id,
+      'archive',
+      'workflow',
+      id,
+      { validation_report }
+    );
     res.json(archiveRes.rows[0]);
   } catch (err) {
     console.error('Erreur lors de l\'archivage:', err);
@@ -1406,6 +1468,19 @@ const sortedTemplates = sortTasksWithDependencies(templates[documentType].tasks)
         due_date: t.due_date
       }))
     });
+
+    // Log de la modification du workflow
+    await logActivity(
+      userId,
+      'Demarrer_workflow',
+      'workflow',
+      id,
+      { 
+        template_type: documentType,
+        new_name: `${templates[documentType].workflowName} #${id}`,
+        new_description: templates[documentType].workflowDescription
+      }
+    );
 
   } catch (err) {
     console.error('Erreur génération workflow:', err);

@@ -12,7 +12,7 @@ const router = express.Router();
 const axios = require('axios');
 const NLP_SERVICE_URL = 'http://localhost:5001/classify';
 const NLP_TIMEOUT = 3000; // 3 secondes timeout
-
+const { logActivity } = require('./historique');
 
 
 // Envoyer un message à un utilisateur ou un groupe
@@ -30,6 +30,18 @@ router.post('/', auth, async (req, res) => {
       `INSERT INTO messages (sender_id, recipient_id, group_id, content, sent_at)
        VALUES ($1, $2, $3, $4, NOW()) RETURNING *`,
       [sender_id, recipient_id || null, group_id || null, content]
+    );
+    // Log de l'action
+    await logActivity(
+      sender_id,
+      'message_send',
+      recipient_id ? 'private_message' : 'group_message',
+      result.rows[0].id,
+      {
+        recipient_id,
+        group_id,
+        content_length: content.length
+      }
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {

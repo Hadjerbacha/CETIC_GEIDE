@@ -3,7 +3,7 @@ const jwt = require("jsonwebtoken");
 const { getUsers, findUserByEmail, createUser, updateUser, deleteUser, createSession, getUserSessions, getActiveSession, updateLogoutTime, getUserWorkStats} = require("../models/userModel");
 require("dotenv").config();
 const pool = require("../config/db"); // Ajoutez cette ligne en haut du fichier
-
+const { logActivity } = require('../routes/historique');
 // Fonction pour récupérer tous les utilisateurs
 // Exemple de contrôleur pour récupérer des utilisateurs
 const getUsersController = async (req, res) => {
@@ -34,7 +34,17 @@ const login = async (req, res) => {
      // Enregistrer la session
     const loginTime = new Date();
     await createSession(user.id, loginTime, null, null);
-
+// Log de la connexion
+    await logActivity(
+      user.id,
+      'user_login',
+      'user',
+      user.id,
+      {
+        login_time: loginTime,
+        ip_address: req.ip
+      }
+    );
     const { password: _, ...userData } = user;
     res.status(200).json({ token, user: userData });
   } catch (err) {
@@ -63,7 +73,18 @@ const register = async (req, res) => {
       password: hashedPassword,
       role,
     });
-
+// Log de la création d'utilisateur
+    await logActivity(
+      req.user?.id || 'system', // Si création par un admin ou système
+      'user_create',
+      'user',
+      newUser.id,
+      {
+        email,
+        role,
+        created_by: req.user?.id || 'system'
+      }
+    );
     res.status(201).json({ message: "Inscription réussie", user: newUser });
   } catch (err) {
     console.error(err.message);
@@ -78,6 +99,21 @@ const updateUserController = async (req, res) => {
 
   try {
     const updated = await updateUser(id, { name, prenom, email, role });
+    // Log de la modification
+    await logActivity(
+      req.user.id, // L'admin qui fait la modification
+      'user_update',
+      'user',
+      id,
+      {
+        changes: {
+          name: { from: oldUser.rows[0]?.name, to: name },
+          email: { from: oldUser.rows[0]?.email, to: email },
+          role: { from: oldUser.rows[0]?.role, to: role }
+        },
+        updated_by: req.user.id
+      }
+    );
     res.status(200).json({ message: "Utilisateur mis à jour", user: updated });
   } catch (err) {
     console.error(err.message);
@@ -92,6 +128,21 @@ const deleteUserController = async (req, res) => {
   try {
     const deleted = await deleteUser(id);
     if (!deleted) return res.status(404).json({ message: "Utilisateur introuvable" });
+    // Log de la suppression
+    await logActivity(
+      req.user.id, // L'admin qui fait la suppression
+      'user_delete',
+      'user',
+      id,
+      {
+        deleted_user: {
+          name: userToDelete.rows[0]?.name,
+          email: userToDelete.rows[0]?.email,
+          role: userToDelete.rows[0]?.role
+        },
+        deleted_by: req.user.id
+      }
+    );
     res.status(200).json({ message: "Utilisateur supprimé", user: deleted });
   } catch (err) {
     console.error(err.message);
@@ -109,9 +160,21 @@ const logout = async (req, res) => {
     const logoutTime = new Date();
 
     // Mettre à jour la session existante
-    const session = await getActiveSession(decoded.id);
+     const session = await getActiveSession(decoded.id);
     if (session) {
       await updateLogoutTime(decoded.id, logoutTime);
+      
+      // Log de la déconnexion
+      await logActivity(
+        decoded.id,
+        'user_logout',
+        'user',
+        decoded.id,
+        {
+          logout_time: logoutTime,
+          session_duration: (logoutTime - new Date(session.login_time)) / 1000 // en secondes
+        }
+      );
     }
 
     res.status(200).json({ message: "Déconnexion réussie" });

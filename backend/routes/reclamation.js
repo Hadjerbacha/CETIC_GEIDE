@@ -3,7 +3,7 @@ const router = express.Router();
 const multer = require('multer');
 const pool = require('../config/db');
 const path = require('path');
-
+const { logActivity } = require('./historique'); 
 // Config Multer
 const storage = multer.diskStorage({
     destination: 'uploads/',
@@ -42,7 +42,18 @@ router.post('/', upload.single('file'), async (req, res) => {
              VALUES ($1, $2, $3, $4)`,
             [category, reclamation, priority || 'moyenne', filePath]
         );
-
+// Log de la création de réclamation
+    await logActivity(
+      req.user?.id || 'system', // Si pas d'authentification
+      'reclamation_create',
+      'reclamation',
+      result.rows[0].id,
+      {
+        category,
+        priority,
+        has_file: !!filePath
+      }
+    );
         res.status(200).json({ message: 'Réclamation enregistrée avec succès.' });
     } catch (error) {
         console.error("Erreur réclamation :", error);

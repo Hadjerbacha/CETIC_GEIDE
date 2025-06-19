@@ -20,6 +20,7 @@ const chatRoutes = require('./routes/chat');
 const { router: activityRoutes, logActivity } = require('./routes/activite');
 const folderRoutes = require('./routes/dossier');
 const messageRoutes = require('./routes/messages');
+const Logs = require('./routes/logs');
 const app = express();
 const PORT = process.env.PORT || 5000;
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -55,6 +56,7 @@ app.use('/api/activities', activityRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/folders', folderRoutes);
 app.use('/api/stats', statsRoutes);
+app.use('/api/activity-logs', Logs);
 
 
 // Lancement du serveur

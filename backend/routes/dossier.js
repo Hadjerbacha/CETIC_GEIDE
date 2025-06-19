@@ -4,6 +4,7 @@ const { auth } = require('../middleware/auth');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
+const { logActivity } = require("./historique");
 
 // Configuration du stockage
 const storage = multer.diskStorage({
@@ -82,6 +83,14 @@ router.post('/', upload.any(), async (req, res) => {
     // 3. Réponse avec l'ID du dossier créé
     res.status(201).json({ folderId: folder.id });
 
+    // Ajoutez ceci après la création
+    await logActivity(req.user.id, 'create', 'folder', folder.id, {
+      folder_name: name,
+      parent_id: parent_id,
+      file_count: req.files?.length || 0
+    });
+
+
   } catch (err) {
     console.error('Erreur lors de la création du dossier et des documents :', err.stack);
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
@@ -147,6 +156,15 @@ router.post('/', upload.array('files'), async (req, res) => {
     }
 
     res.status(201).json({ message: 'Dossier importé avec succès', folderId });
+
+    // Ajoutez ceci après la création
+    await logActivity(req.user.id, 'create', 'folder', folder.id, {
+      folder_name: name,
+      parent_id: parent_id,
+      file_count: req.files?.length || 0
+    });
+
+
   } catch (error) {
     console.error('Erreur lors de l’import du dossier :', error);
     res.status(500).json({ error: 'Erreur serveur' });
@@ -230,6 +248,15 @@ router.post('/', auth, async (req, res) => {
     );
     
     res.status(201).json(result.rows[0]);
+
+    // Ajoutez ceci après la création
+    await logActivity(req.user.id, 'create', 'folder', folder.id, {
+      folder_name: name,
+      parent_id: parent_id,
+      file_count: req.files?.length || 0
+    });
+
+
   } catch (err) {
     console.error('Erreur création dossier:', err.stack);
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
@@ -261,6 +288,13 @@ router.delete('/folders/:id', auth, async (req, res) => {
   try {
     await pool.query('DELETE FROM folders WHERE id = $1 AND user_id = $2', [folderId, req.user.id]);
     res.status(200).json({ message: 'Dossier supprimé avec succès' });
+
+    // Ajoutez ceci
+    await logActivity(req.user.id, 'delete', 'folder', req.params.id, {
+      folder_name: folder.name,
+      parent_id: folder.parent_id
+    });
+
   } catch (err) {
     console.error('Erreur lors de la suppression du dossier:', err.stack);
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
@@ -475,49 +509,7 @@ const workflowRes = await pool.query(
   ]
 );
 
-// Partage d'un dossier avec des utilisateurs/groupes
-router.put('/:id/share', auth, async (req, res) => {
-  const folderId = req.params.id;
-  const userId = req.user.id;
-  const { share_users = [], share_groups = [] } = req.body;
 
-  try {
-    // 1. Vérifier que le dossier existe et appartient à l'utilisateur
-    const folderRes = await pool.query(
-      'SELECT * FROM folders WHERE id = $1 AND user_id = $2',
-      [folderId, userId]
-    );
-
-    if (folderRes.rowCount === 0) {
-      return res.status(404).json({ 
-        error: 'Dossier non trouvé ou vous n\'êtes pas le propriétaire' 
-      });
-    }
-
-    // 2. Mettre à jour les partages
-    await pool.query(
-      `UPDATE folders 
-       SET share_users = $1, share_groups = $2
-       WHERE id = $3`,
-      [share_users, share_groups, folderId]
-    );
-
-    // 3. Retourner le dossier mis à jour
-    const updatedFolderRes = await pool.query(
-      'SELECT * FROM folders WHERE id = $1',
-      [folderId]
-    );
-
-    res.status(200).json(updatedFolderRes.rows[0]);
-    
-  } catch (err) {
-    console.error('Erreur lors du partage du dossier:', err);
-    res.status(500).json({ 
-      error: 'Erreur serveur', 
-      details: err.message 
-    });
-  }
-});
 const workflow = workflowRes.rows[0];
 const workflowId = workflow.id;
 
@@ -620,6 +612,13 @@ await pool.query(
       }))
     });
 
+    // Ajoutez ceci
+    await logActivity(req.user.id, 'create_workflow', 'folder', folderId, {
+      workflow_id: workflow.id,
+      template_used: templateId,
+      task_count: template.tasks.length
+    });
+    
   } catch (err) {
     console.error('Erreur création workflow:', err.stack);
     res.status(500).json({ 
@@ -630,7 +629,55 @@ await pool.query(
   }
 });
 
+// Partage d'un dossier avec des utilisateurs/groupes
+router.put('/:id/share', auth, async (req, res) => {
+  const folderId = req.params.id;
+  const userId = req.user.id;
+  const { share_users = [], share_groups = [] } = req.body;
 
+  try {
+    // 1. Vérifier que le dossier existe et appartient à l'utilisateur
+    const folderRes = await pool.query(
+      'SELECT * FROM folders WHERE id = $1 AND user_id = $2',
+      [folderId, userId]
+    );
+
+    if (folderRes.rowCount === 0) {
+      return res.status(404).json({ 
+        error: 'Dossier non trouvé ou vous n\'êtes pas le propriétaire' 
+      });
+    }
+
+    // 2. Mettre à jour les partages
+    await pool.query(
+      `UPDATE folders 
+       SET share_users = $1, share_groups = $2
+       WHERE id = $3`,
+      [share_users, share_groups, folderId]
+    );
+
+    // 3. Retourner le dossier mis à jour
+    const updatedFolderRes = await pool.query(
+      'SELECT * FROM folders WHERE id = $1',
+      [folderId]
+    );
+
+    res.status(200).json(updatedFolderRes.rows[0]);
+    
+     // Ajoutez ceci
+    await logActivity(req.user.id, 'share', 'folder', folderId, {
+      shared_users: share_users,
+      shared_groups: share_groups
+    });
+    
+  } catch (err) {
+    console.error('Erreur lors du partage du dossier:', err);
+    res.status(500).json({ 
+      error: 'Erreur serveur', 
+      details: err.message 
+    });
+  }
+});
 // Initialisation des tables
 initializeDatabase();
 
