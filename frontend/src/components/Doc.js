@@ -373,6 +373,52 @@ const Doc = () => {
     }
   };
 
+  const handleArchiveRequest = async (docId) => {
+  try {
+    // Vérifiez que docId et userId sont valides
+    if (!docId || !userId) {
+      throw new Error("ID de document ou utilisateur manquant");
+    }
+
+    const response = await axios.post(
+      'http://localhost:5000/api/documents/archive-requests',
+      {
+        documentId: Number(docId), // Assurez-vous que c'est un nombre
+        requesterId: Number(userId) // Assurez-vous que c'est un nombre
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        timeout: 5000
+      }
+    );
+
+    toast.success(response.data.message || "Demande envoyée avec succès");
+  } catch (error) {
+    let errorMessage = "Échec de l'envoi de la demande";
+    
+    if (error.response) {
+      // Messages d'erreur spécifiques du serveur
+      errorMessage = error.response.data?.message || errorMessage;
+      
+      // Cas particuliers
+      if (error.response.status === 400) {
+        errorMessage = error.response.data?.error || "Données de requête invalides";
+      }
+    }
+
+    console.error("Détails de l'erreur:", {
+      config: error.config,
+      response: error.response?.data
+    });
+
+    toast.error(errorMessage);
+  }
+};
+
 
   const latestDocs = Object.values(
     documents.reduce((acc, doc) => {
@@ -711,6 +757,8 @@ const Doc = () => {
       }
     });
   }, [documents]);
+
+
 
   const handleAdvancedSearch = async () => {
     try {
@@ -1532,13 +1580,25 @@ const Doc = () => {
                                   <i className="bi bi-play-fill me-1"></i>
                                 </Button>
                                 {/* Archiver */}
-                                {userRole === 'admin' && (
+                                {userRole === 'admin' ? (
+                                  // Bouton Archive pour l'admin (archive directe)
                                   <Button
                                     variant="secondary"
                                     size="sm"
                                     className="ms-2"
                                     onClick={() => handleArchive(doc.id)}
                                     title="Archiver le document"
+                                  >
+                                    <i className="bi bi-archive"></i>
+                                  </Button>
+                                ) : (
+                                  // Bouton pour les non-admins (envoie une demande)
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="ms-2"
+                                    onClick={() => handleArchiveRequest(doc.id)}
+                                    title="Demander l'archivage"
                                   >
                                     <i className="bi bi-archive"></i>
                                   </Button>
