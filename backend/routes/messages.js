@@ -17,7 +17,8 @@ const NLP_TIMEOUT = 3000; // 3 secondes timeout
 
 // Envoyer un message à un utilisateur ou un groupe
 router.post('/', auth, async (req, res) => {
-  const { recipient_id,sender_id, group_id, content } = req.body;
+   const { recipient_id, group_id, content } = req.body;
+  const sender_id = req.user.id;
   console.log("📩 Données reçues :", { sender_id, recipient_id, group_id, content });
 
   if (!sender_id || !content || (!recipient_id && !group_id)) {
