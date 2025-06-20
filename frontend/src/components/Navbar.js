@@ -9,6 +9,8 @@ import { jwtDecode } from 'jwt-decode';
 import { Dropdown, Avatar, Badge } from 'antd';
 import axios from 'axios';
 import { motion } from 'framer-motion';
+import { FaPhotoVideo } from 'react-icons/fa';
+
 
 const Navbar = () => {
   const [sidebar, setSidebar] = useState(false);
@@ -84,6 +86,12 @@ const Navbar = () => {
       path: '/documents',
       icon: <HiIcons.HiDocumentAdd />,
     },
+    {
+      title: 'Media',
+      path: '/media',
+      icon: <FaPhotoVideo />,
+    },
+
     {
       title: 'Dossiers',
       path: '/folder',

@@ -678,6 +678,49 @@ router.put('/:id/share', auth, async (req, res) => {
     });
   }
 });
+
+// Soft delete d'un dossier
+router.patch('/:id/soft-delete', auth, async (req, res) => {
+  try {
+    const folder = await Folder.findOne({
+      where: { id: req.params.id },
+      include: [Document] // Inclure les documents pour les mettre à jour aussi
+    });
+
+    if (!folder) {
+      return res.status(404).json({ error: 'Dossier non trouvé' });
+    }
+
+    // Vérifier les permissions
+    if (folder.user_id !== req.user.id && !req.user.isAdmin) {
+      return res.status(403).json({ error: 'Non autorisé' });
+    }
+
+    // Marquer le dossier et ses documents comme supprimés
+    await folder.update({
+      deleted: true,
+      deleted_at: new Date(),
+      deleted_by: req.user.id
+    });
+
+    // Marquer aussi tous les documents associés
+    if (folder.Documents && folder.Documents.length > 0) {
+      await Document.update(
+        {
+          deleted: true,
+          deleted_at: new Date(),
+          deleted_by: req.user.id
+        },
+        { where: { folder_id: folder.id } }
+      );
+    }
+
+    res.json({ message: 'Dossier marqué comme supprimé' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
 // Initialisation des tables
 initializeDatabase();
 

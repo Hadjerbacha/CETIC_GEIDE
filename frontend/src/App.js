@@ -9,6 +9,7 @@ import Workflowz from './components/Workflowz';
 import Groupe from './components/Groupe';
 import Doc from './components/Document';
 import Document from './components/Doc';
+import Media from './components/Media';
 import AdminUsers from './components/AdminUsers';
 import ProtectedRoute from './ProtectedRoute'; // Importer le composant ProtectedRoute
 import AssignedTasks from './components/AssignedTasks';
@@ -58,6 +59,7 @@ function App() {
           <Route path="/groupe" element={<ProtectedRoute element={<Groupe />} />} />
           <Route path="/AdminUsers" element={<ProtectedRoute element={<AdminUsers />} />} />
           <Route path="/document" element={<ProtectedRoute element={<Doc />} />} />
+          <Route path="/Media" element={<ProtectedRoute element={<Media />} />} />
           <Route path="/documents" element={<ProtectedRoute element={<Document />} />} />
           <Route path="/folder" element={<ProtectedRoute element={<Folder />} />} />
           <Route path="/workflows" element={<ProtectedRoute element={<Workflows />} />} />

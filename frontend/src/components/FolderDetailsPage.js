@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { Container, Card, Button, Alert, Spinner, Row, Col, ButtonGroup, Dropdown, DropdownButton, ListGroup, Form, Modal } from 'react-bootstrap';
 import axios from 'axios';
 import Navbar from './Navbar';
-import { FaFolderOpen, FaPlus, FaFolderPlus, FaFileUpload } from 'react-icons/fa';
+import { FaFolderOpen, FaPlus, FaTrash, FaFolderPlus, FaFileUpload } from 'react-icons/fa';
 import { FaCloudUploadAlt } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
@@ -94,64 +94,64 @@ const FolderDetailsPage = () => {
   };
 
   const fetchFolder = async () => {
-  try {
-    const res = await axios.get(`http://localhost:5000/api/folders/${id}`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    setFolder(res.data);
-    // Initialisez aussi les sélections de partage si nécessaire
-    setSelectedUsers(allUsers.filter(u => res.data.share_users?.includes(u.value)));
-    setSelectedGroups(allGroups.filter(g => res.data.share_groups?.includes(g.value)));
-  } catch (error) {
-    setError("Erreur lors du chargement du dossier");
-    console.error(error);
-  } finally {
-    setLoading(false);
-  }
-};
+    try {
+      const res = await axios.get(`http://localhost:5000/api/folders/${id}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setFolder(res.data);
+      // Initialisez aussi les sélections de partage si nécessaire
+      setSelectedUsers(allUsers.filter(u => res.data.share_users?.includes(u.value)));
+      setSelectedGroups(allGroups.filter(g => res.data.share_groups?.includes(g.value)));
+    } catch (error) {
+      setError("Erreur lors du chargement du dossier");
+      console.error(error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Utilisez vos fonctions existantes telles quelles
-const fetchUsers = async () => {
-  try {
-    const res = await axios.get('http://localhost:5000/api/auth/users/');
-    const formatted = res.data.map(u => ({ value: u.id, label: `${u.name} ${u.prenom}` }));
-    setAllUsers(formatted);
-  } catch (err) {
-    console.error('Erreur chargement des utilisateurs', err);
-  }
-};
-
-const fetchGroups = async () => {
-  try {
-    const res = await axios.get(GROUPS_API);
-    setAllGroups(res.data.map(g => ({ value: g.id, label: g.name }))); // Formatage pour react-select
-  } catch (err) {
-    console.error('Erreur récupération groupes:', err);
-  }
-};
-
-useEffect(() => {
-  const loadData = async () => {
-    await fetchFolder();
-    await fetchUsers();
-    await fetchGroups();
-    await fetchData();
+  const fetchUsers = async () => {
+    try {
+      const res = await axios.get('http://localhost:5000/api/auth/users/');
+      const formatted = res.data.map(u => ({ value: u.id, label: `${u.name} ${u.prenom}` }));
+      setAllUsers(formatted);
+    } catch (err) {
+      console.error('Erreur chargement des utilisateurs', err);
+    }
   };
 
-  loadData();
-}, [id, token]);
-
-
-useEffect(() => {
-  const loadData = async () => {
-    await fetchFolder();
-    await fetchUsers();
-    await fetchGroups();
-    await fetchData();
+  const fetchGroups = async () => {
+    try {
+      const res = await axios.get(GROUPS_API);
+      setAllGroups(res.data.map(g => ({ value: g.id, label: g.name }))); // Formatage pour react-select
+    } catch (err) {
+      console.error('Erreur récupération groupes:', err);
+    }
   };
 
-  loadData();
-}, [id, token]);
+  useEffect(() => {
+    const loadData = async () => {
+      await fetchFolder();
+      await fetchUsers();
+      await fetchGroups();
+      await fetchData();
+    };
+
+    loadData();
+  }, [id, token]);
+
+
+  useEffect(() => {
+    const loadData = async () => {
+      await fetchFolder();
+      await fetchUsers();
+      await fetchGroups();
+      await fetchData();
+    };
+
+    loadData();
+  }, [id, token]);
 
 
   useEffect(() => {
@@ -194,42 +194,42 @@ useEffect(() => {
   };
 
   const handleShareFolder = async (userIds, groupIds) => {
-  try {
-    const res = await axios.put(
-      `http://localhost:5000/api/folders/${id}/share`,
-      {
-        share_users: userIds,
-        share_groups: groupIds
-      },
-      {
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json'
+    try {
+      const res = await axios.put(
+        `http://localhost:5000/api/folders/${id}/share`,
+        {
+          share_users: userIds,
+          share_groups: groupIds
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      // Mettre à jour l'état local avec la réponse complète du serveur
+      setFolder(res.data);
+
+      toast.success("Partage mis à jour avec succès!");
+      return true;
+    } catch (err) {
+      console.error("Erreur lors du partage:", err);
+
+      let errorMessage = "Erreur lors de la mise à jour du partage";
+      if (err.response) {
+        if (err.response.status === 403) {
+          errorMessage = "Vous n'avez pas la permission de partager ce dossier";
+        } else if (err.response.data?.error) {
+          errorMessage = err.response.data.error;
         }
       }
-    );
-    
-    // Mettre à jour l'état local avec la réponse complète du serveur
-    setFolder(res.data);
-    
-    toast.success("Partage mis à jour avec succès!");
-    return true;
-  } catch (err) {
-    console.error("Erreur lors du partage:", err);
-    
-    let errorMessage = "Erreur lors de la mise à jour du partage";
-    if (err.response) {
-      if (err.response.status === 403) {
-        errorMessage = "Vous n'avez pas la permission de partager ce dossier";
-      } else if (err.response.data?.error) {
-        errorMessage = err.response.data.error;
-      }
+
+      toast.error(errorMessage);
+      return false;
     }
-    
-    toast.error(errorMessage);
-    return false;
-  }
-};
+  };
 
   const handleImportFolder = async () => {
     if (!folderName || !pendingFile || pendingFile.length === 0) {
@@ -342,6 +342,30 @@ useEffect(() => {
     }
   };
 
+  const handleDeleteFolder = async () => {
+    if (window.confirm(`Êtes-vous sûr de vouloir supprimer le dossier "${folder.name}" ? Cette action est irréversible.`)) {
+      try {
+        // D'abord, marquer le dossier comme supprimé (soft delete)
+        await axios.patch(
+          `http://localhost:5000/api/folders/${id}/soft-delete`,
+          {},
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        toast.success('Dossier marqué comme supprimé avec succès!');
+
+        // Rediriger vers la page parent ou la page d'accueil après un délai
+        setTimeout(() => {
+          navigate(folder.parent_id ? `/folder/${folder.parent_id}` : '/');
+        }, 1500);
+
+      } catch (err) {
+        console.error('Erreur lors de la suppression:', err);
+        toast.error(err.response?.data?.error || 'Erreur lors de la suppression du dossier');
+      }
+    }
+  };
+
   return (
     <>
       <Navbar />
@@ -354,29 +378,45 @@ useEffect(() => {
             <Card.Body>
               <Card.Title className="mb-4 display-6">📁 Détails du dossier</Card.Title>
 
-              <ButtonGroup className="mt-3">
-  <Button
-    variant="primary"
-    onClick={createWorkflow}
-    disabled={folder?.workflow_id}
-  >
-    <FiFileText className="me-2" />
-    {folder?.workflow_id ? 'Workflow déjà appliqué' : 'Créer un workflow'}
-  </Button>
-  
-  <Button 
-    variant="info" 
-    onClick={() => {
-      setSelectedUsers(allUsers.filter(u => folder?.share_users?.includes(u.value)));
-      setSelectedGroups(allGroups.filter(g => folder?.share_groups?.includes(g.value)));
-      setShowShareModal(true);
-    }}
-    className="ms-2"
-  >
-    <FaShare className="me-2" />
-    Partager
-  </Button>
-</ButtonGroup>
+              <ButtonGroup className="mt-3 d-flex gap-2">
+
+                <Button
+                  variant={folder?.workflow_id ? 'secondary' : 'success'}
+                  onClick={createWorkflow}
+                  disabled={folder?.workflow_id}
+                  className="d-flex align-items-center px-3 rounded-pill shadow-sm"
+                  title="Créer un workflow pour ce dossier"
+                >
+                  <FiFileText className="me-2" />
+                  {folder?.workflow_id ? 'Workflow appliqué' : 'Créer un workflow'}
+                </Button>
+
+                <Button
+                  variant="outline-primary"
+                  onClick={() => {
+                    setSelectedUsers(allUsers.filter(u => folder?.share_users?.includes(u.value)));
+                    setSelectedGroups(allGroups.filter(g => folder?.share_groups?.includes(g.value)));
+                    setShowShareModal(true);
+                  }}
+                  className="d-flex align-items-center px-3 rounded-pill shadow-sm"
+                  title="Partager le dossier"
+                >
+                  <FaShare className="me-2" />
+                  Partager
+                </Button>
+
+                <Button
+                  variant="outline-danger"
+                  onClick={handleDeleteFolder}
+                  className="d-flex align-items-center px-3 rounded-pill shadow-sm"
+                  title="Supprimer définitivement"
+                >
+                  <FaTrash className="me-2" />
+                  Supprimer
+                </Button>
+
+              </ButtonGroup>
+
               <p><strong>ID :</strong> {id ?? 'N/A'}</p>
               <p><strong>Nom :</strong> {folder.name ?? 'Sans nom'}</p>
               <p><strong>Description :</strong> {folder.description ? folder.description : 'Aucune description fournie.'}</p>
@@ -395,6 +435,10 @@ useEffect(() => {
                   <Dropdown.Item onClick={() => setShowImportFolderModal(true)}>
                     <FaFolderOpen className="me-2" />
                     Importer un dossier
+                  </Dropdown.Item>
+                  <Dropdown.Item onClick={() => setShowUploadForm(true)}>
+                    <FaFolderOpen className="me-2" />
+                    Importer un fichier
                   </Dropdown.Item>
                 </Dropdown.Menu>
               </Dropdown>
@@ -434,7 +478,7 @@ useEffect(() => {
                   ))}
                 </ListGroup>
               )}
-             
+
               {folder.workflow_id && (
                 <div className="mt-4">
                   <h5>Workflow associé</h5>
@@ -580,89 +624,89 @@ useEffect(() => {
       </Modal>
 
       {/* Modal de partage */}
-<Modal show={showShareModal} style={{ zIndex: 1050 }} onHide={() => setShowShareModal(false)} size="lg">
-  <Modal.Header closeButton>
-    <Modal.Title>Partager le dossier "{folder?.name}"</Modal.Title>
-  </Modal.Header>
-  <Modal.Body>
-    <Form>
-      <Form.Group className="mb-4">
-        <Form.Label>Utilisateurs</Form.Label>
-        <Select
-          isMulti
-          options={allUsers}
-          value={selectedUsers}
-          onChange={(selected) => setSelectedUsers(selected || [])}
-          placeholder="Sélectionnez des utilisateurs..."
-          className="basic-multi-select"
-          classNamePrefix="select"
-        />
-      </Form.Group>
+      <Modal show={showShareModal} style={{ zIndex: 1050 }} onHide={() => setShowShareModal(false)} size="lg">
+        <Modal.Header closeButton>
+          <Modal.Title>Partager le dossier "{folder?.name}"</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <Form>
+            <Form.Group className="mb-4">
+              <Form.Label>Utilisateurs</Form.Label>
+              <Select
+                isMulti
+                options={allUsers}
+                value={selectedUsers}
+                onChange={(selected) => setSelectedUsers(selected || [])}
+                placeholder="Sélectionnez des utilisateurs..."
+                className="basic-multi-select"
+                classNamePrefix="select"
+              />
+            </Form.Group>
 
-      <Form.Group>
-        <Form.Label>Groupes</Form.Label>
-        <Select
-          isMulti
-          options={allGroups}
-          value={selectedGroups}
-          onChange={(selected) => setSelectedGroups(selected || [])}
-          placeholder="Sélectionnez des groupes..."
-          className="basic-multi-select"
-          classNamePrefix="select"
-        />
-      </Form.Group>
+            <Form.Group>
+              <Form.Label>Groupes</Form.Label>
+              <Select
+                isMulti
+                options={allGroups}
+                value={selectedGroups}
+                onChange={(selected) => setSelectedGroups(selected || [])}
+                placeholder="Sélectionnez des groupes..."
+                className="basic-multi-select"
+                classNamePrefix="select"
+              />
+            </Form.Group>
 
-      <div className="mt-4 p-3 bg-light rounded">
-        <h6>Actuellement partagé avec :</h6>
-        {folder?.share_users?.length > 0 || folder?.share_groups?.length > 0 ? (
-          <>
-            {folder.share_users?.length > 0 && (
-              <div>
-                <strong>Utilisateurs :</strong>
-                <ul>
-                  {folder.share_users.map(userId => {
-                    const user = allUsers.find(u => u.value === userId);
-                    return <li key={userId}>{user ? user.label : `ID: ${userId}`}</li>;
-                  })}
-                </ul>
-              </div>
-            )}
-            {folder.share_groups?.length > 0 && (
-              <div>
-                <strong>Groupes :</strong>
-                <ul>
-                  {folder.share_groups.map(groupId => {
-                    const group = allGroups.find(g => g.value === groupId);
-                    return <li key={groupId}>{group ? group.label : `ID: ${groupId}`}</li>;
-                  })}
-                </ul>
-              </div>
-            )}
-          </>
-        ) : (
-          <p>Ce dossier n'est pas partagé.</p>
-        )}
-      </div>
-    </Form>
-  </Modal.Body>
-  <Modal.Footer>
-    <Button variant="secondary" onClick={() => setShowShareModal(false)}>
-      Annuler
-    </Button>
-    <Button 
-      variant="primary" 
-      onClick={async () => {
-        await handleShareFolder(
-          selectedUsers.map(u => u.value),
-          selectedGroups.map(g => g.value)
-        );
-        setShowShareModal(false);
-      }}
-    >
-      Enregistrer le partage
-    </Button>
-  </Modal.Footer>
-</Modal>
+            <div className="mt-4 p-3 bg-light rounded">
+              <h6>Actuellement partagé avec :</h6>
+              {folder?.share_users?.length > 0 || folder?.share_groups?.length > 0 ? (
+                <>
+                  {folder.share_users?.length > 0 && (
+                    <div>
+                      <strong>Utilisateurs :</strong>
+                      <ul>
+                        {folder.share_users.map(userId => {
+                          const user = allUsers.find(u => u.value === userId);
+                          return <li key={userId}>{user ? user.label : `ID: ${userId}`}</li>;
+                        })}
+                      </ul>
+                    </div>
+                  )}
+                  {folder.share_groups?.length > 0 && (
+                    <div>
+                      <strong>Groupes :</strong>
+                      <ul>
+                        {folder.share_groups.map(groupId => {
+                          const group = allGroups.find(g => g.value === groupId);
+                          return <li key={groupId}>{group ? group.label : `ID: ${groupId}`}</li>;
+                        })}
+                      </ul>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <p>Ce dossier n'est pas partagé.</p>
+              )}
+            </div>
+          </Form>
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowShareModal(false)}>
+            Annuler
+          </Button>
+          <Button
+            variant="primary"
+            onClick={async () => {
+              await handleShareFolder(
+                selectedUsers.map(u => u.value),
+                selectedGroups.map(g => g.value)
+              );
+              setShowShareModal(false);
+            }}
+          >
+            Enregistrer le partage
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
     </>
   );
