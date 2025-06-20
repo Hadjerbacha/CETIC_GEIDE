@@ -1071,7 +1071,9 @@ router.put('/:id/affiche', auth, async (req, res) => {
       'SELECT *, TO_CHAR(date_archive, \'DD/MM/YYYY HH24:MI\') as formatted_date_archive FROM documents WHERE id = $1',
       [docId]
     );
-
+    await logActivity(req.user.id, isArchived ? 'archive' : 'unarchive', 'document', docId, {
+      action: isArchived ? 'archive' : 'unarchive'
+    });
     res.json({ 
       message: isArchived ? 'Document archivé' : 'Document désarchivé', 
       document: updatedDoc.rows[0] 
@@ -1626,7 +1628,11 @@ router.post('/archive-requests', auth, async (req, res) => {
     });
 
     await Promise.all(notificationPromises);
-
+// Ajoutez ceci après la création de la demande
+    await logActivity(req.user.id, 'archive_request', 'document', documentId, {
+      request_id: newRequest.rows[0].id,
+      status: 'pending'
+    });
     return res.status(201).json({
       success: true,
       data: {
@@ -1760,7 +1766,9 @@ router.put('/archive-requests/:id/process', auth, async (req, res) => {
           request.rows[0].document_id
         ]
       );
-
+      await logActivity(req.user.id, 'archive_approve', 'document', request.rows[0].document_id, {
+        request_id: id
+      });
       res.json({ message: 'Document archivé avec succès' });
 
     } else if (action === 'reject') {
@@ -1783,7 +1791,9 @@ router.put('/archive-requests/:id/process', auth, async (req, res) => {
           request.rows[0].document_id
         ]
       );
-
+    await logActivity(req.user.id, 'archive_reject', 'document', request.rows[0].document_id, {
+        request_id: id
+      });
       res.json({ message: 'Demande rejetée' });
     } else {
       res.status(400).json({ message: 'Action invalide' });

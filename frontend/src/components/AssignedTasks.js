@@ -65,7 +65,7 @@ const AssignedTasks = () => {
 
       setTasks(assignedTasks);
       
-      // Mise à jour des stats (optionnel - retirez "blocked" si nécessaire)
+      // Mise à jour des stats
       const statusCounts = {
         pending: 0,
         rejected: 0,
@@ -94,58 +94,6 @@ const AssignedTasks = () => {
       case 'rejected': return 'var(--bs-danger)';
       case 'completed': return 'var(--bs-success)';
       default: return 'var(--bs-light)';
-    }
-  };
-
-  const handleStatusChange = async (taskId, newStatus) => {
-    try {
-      // Si c'est un refus, demander une raison
-      if (newStatus === 'rejected') {
-        const reason = prompt("Veuillez saisir la raison du refus :");
-        if (!reason) return; // Annuler si pas de raison fournie
-        
-        const res = await fetch(`http://localhost:5000/api/tasks/${taskId}/status`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ 
-            status: newStatus,
-            rejection_reason: reason 
-          }),
-        });
-
-        if (!res.ok) throw new Error('Erreur lors du refus');
-        
-        // Envoyer une notification au créateur
-        await fetch(`http://localhost:5000/api/tasks/${taskId}/notify-rejection`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ reason }),
-        });
-
-      } else {
-        // Logique normale pour les autres statuts
-        const res = await fetch(`http://localhost:5000/api/tasks/${taskId}/status`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ status: newStatus }),
-        });
-        if (!res.ok) throw new Error('Erreur lors de la mise à jour du statut');
-      }
-
-      // Recharger les tâches
-      fetchTasks();
-    } catch (error) {
-      console.error("Erreur:", error);
-      alert("❌ Impossible de changer le statut !");
     }
   };
 
@@ -228,6 +176,15 @@ const AssignedTasks = () => {
     if (!Array.isArray(workflows)) return '---';
     const wf = workflows.find(w => w.id === id);
     return wf ? wf.name : '---';
+  };
+
+  const renderStatus = (status) => {
+    switch (status) {
+      case 'pending': return '⏳ En attente';
+      case 'rejected': return '❌ Refusée';
+      case 'completed': return '✅ Terminée';
+      default: return status;
+    }
   };
 
   return (
@@ -387,22 +344,15 @@ const AssignedTasks = () => {
                           </span>
                         </td>
                         <td>
-                          <select
-                            value={task.status}
-                            className="form-select form-select-sm"
+                          <span 
+                            className="badge rounded-pill"
                             style={{
                               backgroundColor: getStatusColor(task.status),
-                              color: 'white',
-                              border: 'none',
-                              borderRadius: '20px',
-                              padding: '0.25rem 0.5rem'
+                              color: 'white'
                             }}
-                            onChange={(e) => handleStatusChange(task.id, e.target.value)}
                           >
-                            <option value="pending">⏳ En attente</option>
-                            <option value="rejected">❌ Refusée</option>
-                            <option value="completed">✅ Terminée</option>
-                          </select>
+                            {renderStatus(task.status)}
+                          </span>
                         </td>
                         <td className="pe-4">
                           <Button
