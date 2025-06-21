@@ -454,21 +454,22 @@ const Doc = () => {
     // 1. Exclusion des fichiers média
     const filePath = doc.file_path?.toString() || '';
     const extension = filePath.split('.').pop().toLowerCase();
+    const docCategory = doc.category ? doc.category.toString().toLowerCase() : '';
 
     const photoExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'svg'];
     const videoExtensions = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'wmv', 'mpeg', '3gp'];
 
     const isPhoto = photoExtensions.includes(extension);
     const isVideo = videoExtensions.includes(extension);
+    const isMediaCategory = ['media', 'média'].includes(docCategory);
 
-    // Exclusion de tous les fichiers média
-    if (isPhoto || isVideo) return false;
+    // Exclusion de tous les fichiers média (par extension ou par catégorie)
+    if (isPhoto || isVideo || isMediaCategory) return false;
 
     // 2. Normalisation des données pour la recherche avancée
     const docName = doc.name ? doc.name.toString().toLowerCase() : '';
     const docDate = doc.date ? new Date(doc.date) : null;
     const docContent = doc.text_content ? doc.text_content.toString().toLowerCase() : '';
-    const docCategory = doc.category ? doc.category.toString().toLowerCase() : '';
     const docSummary = doc.summary ? doc.summary.toString().toLowerCase() : '';
     const docDescription = doc.description ? doc.description.toString().toLowerCase() : '';
     const docTags = Array.isArray(doc.tags) ? doc.tags.map(t => t.toString().toLowerCase()) : [];
@@ -477,6 +478,7 @@ const Doc = () => {
     const docPriority = doc.priority ? doc.priority.toString().toLowerCase() : '';
     const docCreationDate = doc.creation_date ? new Date(doc.creation_date).toISOString().split('T')[0] : '';
 
+    // [Le reste du code reste inchangé...]
     // 3. Filtrage par type de fichier
     const matchesType = filterType === 'Tous les documents' ||
       extension === filterType.toLowerCase();
@@ -528,7 +530,7 @@ const Doc = () => {
         creation_date: !filters.creation_date || docCreationDate === filters.creation_date
       };
 
-      // Filtres spécifiques aux catégories
+      // [Le reste du code des filtres avancés reste inchangé...]
       switch (selectedCategory.toLowerCase()) {
         case 'facture':
           return commonFilters.description &&
@@ -579,7 +581,7 @@ const Doc = () => {
 
     // 8. Application combinée de tous les filtres
     return matchesType && matchesDate && matchesSearch && matchesCategory && matchesAdvancedFilters;
-  });
+});
   const handleOpenConfirm = async (doc) => {
     setModalDoc(doc);
     setAutoWfName(`WF_${doc.name}`);
