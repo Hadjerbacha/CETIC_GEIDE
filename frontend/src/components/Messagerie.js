@@ -24,6 +24,10 @@ const API_BASE_URL = 'http://localhost:5000/api';
 
 const MessageriePage = () => {
   const token = localStorage.getItem('token');
+  
+  const GROUPS_API = 'http://localhost:5000/api/groups';
+  const [selectedGroup, setSelectedGroup] = useState(null); // Groupe sélectionné
+  const [allGroups, setAllGroups] = useState([]);
   const [messages, setMessages] = useState({ received: [], sent: [] });
   const [users, setUsers] = useState([]);
   const [groups, setGroups] = useState([]);
@@ -40,6 +44,14 @@ const MessageriePage = () => {
     sending: false
   });
 
+  const fetchGroups = async () => {
+      try {
+        const res = await axios.get(GROUPS_API);
+        setAllGroups(res.data); // Remplir la liste des groupes
+      } catch (err) {
+        console.error('Erreur récupération groupes:', err);
+      }
+    };
   // Décodage du token pour obtenir l'ID utilisateur
   useEffect(() => {
     if (token) {
@@ -52,6 +64,11 @@ const MessageriePage = () => {
       }
     }
   }, [token]);
+
+    useEffect(() => {
+      fetchUsers();
+      fetchGroups();
+    }, [token]);
 
   // Options pour les destinataires (groupes ou utilisateurs)
   const recipientOptions = useCallback(() => {
@@ -110,17 +127,6 @@ const MessageriePage = () => {
     }
   }, [token]);
 
-  // Récupération des groupes
-  const fetchGroups = useCallback(async () => {
-    try {
-      const res = await axios.get(`${API_BASE_URL}/groups`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      setGroups(Array.isArray(res.data) ? res.data : res.data.groups || []);
-    } catch (err) {
-      console.error("Erreur lors de la récupération des groupes:", err);
-    }
-  }, [token]);
 
   // Envoi d'un nouveau message
   const handleSendMessage = async () => {
@@ -214,16 +220,25 @@ const MessageriePage = () => {
                       <Spinner animation="border" size="sm" />
                     </div>
                   ) : (
-                    <Select
-                      placeholder={isGroupMode ? "Choisir un groupe..." : "Choisir un contact..."}
-                      options={recipientOptions()}
-                      value={selectedRecipient}
-                      onChange={setSelectedRecipient}
-                      className="basic-multi-select"
-                      classNamePrefix="select"
-                      isClearable
-                      noOptionsMessage={() => "Aucun résultat trouvé"}
-                    />
+                   <Select
+                              value={
+                                selectedGroup
+                                  ? {
+                                    value: selectedGroup,
+                                    label: allGroups.find(group => group.id === selectedGroup)?.nom,
+                                  }
+                                  : null
+                              }
+                              options={allGroups.map(group => ({
+                                value: group.id,
+                                label: group.nom,
+                              }))}
+                              onChange={(selectedOption) => {
+                                setSelectedGroup(selectedOption ? selectedOption.value : null);
+                              }}
+                              placeholder="Sélectionner un groupe..."
+                              classNamePrefix="select"
+                            />
                   )}
                 </div>
               </Card.Body>
