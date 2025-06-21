@@ -44,6 +44,7 @@ const ACTION_ICONS = {
   download: <FiDownload size={18} className="text-primary" />,
   delete: <FiTrash2 size={18} className="text-danger" />,
   update: <FiEdit2 size={18} className="text-warning" />,
+  create_workflow: <FiFileText size={18} className="text-success" />,
   default: <FiFileText size={18} className="text-info" />
 };
 
@@ -59,6 +60,7 @@ const ACTION_LABELS = {
   download: 'Téléchargement document',
   delete: 'Suppression document',
   update: 'Modification document',
+  create_workflow: 'Création workflow',
   default: 'Action système'
 };
 
@@ -173,6 +175,8 @@ const ActivityLog = () => {
       case 'upload':
       case 'download':
         return 'info';
+      case 'create_workflow':
+        return 'success';
       default: 
         return 'info';
     }
@@ -241,21 +245,11 @@ const ActivityLog = () => {
         <Card className="shadow-sm">
           <Card.Header className="py-3">
             <Row className="align-items-center">
-              <Col md={6}>
+              <Col md={12}>
                 <h4 className="mb-0">
                   <i className="bi bi-clock-history me-2"></i>
                   Journal d'Activité
                 </h4>
-              </Col>
-              <Col md={6} className="text-md-end">
-                <Button 
-                  variant="outline-secondary" 
-                  size="sm" 
-                  onClick={handleResetFilters}
-                  className="me-2"
-                >
-                  Réinitialiser
-                </Button>
               </Col>
             </Row>
           </Card.Header>
@@ -263,19 +257,6 @@ const ActivityLog = () => {
           <Card.Body className="p-0">
             <div className="filter-section p-3 border-bottom">
               <Row>
-                <Col md={3}>
-                  <Form.Group controlId="viewType">
-                    <Form.Label>Type de vue</Form.Label>
-                    <Form.Select
-                      value={filters.viewType}
-                      onChange={(e) => setFilters({...filters, viewType: e.target.value})}
-                    >
-                      <option value="all">Toutes les activités</option>
-                      <option value="sessions">Sessions seulement</option>
-                      <option value="activities">Activités seulement</option>
-                    </Form.Select>
-                  </Form.Group>
-                </Col>
                 
                 <Col md={3}>
                   <Form.Group controlId="actionType">
@@ -294,7 +275,7 @@ const ActivityLog = () => {
                 
                 <Col md={3}>
                   <Form.Group controlId="dateFrom">
-                    <Form.Label>Du</Form.Label>
+                    <Form.Label>Date</Form.Label>
                     <Form.Control
                       type="date"
                       value={filters.dateFrom}
@@ -303,22 +284,8 @@ const ActivityLog = () => {
                     />
                   </Form.Group>
                 </Col>
-                
-                <Col md={3}>
-                  <Form.Group controlId="dateTo">
-                    <Form.Label>Au</Form.Label>
-                    <Form.Control
-                      type="date"
-                      value={filters.dateTo}
-                      onChange={(e) => setFilters({...filters, dateTo: e.target.value})}
-                      min={filters.dateFrom || undefined}
-                    />
-                  </Form.Group>
-                </Col>
-              </Row>
               
               {currentUser?.role === 'admin' && (
-                <Row className="mt-3">
                   <Col md={6}>
                     <Form.Group controlId="userFilter">
                       <Form.Label>Filtrer par utilisateur</Form.Label>
@@ -345,8 +312,9 @@ const ActivityLog = () => {
                       </Dropdown>
                     </Form.Group>
                   </Col>
-                </Row>
+                
               )}
+              </Row>
             </div>
 
             {error && (
