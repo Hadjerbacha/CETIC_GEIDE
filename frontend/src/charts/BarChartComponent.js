@@ -10,7 +10,7 @@ export default function BarChartComponent({ data, colors, showGrid = true }) {
       <Tooltip 
         contentStyle={{
           background: '#ffffff',
-          border: 'none',
+          border: 'none', 
           borderRadius: '8px',
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
         }}
