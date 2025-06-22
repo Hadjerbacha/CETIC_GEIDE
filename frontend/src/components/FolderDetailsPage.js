@@ -9,7 +9,7 @@ import { toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { FiFileText } from 'react-icons/fi';
 import Select from 'react-select';
-import { FaShare } from 'react-icons/fa';
+import { FaShare,FaFolder } from 'react-icons/fa';
 
 const FolderDetailsPage = () => {
   const { id } = useParams();
@@ -18,14 +18,16 @@ const FolderDetailsPage = () => {
   const [subfolders, setSubfolders] = useState([]);
   const [selectedFolderId, setSelectedFolderId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [folderDescription, setFolderDescription] = useState('');
   const [error, setError] = useState(null);
   const token = localStorage.getItem('token');
+  const [selectedGroup, setSelectedGroup] = useState(null); // Groupe sélectionné
+  const [allGroups, setAllGroups] = useState([]);
   const [showImportFolderModal, setShowImportFolderModal] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState(null); // 'document' ou 'subfolder'
   const [showShareModal, setShowShareModal] = useState(false);
   const [allUsers, setAllUsers] = useState([]);
-  const [allGroups, setAllGroups] = useState([]);
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [selectedGroups, setSelectedGroups] = useState([]);
   const GROUPS_API = 'http://localhost:5000/api/groups'; // Ajustez selon votre API
@@ -34,12 +36,12 @@ const FolderDetailsPage = () => {
   const [errorMessage, setErrorMessage] = useState('');
   const [showCreateFolderModal, setShowCreateFolderModal] = useState(false);
   const [accessType, setAccessType] = useState('private');
+  const [currentFolderId, setCurrentFolderId] = useState(id); // Utilise l'ID de l'URL comme dossier courant
   const [permissions, setPermissions] = useState({
     can_modify: false,
     can_delete: false
   });
   const [allowedUsers, setAllowedUsers] = useState([]);
-  const [selectedGroup, setSelectedGroup] = useState(null);
   const [showUploadForm, setShowUploadForm] = useState(false);
   const [documentId, setDocumentId] = useState(null);
   const [step, setStep] = useState(1);
@@ -68,6 +70,15 @@ const FolderDetailsPage = () => {
 
     fetchFolder();
   }, [id, token]);
+
+  const fetchGroups = async () => {
+        try {
+          const res = await axios.get(GROUPS_API);
+          setAllGroups(res.data); // Remplir la liste des groupes
+        } catch (err) {
+          console.error('Erreur récupération groupes:', err);
+        }
+      };
 
   const fetchData = async () => {
     try {
@@ -121,14 +132,7 @@ const FolderDetailsPage = () => {
     }
   };
 
-  const fetchGroups = async () => {
-    try {
-      const res = await axios.get(GROUPS_API);
-      setAllGroups(res.data.map(g => ({ value: g.id, label: g.name }))); // Formatage pour react-select
-    } catch (err) {
-      console.error('Erreur récupération groupes:', err);
-    }
-  };
+  
 
   useEffect(() => {
     const loadData = async () => {
@@ -158,79 +162,127 @@ const FolderDetailsPage = () => {
     fetchData();
   }, [id, token]);
 
-  const handleCreateFolder = async (e) => {
-    e.preventDefault();
-    try {
-      const config = {
+const handleCreateFolder = async (e) => {
+  e.preventDefault();
+  if (!folderName.trim()) {
+    toast.error('Veuillez entrer un nom de dossier');
+    return;
+  }
+
+  try {
+    const response = await axios.post(
+      'http://localhost:5000/api/folders',
+      {
+        name: folderName,
+        parent_id: id || null, // Utilise directement l'ID de l'URL
+        description: folderDescription || null
+      },
+      {
         headers: {
           Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      };
-
-      // Changer ici : URL correcte pour création dossier
-      const response = await axios.post(
-        'http://localhost:5000/api/folders',
-        {
-          name: folderName,
-          parent_id: null // ou currentFolderId si tu veux créer un sous-dossier
-        },
-        config
-      );
-
-      console.log('Dossier créé:', response.data);
-      setShowCreateFolderModal(false);
-      setFolderName('');
-      // Recharge la liste des dossiers
-      const res = await axios.get('http://localhost:5000/api/folders', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setFolders(res.data);
-
-    } catch (error) {
-      console.error('Erreur création dossier:', error);
-      alert('Impossible de créer le dossier.');
-    }
-  };
-
-  const handleShareFolder = async (userIds, groupIds) => {
-    try {
-      const res = await axios.put(
-        `http://localhost:5000/api/folders/${id}/share`,
-        {
-          share_users: userIds,
-          share_groups: groupIds
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      // Mettre à jour l'état local avec la réponse complète du serveur
-      setFolder(res.data);
-
-      toast.success("Partage mis à jour avec succès!");
-      return true;
-    } catch (err) {
-      console.error("Erreur lors du partage:", err);
-
-      let errorMessage = "Erreur lors de la mise à jour du partage";
-      if (err.response) {
-        if (err.response.status === 403) {
-          errorMessage = "Vous n'avez pas la permission de partager ce dossier";
-        } else if (err.response.data?.error) {
-          errorMessage = err.response.data.error;
+          'Content-Type': 'application/json' // Changé de multipart/form-data
         }
       }
+    );
 
-      toast.error(errorMessage);
-      return false;
+    toast.success('Dossier créé avec succès!');
+    setShowCreateFolderModal(false);
+    setFolderName('');
+    setFolderDescription('');
+    
+    // Rechargez les données
+    fetchData(); // Utilisez fetchData qui recharge tout
+
+  } catch (error) {
+    console.error('Erreur création dossier:', error);
+    toast.error(error.response?.data?.error || 'Erreur lors de la création du dossier');
+  }
+};
+
+const handleShareFolder = async (userIds, groupIds) => {
+  try {
+    // 1. Partage du dossier
+    const res = await axios.put(
+      `http://localhost:5000/api/folders/${id}/share`,
+      {
+        share_users: userIds,
+        share_groups: groupIds
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    // 2. Mise à jour de l'état local
+    setFolder(res.data);
+
+    // 3. Envoi des notifications uniquement si des utilisateurs sont spécifiés
+    if (userIds?.length > 0) {
+      try {
+        const notifResponse = await axios.post(
+          'http://localhost:5000/api/notifications',
+          {
+            recipients: userIds, // Certains backends préfèrent 'recipients' au lieu de 'recipientIds'
+            type: 'SHARED_FOLDER',
+            content: {
+              title: "Nouveau dossier partagé",
+              message: `Le dossier "${res.data.name}" a été partagé avec vous`,
+              folderId: id
+            }
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+        
+        console.log('Notifications envoyées:', notifResponse.data);
+      } catch (notifErr) {
+  console.error("Erreur de notification complète:", {
+    requestData: {
+      recipients: userIds,
+      type: 'SHARED_FOLDER',
+      content: {
+        title: "Nouveau dossier partagé",
+        message: `Le dossier "${res.data.name}" a été partagé avec vous`,
+        folderId: id
+      }
+    },
+    responseError: notifErr.response?.data,
+    status: notifErr.response?.status,
+    headers: notifErr.response?.headers
+  });
+  toast.warning("Partage réussi mais échec d'envoi des notifications");
+}
     }
-  };
 
+    toast.success("Partage mis à jour avec succès!");
+    return true;
+  } catch (err) {
+    console.error("Erreur détaillée:", {
+      error: err.response?.data,
+      status: err.response?.status,
+      config: err.config
+    });
+
+    let errorMessage = "Erreur lors de la mise à jour du partage";
+    if (err.response) {
+      if (err.response.status === 403) {
+        errorMessage = "Vous n'avez pas la permission de partager ce dossier";
+      } else if (err.response.data?.error) {
+        errorMessage = err.response.data.error;
+      }
+    }
+
+    toast.error(errorMessage);
+    return false;
+  }
+};
   const handleImportFolder = async () => {
     if (!folderName || !pendingFile || pendingFile.length === 0) {
       alert("Veuillez fournir un nom de dossier et au moins un fichier.");
@@ -446,6 +498,31 @@ const FolderDetailsPage = () => {
               <hr />
 
               <h5 className="mt-4 mb-3">📂 Sous-dossiers</h5>
+              {/* Dans votre JSX, modifiez l'affichage des sous-dossiers comme ceci : */}
+{subfolders && subfolders.length > 0 ? (
+  <ListGroup className="mt-3">
+    {subfolders.map((sub) => (
+      <ListGroup.Item 
+        key={sub.id}
+        action 
+        className="d-flex justify-content-between align-items-center"
+        onClick={() => navigate(`/folder/${sub.id}`)}
+      >
+        <div>
+          <FaFolder className="me-2" />
+          {sub.name}
+        </div>
+        <small className="text-muted">
+          Créé le: {new Date(sub.date).toLocaleDateString()}
+        </small>
+      </ListGroup.Item>
+    ))}
+  </ListGroup>
+) : (
+  <Alert variant="info" className="mt-3">
+    Aucun sous-dossier pour le moment
+  </Alert>
+)}
               <hr />
 
               <h5 className="mt-4 mb-3">📄 Fichiers</h5>
@@ -646,47 +723,25 @@ const FolderDetailsPage = () => {
             <Form.Group>
               <Form.Label>Groupes</Form.Label>
               <Select
-                isMulti
-                options={allGroups}
-                value={selectedGroups}
-                onChange={(selected) => setSelectedGroups(selected || [])}
-                placeholder="Sélectionnez des groupes..."
-                className="basic-multi-select"
-                classNamePrefix="select"
-              />
+                              value={
+                                selectedGroup
+                                  ? {
+                                    value: selectedGroup,
+                                    label: allGroups.find(group => group.id === selectedGroup)?.nom,
+                                  }
+                                  : null
+                              }
+                              options={allGroups.map(group => ({
+                                value: group.id,
+                                label: group.nom,
+                              }))}
+                              onChange={(selectedOption) => {
+                                setSelectedGroup(selectedOption ? selectedOption.value : null);
+                              }}
+                              placeholder="Sélectionner un groupe..."
+                              classNamePrefix="select"
+                            />
             </Form.Group>
-
-            <div className="mt-4 p-3 bg-light rounded">
-              <h6>Actuellement partagé avec :</h6>
-              {folder?.share_users?.length > 0 || folder?.share_groups?.length > 0 ? (
-                <>
-                  {folder.share_users?.length > 0 && (
-                    <div>
-                      <strong>Utilisateurs :</strong>
-                      <ul>
-                        {folder.share_users.map(userId => {
-                          const user = allUsers.find(u => u.value === userId);
-                          return <li key={userId}>{user ? user.label : `ID: ${userId}`}</li>;
-                        })}
-                      </ul>
-                    </div>
-                  )}
-                  {folder.share_groups?.length > 0 && (
-                    <div>
-                      <strong>Groupes :</strong>
-                      <ul>
-                        {folder.share_groups.map(groupId => {
-                          const group = allGroups.find(g => g.value === groupId);
-                          return <li key={groupId}>{group ? group.label : `ID: ${groupId}`}</li>;
-                        })}
-                      </ul>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <p>Ce dossier n'est pas partagé.</p>
-              )}
-            </div>
           </Form>
         </Modal.Body>
         <Modal.Footer>

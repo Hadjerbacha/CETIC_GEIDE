@@ -435,15 +435,7 @@ const DocumentCompletion = () => {
                 )}
 
                 <div className="d-flex justify-content-between">
-                  {existingDocument && canAddVersion && !isNewVersion && (
-                    <Button 
-                      variant="outline-secondary"
-                      onClick={() => setBaseName(prev => `${prev}_${Date.now()}`)}
-                    >
-                      Modifier le nom
-                    </Button>
-                  )}
-                  
+                
                   <Button
                     variant="success"
                     type="submit"

@@ -147,7 +147,7 @@ const DocumentVersion = () => {
   const handleDelete = async id => {
     if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce document ?')) return;
     try {
-      await fetch(`http://localhost:5000/api/documents/${id}\versions`, {
+      await fetch(`http://localhost:5000/api/documents/${id}`, {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${token}` }
       });

@@ -45,22 +45,23 @@ const FolderListPage = () => {
   const [userId, setUser] = useState(JSON.parse(localStorage.getItem("user")));
 
 
-  useEffect(() => {
-    const fetchFolders = async () => {
-      try {
-        const res = await axios.get('http://localhost:5000/api/folders', {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setFolders(res.data);
-      } catch (err) {
-        console.error('Erreur chargement des dossiers :', err);
-        setError("Erreur lors du chargement des dossiers.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchFolders();
-  }, [token]);
+ useEffect(() => {
+  const fetchFolders = async () => {
+    try {
+      // Utilisez la nouvelle route /root
+      const res = await axios.get('http://localhost:5000/api/folders/root', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setFolders(res.data);
+    } catch (err) {
+      console.error('Erreur chargement des dossiers :', err);
+      setError("Erreur lors du chargement des dossiers.");
+    } finally {
+      setLoading(false);
+    }
+  };
+  fetchFolders();
+}, [token]);
 
 
   const handleViewFolder = (folderId) => {

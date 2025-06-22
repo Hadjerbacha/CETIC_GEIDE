@@ -47,53 +47,49 @@ async function initializeDatabase() {
   }
 }
 
-router.post('/', upload.any(), async (req, res) => {
-  const { name, parent_id, userId, description } = req.body;
+router.post('/', upload.any(), auth, async (req, res) => { // Ajoutez le middleware authenticateJWT
+  const { name, parent_id, description } = req.body; // userId vient maintenant du token
 
   if (!name) {
     return res.status(400).json({ error: 'Nom du dossier requis' });
   }
 
-  if (!userId) {
-    return res.status(401).json({ error: 'Utilisateur non spécifié' });
-  }
-
   try {
     // 1. Création du dossier avec description
     const folderResult = await pool.query(
-      `INSERT INTO folders (name, parent_id, user_id, description) VALUES ($1, $2, $3, $4) RETURNING *`,
-      [name, parent_id || null, userId, description || null]
+      `INSERT INTO folders (name, parent_id, user_id, description) 
+       VALUES ($1, $2, $3, $4) RETURNING *`,
+      [name, parent_id || null, req.user.id, description || null] // Utilisez req.user.id du token
     );
 
     const folder = folderResult.rows[0];
 
-    // 2. Insertion des documents uploadés dans le dossier
-    if (req.files && req.files.length > 0) {
-      const insertDocPromises = req.files.map(file => {
-        return pool.query(
+    // 2. Insertion des documents uploadés
+    if (req.files?.length > 0) {
+      await Promise.all(req.files.map(file => 
+        pool.query(
           `INSERT INTO documents (name, file_path, folder_id, owner_id, date, version)
            VALUES ($1, $2, $3, $4, NOW(), 1)`,
-          [file.originalname, file.path, folder.id, userId]
-        );
-      });
-
-      await Promise.all(insertDocPromises);
+          [file.originalname, file.path, folder.id, req.user.id] // Même user_id que le dossier
+        )
+      ));
     }
 
-    // 3. Réponse avec l'ID du dossier créé
-    res.status(201).json({ folderId: folder.id });
-
-    // Ajoutez ceci après la création
+    // 3. Journalisation
     await logActivity(req.user.id, 'create', 'folder', folder.id, {
       folder_name: name,
       parent_id: parent_id,
       file_count: req.files?.length || 0
     });
 
+    res.status(201).json(folder); // Renvoyez tout le dossier créé
 
   } catch (err) {
-    console.error('Erreur lors de la création du dossier et des documents :', err.stack);
-    res.status(500).json({ error: 'Erreur serveur', details: err.message });
+    console.error('Erreur création dossier:', err);
+    res.status(500).json({ 
+      error: 'Erreur serveur', 
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined 
+    });
   }
 });
 
@@ -131,6 +127,71 @@ router.get('/folders/:parentId', async (req, res) => {
       error: 'Erreur serveur',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
+  }
+});
+
+router.get('/root', auth, async (req, res) => {
+  try {
+    console.log('User ID:', req.user.id, 'Type:', typeof req.user.id);
+    
+    // Version debug avec logging complet
+    const query = `
+      SELECT 
+        f.id,
+        f.name,
+        f.user_id as owner_id,
+        f.share_users,
+        f.parent_id,
+        (f.user_id = $1) AS is_owner,
+        ($1 = ANY(f.share_users)) AS is_shared
+      FROM folders f
+      WHERE f.parent_id IS NULL
+      AND (f.user_id = $1 OR $1 = ANY(f.share_users))
+      ORDER BY f.date DESC
+    `;
+    
+    console.log('Exécution de la requête:', query.replace(/\s+/g, ' '));
+    
+    const result = await pool.query(query, [req.user.id]);
+    
+    console.log('Résultats trouvés:', {
+      count: result.rowCount,
+      folders: result.rows
+    });
+    
+    if (result.rowCount === 0) {
+      // Debug supplémentaire quand aucun résultat
+      const allFolders = await pool.query('SELECT * FROM folders');
+      console.log('Tous les dossiers existants:', allFolders.rows);
+    }
+    
+    res.status(200).json(result.rows);
+  } catch (err) {
+    console.error('Erreur complète:', {
+      error: err,
+      stack: err.stack,
+      query: err.query
+    });
+    res.status(500).json({ 
+      error: 'Erreur serveur',
+      details: err.message,
+      hint: 'Vérifiez les logs serveur pour le debug complet'
+    });
+  }
+});
+
+
+// Route pour les sous-dossiers (existe déjà)
+router.get('/:id/children', auth, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM folders WHERE parent_id = $1 AND user_id = $2 ORDER BY date DESC`,
+      [req.params.id, req.user.id]
+    );
+    res.status(200).json(result.rows);
+  } catch (err) {
+    console.error('Erreur récupération sous-dossiers:', err.stack);
+    res.status(500).json({ error: 'Erreur serveur' });
   }
 });
 
@@ -175,7 +236,10 @@ router.post('/', upload.array('files'), async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT * FROM folders WHERE user_id = $1 ORDER BY date DESC`,
+      `SELECT * FROM folders 
+       WHERE user_id = $1 
+       OR $1 = ANY(share_users)
+       ORDER BY date DESC`,
       [req.user.id]
     );
     res.status(200).json(result.rows);
