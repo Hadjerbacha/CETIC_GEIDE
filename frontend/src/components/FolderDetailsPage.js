@@ -199,44 +199,90 @@ const handleCreateFolder = async (e) => {
   }
 };
 
-  const handleShareFolder = async (userIds, groupIds) => {
-    try {
-      const res = await axios.put(
-        `http://localhost:5000/api/folders/${id}/share`,
-        {
-          share_users: userIds,
-          share_groups: groupIds
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      // Mettre à jour l'état local avec la réponse complète du serveur
-      setFolder(res.data);
-
-      toast.success("Partage mis à jour avec succès!");
-      return true;
-    } catch (err) {
-      console.error("Erreur lors du partage:", err);
-
-      let errorMessage = "Erreur lors de la mise à jour du partage";
-      if (err.response) {
-        if (err.response.status === 403) {
-          errorMessage = "Vous n'avez pas la permission de partager ce dossier";
-        } else if (err.response.data?.error) {
-          errorMessage = err.response.data.error;
+const handleShareFolder = async (userIds, groupIds) => {
+  try {
+    // 1. Partage du dossier
+    const res = await axios.put(
+      `http://localhost:5000/api/folders/${id}/share`,
+      {
+        share_users: userIds,
+        share_groups: groupIds
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       }
+    );
 
-      toast.error(errorMessage);
-      return false;
+    // 2. Mise à jour de l'état local
+    setFolder(res.data);
+
+    // 3. Envoi des notifications uniquement si des utilisateurs sont spécifiés
+    if (userIds?.length > 0) {
+      try {
+        const notifResponse = await axios.post(
+          'http://localhost:5000/api/notifications',
+          {
+            recipients: userIds, // Certains backends préfèrent 'recipients' au lieu de 'recipientIds'
+            type: 'SHARED_FOLDER',
+            content: {
+              title: "Nouveau dossier partagé",
+              message: `Le dossier "${res.data.name}" a été partagé avec vous`,
+              folderId: id
+            }
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        );
+        
+        console.log('Notifications envoyées:', notifResponse.data);
+      } catch (notifErr) {
+  console.error("Erreur de notification complète:", {
+    requestData: {
+      recipients: userIds,
+      type: 'SHARED_FOLDER',
+      content: {
+        title: "Nouveau dossier partagé",
+        message: `Le dossier "${res.data.name}" a été partagé avec vous`,
+        folderId: id
+      }
+    },
+    responseError: notifErr.response?.data,
+    status: notifErr.response?.status,
+    headers: notifErr.response?.headers
+  });
+  toast.warning("Partage réussi mais échec d'envoi des notifications");
+}
     }
-  };
 
+    toast.success("Partage mis à jour avec succès!");
+    return true;
+  } catch (err) {
+    console.error("Erreur détaillée:", {
+      error: err.response?.data,
+      status: err.response?.status,
+      config: err.config
+    });
+
+    let errorMessage = "Erreur lors de la mise à jour du partage";
+    if (err.response) {
+      if (err.response.status === 403) {
+        errorMessage = "Vous n'avez pas la permission de partager ce dossier";
+      } else if (err.response.data?.error) {
+        errorMessage = err.response.data.error;
+      }
+    }
+
+    toast.error(errorMessage);
+    return false;
+  }
+};
   const handleImportFolder = async () => {
     if (!folderName || !pendingFile || pendingFile.length === 0) {
       alert("Veuillez fournir un nom de dossier et au moins un fichier.");

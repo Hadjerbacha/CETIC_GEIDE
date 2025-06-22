@@ -130,20 +130,56 @@ router.get('/folders/:parentId', async (req, res) => {
   }
 });
 
-
-// Route pour les dossiers principaux
 router.get('/root', auth, async (req, res) => {
   try {
-    const result = await pool.query(
-      `SELECT * FROM folders WHERE parent_id IS NULL AND user_id = $1 ORDER BY date DESC`,
-      [req.user.id]
-    );
+    console.log('User ID:', req.user.id, 'Type:', typeof req.user.id);
+    
+    // Version debug avec logging complet
+    const query = `
+      SELECT 
+        f.id,
+        f.name,
+        f.user_id as owner_id,
+        f.share_users,
+        f.parent_id,
+        (f.user_id = $1) AS is_owner,
+        ($1 = ANY(f.share_users)) AS is_shared
+      FROM folders f
+      WHERE f.parent_id IS NULL
+      AND (f.user_id = $1 OR $1 = ANY(f.share_users))
+      ORDER BY f.date DESC
+    `;
+    
+    console.log('Exécution de la requête:', query.replace(/\s+/g, ' '));
+    
+    const result = await pool.query(query, [req.user.id]);
+    
+    console.log('Résultats trouvés:', {
+      count: result.rowCount,
+      folders: result.rows
+    });
+    
+    if (result.rowCount === 0) {
+      // Debug supplémentaire quand aucun résultat
+      const allFolders = await pool.query('SELECT * FROM folders');
+      console.log('Tous les dossiers existants:', allFolders.rows);
+    }
+    
     res.status(200).json(result.rows);
   } catch (err) {
-    console.error('Erreur récupération dossiers principaux:', err.stack);
-    res.status(500).json({ error: 'Erreur serveur' });
+    console.error('Erreur complète:', {
+      error: err,
+      stack: err.stack,
+      query: err.query
+    });
+    res.status(500).json({ 
+      error: 'Erreur serveur',
+      details: err.message,
+      hint: 'Vérifiez les logs serveur pour le debug complet'
+    });
   }
 });
+
 
 // Route pour les sous-dossiers (existe déjà)
 router.get('/:id/children', auth, async (req, res) => {
@@ -200,7 +236,10 @@ router.post('/', upload.array('files'), async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT * FROM folders WHERE user_id = $1 ORDER BY date DESC`,
+      `SELECT * FROM folders 
+       WHERE user_id = $1 
+       OR $1 = ANY(share_users)
+       ORDER BY date DESC`,
       [req.user.id]
     );
     res.status(200).json(result.rows);
