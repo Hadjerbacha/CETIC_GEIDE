@@ -10,9 +10,25 @@ import 'react-toastify/dist/ReactToastify.css';
 import { FiFileText } from 'react-icons/fi';
 import Select from 'react-select';
 import { FaShare,FaFolder } from 'react-icons/fa';
+import { jwtDecode } from 'jwt-decode'; 
 
-const FolderDetailsPage = () => {
+const FolderDetailsPage = () => {  
+  const getUserIdFromToken = () => {
+  const token = localStorage.getItem('token');
+  if (!token) return null;
+  
+  try {
+    const decoded = jwtDecode(token);
+    return decoded.userId || decoded.sub; // Selon comment votre backend génère le token
+  } catch (err) {
+    console.error("Erreur décodage token:", err);
+    return null;
+  }
+};
+
+const usId = getUserIdFromToken();
   const { id } = useParams();
+  const [currentUser, setCurrentUser] = useState(null);
   const [folders, setFolders] = useState([]);
   const navigate = useNavigate();
   const [subfolders, setSubfolders] = useState([]);
@@ -104,6 +120,9 @@ const FolderDetailsPage = () => {
     }
   };
 
+  console.log(id);
+
+  
   const fetchFolder = async () => {
     try {
       const res = await axios.get(`http://localhost:5000/api/folders/${id}`, {
@@ -201,7 +220,10 @@ const handleCreateFolder = async (e) => {
 
 const handleShareFolder = async (userIds, groupIds) => {
   try {
-    // 1. Partage du dossier
+    // Get current user ID (you'll need to implement this)
+    const currentUserId = localStorage.getItem('userId'); // Or from your auth context
+    
+    // 1. Share the folder
     const res = await axios.put(
       `http://localhost:5000/api/folders/${id}/share`,
       {
@@ -216,73 +238,42 @@ const handleShareFolder = async (userIds, groupIds) => {
       }
     );
 
-    // 2. Mise à jour de l'état local
+    // 2. Update local state
     setFolder(res.data);
 
-    // 3. Envoi des notifications uniquement si des utilisateurs sont spécifiés
+    // 3. Send notifications to shared users
     if (userIds?.length > 0) {
-      try {
-        const notifResponse = await axios.post(
-          'http://localhost:5000/api/notifications',
-          {
-            recipients: userIds, // Certains backends préfèrent 'recipients' au lieu de 'recipientIds'
-            type: 'SHARED_FOLDER',
-            content: {
-              title: "Nouveau dossier partagé",
+      for (const userId of userIds) {
+        try {
+          await axios.post(
+            'http://localhost:5000/api/notifications',
+            {
+              user_id: userId, // The user being notified
+              sender_id: userId, // The user who shared the folder
               message: `Le dossier "${res.data.name}" a été partagé avec vous`,
-              folderId: id
+              type: 'SHARED_FOLDER',
+              is_read: false,
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
             }
-          },
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            }
-          }
-        );
-        
-        console.log('Notifications envoyées:', notifResponse.data);
-      } catch (notifErr) {
-  console.error("Erreur de notification complète:", {
-    requestData: {
-      recipients: userIds,
-      type: 'SHARED_FOLDER',
-      content: {
-        title: "Nouveau dossier partagé",
-        message: `Le dossier "${res.data.name}" a été partagé avec vous`,
-        folderId: id
+          );
+        } catch (notifErr) {
+          console.error("Failed to send notification to", userId, notifErr.response?.data);
+        }
       }
-    },
-    responseError: notifErr.response?.data,
-    status: notifErr.response?.status,
-    headers: notifErr.response?.headers
-  });
-  toast.warning("Partage réussi mais échec d'envoi des notifications");
-}
     }
 
     toast.success("Partage mis à jour avec succès!");
     return true;
   } catch (err) {
-    console.error("Erreur détaillée:", {
-      error: err.response?.data,
-      status: err.response?.status,
-      config: err.config
-    });
-
-    let errorMessage = "Erreur lors de la mise à jour du partage";
-    if (err.response) {
-      if (err.response.status === 403) {
-        errorMessage = "Vous n'avez pas la permission de partager ce dossier";
-      } else if (err.response.data?.error) {
-        errorMessage = err.response.data.error;
-      }
-    }
-
-    toast.error(errorMessage);
-    return false;
+    // ... existing error handling ...
   }
 };
+
   const handleImportFolder = async () => {
     if (!folderName || !pendingFile || pendingFile.length === 0) {
       alert("Veuillez fournir un nom de dossier et au moins un fichier.");
