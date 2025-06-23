@@ -153,22 +153,35 @@ const DocumentCompletion = () => {
     initialize();
   }, [id, token]);
 
-  const validateCategoryFields = (category, values) => {
-    switch (category) {
-      case 'facture':
-        return values.num_facture && values.nom_entreprise && values.montant && values.date_facture;
-      case 'cv':
-        return values.num_cv && values.nom_candidat && values.metier && values.lieu;
-      case 'demande_conge':
-        return values.num_demande && values.date_debut && values.date_fin && values.motif;
-      case 'contrat':
-        return values.numero_contrat && values.type_contrat && values.partie_prenante && values.date_signature;
-      case 'rapport':
-        return values.type_rapport && values.auteur && values.date_rapport;
-      default:
-        return true;
-    }
-  };
+   const validateDates = (dateDebut, dateFin) => {
+  if (!dateDebut || !dateFin) return true; // La validation de champ vide est déjà gérée ailleurs
+  return new Date(dateFin) >= new Date(dateDebut);
+};
+
+ const validateCategoryFields = (category, values) => {
+  switch (category) {
+    case 'facture':
+      return values.num_facture && values.nom_entreprise && values.montant && values.date_facture;
+    case 'cv':
+      return values.num_cv && values.nom_candidat && values.metier && values.lieu;
+    case 'demande_conge':
+      return (
+        values.num_demande && 
+        values.date_debut && 
+        values.date_fin && 
+        values.motif &&
+        validateDates(values.date_debut, values.date_fin)
+      );
+    case 'contrat':
+      return values.numero_contrat && values.type_contrat && values.partie_prenante && values.date_signature;
+    case 'rapport':
+      return values.type_rapport && values.auteur && values.date_rapport;
+    default:
+      return true;
+  }
+};
+
+ 
 
   const checkForDuplicate = async (docName) => {
     if (!docName.trim()) return false;
@@ -223,70 +236,102 @@ const DocumentCompletion = () => {
     }
   };
 
- const handleSaveAsVersion = async () => {
-  setIsSaving(true);
+  const handleSaveAsVersion = async () => {
+    setIsSaving(true);
+    try {
+      const fullName = extension ? `${baseName}.${extension}` : baseName;
+      const tagArray = tags.split(',').map(t => t.trim()).filter(Boolean);
+
+      const payload = {
+        name: fullName,
+        summary,
+        tags: tagArray,
+        priority,
+        diff_version: differenceNote, // Note de version
+        is_completed: true, // Marquer comme complet
+        ...extraFields
+      };
+
+      // Utilisation de la route PUT au lieu de POST /versions
+      await axios.put(`http://localhost:5000/api/documents/${id}`, payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      setSuccessMessage("Document enregistré comme nouvelle version avec succès !");
+      setIsCompleted(true);
+      setTimeout(() => navigate('/Documents'), 2000);
+    } catch (error) {
+      setErrorMessage(error.response?.data?.error || "Échec de l'enregistrement");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSubmit = async (e) => {
+  e.preventDefault();
+  setErrorMessage(null);
+  setSuccessMessage(null);
+
+  // Validation des champs obligatoires selon la catégorie
+  if (!validateCategoryFields(category, extraFields)) {
+    if (category === 'demande_conge' && 
+        extraFields.date_debut && 
+        extraFields.date_fin && 
+        !validateDates(extraFields.date_debut, extraFields.date_fin)) {
+      setErrorMessage("La date de fin doit être postérieure à la date de début");
+    } else {
+      setErrorMessage("Veuillez remplir tous les champs obligatoires");
+    }
+    return;
+  }
+
+  // Validation pour les nouvelles versions
+  if (isNewVersion && !differenceNote.trim()) {
+    setErrorMessage("Veuillez décrire les modifications pour la nouvelle version");
+    return;
+  }
+
+  // Validation des champs communs
+  const isCommonFieldsValid = shouldShowCommonFields(category)
+    ? baseName.trim() && summary.trim() && tags.trim() && priority.trim()
+    : baseName.trim();
+
+  if (!isCommonFieldsValid) {
+    setErrorMessage("Veuillez remplir tous les champs obligatoires");
+    return;
+  }
+
+  // Validation des conflits de noms
+  if (existingDocument && existingDocument.id !== docInfo?.id && !canAddVersion) {
+    setErrorMessage("Un document avec ce nom existe déjà et vous n'avez pas les droits de modification");
+    return;
+  }
+
   try {
-    const fullName = extension ? `${baseName}.${extension}` : baseName;
-    const tagArray = tags.split(',').map(t => t.trim()).filter(Boolean);
+    setIsSaving(true);
 
-    const payload = {
-      name: fullName,
-      summary,
-      tags: tagArray,
-      priority,
-      diff_version: differenceNote, // Note de version
-      is_completed: true, // Marquer comme complet
-      ...extraFields
-    };
-
-    // Utilisation de la route PUT au lieu de POST /versions
-    await axios.put(`http://localhost:5000/api/documents/${id}`, payload, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
-
-    setSuccessMessage("Document enregistré comme nouvelle version avec succès !");
-    setIsCompleted(true);
-    setTimeout(() => navigate('/Documents'), 2000);
+    if (isNewVersion) {
+      await handleSaveAsVersion();
+    } else {
+      await saveDocument();
+    }
   } catch (error) {
-    setErrorMessage(error.response?.data?.error || "Échec de l'enregistrement");
+    console.error("Erreur lors de l'enregistrement:", error);
+    setErrorMessage(error.response?.data?.message || error.message || "Une erreur est survenue lors de l'enregistrement");
   } finally {
     setIsSaving(false);
   }
 };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setErrorMessage(null);
-
-    if (!validateCategoryFields(category, extraFields)) {
-      setErrorMessage("Veuillez remplir tous les champs obligatoires");
-      return;
-    }
-
-    if (isNewVersion && !differenceNote.trim()) {
-      setErrorMessage("Veuillez décrire les modifications pour la nouvelle version");
-      return;
-    }
-
-    try {
-      if (isNewVersion) {
-        await handleSaveAsVersion();
-      } else {
-        await saveDocument();
-      }
-    } catch (error) {
-      setErrorMessage(error.message || "Erreur lors de l'enregistrement");
-    }
-  };
 
   const isFormValid = () => {
-    const isCommonFieldsValid = shouldShowCommonFields(category) 
+    const isCommonFieldsValid = shouldShowCommonFields(category)
       ? baseName.trim() && summary.trim() && tags.trim() && priority.trim()
       : baseName.trim();
-    
+
     const isCategoryValid = validateCategoryFields(category, extraFields);
     const hasNameConflict = existingDocument && existingDocument.id !== docInfo?.id && !canAddVersion;
-    
+
     return isCommonFieldsValid && isCategoryValid && !hasNameConflict;
   };
 
@@ -367,19 +412,31 @@ const DocumentCompletion = () => {
                   </div>
                 </Form.Group>
 
-                {Object.entries(extraFields).map(([key, value]) => (
-                  <Form.Group className="mb-3" key={key}>
-                    <Form.Label>
-                      {key.replace(/_/g, ' ').charAt(0).toUpperCase() + key.replace(/_/g, ' ').slice(1)}
-                    </Form.Label>
-                    <Form.Control
-                      type={key.toLowerCase().includes('date') ? 'date' : 'text'}
-                      value={value}
-                      onChange={(e) => setExtraFields(prev => ({ ...prev, [key]: e.target.value }))}
-                      required={validateCategoryFields(category, extraFields)}
-                    />
-                  </Form.Group>
-                ))}
+               {Object.entries(extraFields).map(([key, value]) => (
+  <Form.Group className="mb-3" key={key}>
+    <Form.Label>
+      {key.replace(/_/g, ' ').charAt(0).toUpperCase() + key.replace(/_/g, ' ').slice(1)}
+    </Form.Label>
+    <Form.Control
+      type={key.toLowerCase().includes('date') ? 'date' : 'text'}
+      value={value}
+      onChange={(e) => setExtraFields(prev => ({ ...prev, [key]: e.target.value }))}
+      required={validateCategoryFields(category, extraFields)}
+      isInvalid={
+        key === 'date_fin' && 
+        extraFields.date_debut && 
+        extraFields.date_fin && 
+        !validateDates(extraFields.date_debut, extraFields.date_fin)
+      }
+    />
+    {key === 'date_fin' && extraFields.date_debut && extraFields.date_fin && 
+     !validateDates(extraFields.date_debut, extraFields.date_fin) && (
+      <Form.Text className="text-danger">
+        ⚠️ La date de fin doit être après la date de début
+      </Form.Text>
+    )}
+  </Form.Group>
+))}
 
                 {shouldShowCommonFields(category) && (
                   <>
@@ -435,11 +492,15 @@ const DocumentCompletion = () => {
                 )}
 
                 <div className="d-flex justify-content-between">
-                
+
                   <Button
                     variant="success"
                     type="submit"
-                    disabled={!isFormValid() || isSaving}
+                    disabled={
+                      !isFormValid() ||
+                      isSaving ||
+                      (isNewVersion && !differenceNote.trim())
+                    }
                     className="ms-auto"
                   >
                     {isSaving ? 'Enregistrement...' : 'Enregistrer'}
