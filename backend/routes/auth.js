@@ -7,7 +7,8 @@ const {
     updateUserController,
     deleteUserController,
     logout,
-    getUserSessionsController
+    getUserSessionsController,
+    toggleUserStatus  // Ajoutez cette ligne
   } = require("../controllers/authController");
 
 // Route pour récupérer tous les utilisateurs
@@ -20,7 +21,6 @@ router.put("/users/:id", updateUserController);
 router.delete("/users/:id", deleteUserController);
 router.post("/logout", logout);
 router.get("/sessions", getUserSessionsController);
+router.put("/users/:id/status", toggleUserStatus);  // Ajoutez cette nouvelle route
 
 module.exports = router;
-
-

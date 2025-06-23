@@ -1,18 +1,36 @@
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const { getUsers, findUserByEmail, createUser, updateUser, deleteUser, createSession, getUserSessions, getActiveSession, updateLogoutTime, getUserWorkStats} = require("../models/userModel");
+const { getUsers, findUserByEmail, createUser, updateUser, deleteUser, createSession, getUserSessions, getActiveSession, updateLogoutTime, getUserWorkStats, deactivateUser, reactivateUser} = require("../models/userModel");
 require("dotenv").config();
-const pool = require("../config/db"); // Ajoutez cette ligne en haut du fichier
+const pool = require("../config/db");
 const { logActivity } = require('../routes/historique');
-// Fonction pour récupérer tous les utilisateurs
-// Exemple de contrôleur pour récupérer des utilisateurs
+
 const getUsersController = async (req, res) => {
   try {
-    const users = await getUsers(); // Suppose que tu appelles une fonction pour obtenir les utilisateurs
-    res.json(users); // Renvoie les utilisateurs en JSON
+    const { search, role, status } = req.query;
+    let query = 'SELECT * FROM users WHERE 1=1';
+    const params = [];
+
+    if (search) {
+      query += ' AND (name ILIKE $1 OR prenom ILIKE $1 OR email ILIKE $1)';
+      params.push(`%${search}%`);
+    }
+
+    if (role) {
+      query += ` AND role = $${params.length + 1}`;
+      params.push(role);
+    }
+
+    if (status) {
+      query += ` AND is_active = $${params.length + 1}`;
+      params.push(status === 'active');
+    }
+
+    const { rows: users } = await pool.query(query, params);
+    res.json(users);
   } catch (err) {
     console.error(err.message);
-    res.status(500).json({ error: 'Server Error' }); // Si erreur, renvoie une réponse d'erreur
+    res.status(500).json({ error: 'Server Error' });
   }
 };
 
@@ -24,6 +42,9 @@ const login = async (req, res) => {
     if (!user)
       return res.status(400).json({ message: "Email ou mot de passe invalide" });
 
+    if (!user.is_active)
+      return res.status(403).json({ message: "Ce compte est désactivé" });
+
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword)
       return res.status(400).json({ message: "Email ou mot de passe invalide" });
@@ -31,10 +52,10 @@ const login = async (req, res) => {
     const token = jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, {
       expiresIn: "300d",
     });
-     // Enregistrer la session
+    
     const loginTime = new Date();
     await createSession(user.id, loginTime, null, null);
-// Log de la connexion
+    
     await logActivity(
       user.id,
       'user_login',
@@ -45,6 +66,7 @@ const login = async (req, res) => {
         ip_address: req.ip
       }
     );
+    
     const { password: _, ...userData } = user;
     res.status(200).json({ token, user: userData });
   } catch (err) {
@@ -52,7 +74,6 @@ const login = async (req, res) => {
     res.status(500).json({ message: "Erreur serveur" });
   }
 };
-
 
 const register = async (req, res) => {
   const { name, prenom, email, password, role = "employe" } = req.body;
@@ -72,10 +93,11 @@ const register = async (req, res) => {
       email,
       password: hashedPassword,
       role,
+      is_active: true
     });
-// Log de la création d'utilisateur
+
     await logActivity(
-      req.user?.id || 'system', // Si création par un admin ou système
+      req.user?.id || 'system',
       'user_create',
       'user',
       newUser.id,
@@ -92,16 +114,16 @@ const register = async (req, res) => {
   }
 };
 
-// Mettre à jour un utilisateur
 const updateUserController = async (req, res) => {
   const { id } = req.params;
   const { name, prenom, email, role } = req.body;
 
   try {
+    const oldUser = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
     const updated = await updateUser(id, { name, prenom, email, role });
-    // Log de la modification
+    
     await logActivity(
-      req.user.id, // L'admin qui fait la modification
+      req.user.id,
       'user_update',
       'user',
       id,
@@ -114,6 +136,7 @@ const updateUserController = async (req, res) => {
         updated_by: req.user.id
       }
     );
+    
     res.status(200).json({ message: "Utilisateur mis à jour", user: updated });
   } catch (err) {
     console.error(err.message);
@@ -121,36 +144,102 @@ const updateUserController = async (req, res) => {
   }
 };
 
-// Supprimer un utilisateur
 const deleteUserController = async (req, res) => {
   const { id } = req.params;
+  const { permanent } = req.query;
 
   try {
-    const deleted = await deleteUser(id);
-    if (!deleted) return res.status(404).json({ message: "Utilisateur introuvable" });
-    // Log de la suppression
-    await logActivity(
-      req.user.id, // L'admin qui fait la suppression
-      'user_delete',
-      'user',
-      id,
-      {
-        deleted_user: {
-          name: userToDelete.rows[0]?.name,
-          email: userToDelete.rows[0]?.email,
-          role: userToDelete.rows[0]?.role
-        },
-        deleted_by: req.user.id
-      }
-    );
-    res.status(200).json({ message: "Utilisateur supprimé", user: deleted });
+    if (permanent === 'true') {
+      const userToDelete = await pool.query('SELECT * FROM users WHERE id = $1', [id]);
+      const deleted = await deleteUser(id);
+      
+      if (!deleted) return res.status(404).json({ message: "Utilisateur introuvable" });
+      
+      await logActivity(
+        req.user.id,
+        'user_delete',
+        'user',
+        id,
+        {
+          deleted_user: {
+            name: userToDelete.rows[0]?.name,
+            email: userToDelete.rows[0]?.email,
+            role: userToDelete.rows[0]?.role
+          },
+          deleted_by: req.user.id
+        }
+      );
+      
+      return res.status(200).json({ message: "Utilisateur supprimé définitivement", user: deleted });
+    } else {
+      const deactivated = await deactivateUser(id);
+      
+      await logActivity(
+        req.user.id,
+        'user_deactivate',
+        'user',
+        id,
+        {
+          deactivated_by: req.user.id,
+          deactivated_at: new Date()
+        }
+      );
+      
+      return res.status(200).json({ message: "Utilisateur désactivé", user: deactivated });
+    }
   } catch (err) {
     console.error(err.message);
     res.status(500).json({ message: "Erreur serveur" });
   }
 };
 
-// Dans authController.js
+const toggleUserStatus = async (req, res) => {
+  const { id } = req.params;
+  const { action } = req.body; // 'activate' or 'deactivate'
+
+  try {
+    // Vérifiez d'abord si l'utilisateur est authentifié
+    if (!req.user || !req.user.id) {
+      return res.status(401).json({ message: "Non autorisé" });
+    }
+
+    let result;
+    if (action === 'activate') {
+      result = await reactivateUser(id);
+      await logActivity(
+        req.user.id,
+        'user_reactivate',
+        'user',
+        id,
+        {
+          reactivated_by: req.user.id,
+          reactivated_at: new Date()
+        }
+      );
+    } else {
+      result = await deactivateUser(id);
+      await logActivity(
+        req.user.id,
+        'user_deactivate',
+        'user',
+        id,
+        {
+          deactivated_by: req.user.id,
+          deactivated_at: new Date()
+        }
+      );
+    }
+
+    res.status(200).json({ 
+      message: action === 'activate' ? "Utilisateur réactivé" : "Utilisateur désactivé",
+      user: result 
+    });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+};
+
 const logout = async (req, res) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
@@ -159,12 +248,10 @@ const logout = async (req, res) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const logoutTime = new Date();
 
-    // Mettre à jour la session existante
-     const session = await getActiveSession(decoded.id);
+    const session = await getActiveSession(decoded.id);
     if (session) {
       await updateLogoutTime(decoded.id, logoutTime);
       
-      // Log de la déconnexion
       await logActivity(
         decoded.id,
         'user_logout',
@@ -172,7 +259,7 @@ const logout = async (req, res) => {
         decoded.id,
         {
           logout_time: logoutTime,
-          session_duration: (logoutTime - new Date(session.login_time)) / 1000 // en secondes
+          session_duration: (logoutTime - new Date(session.login_time)) / 1000
         }
       );
     }
@@ -190,18 +277,11 @@ const getUserSessionsController = async (req, res) => {
     if (!token) return res.status(401).json({ message: "Non autorisé" });
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    // Récupérer les paramètres de filtre
     const { dateFrom, dateTo } = req.query;
     
-    let query = `
-      SELECT * FROM sessions 
-      WHERE user_id = $1
-    `;
-    
+    let query = `SELECT * FROM sessions WHERE user_id = $1`;
     const queryParams = [decoded.id];
     
-    // Ajouter les conditions de filtre si elles existent
     if (dateFrom) {
       query += ` AND login_time >= $${queryParams.length + 1}`;
       queryParams.push(dateFrom);
@@ -209,7 +289,7 @@ const getUserSessionsController = async (req, res) => {
     
     if (dateTo) {
       query += ` AND login_time <= $${queryParams.length + 1}`;
-      queryParams.push(dateTo + ' 23:59:59'); // Inclure toute la journée
+      queryParams.push(dateTo + ' 23:59:59');
     }
     
     query += ` ORDER BY login_time DESC`;
@@ -225,26 +305,21 @@ const getUserSessionsController = async (req, res) => {
 
 const assignTasksAutomatically = async (workflowId, tasks) => {
   try {
-    // 1. Récupérer les stats des utilisateurs
     const usersStats = await getUserWorkStats();
-    
-    // 2. Filtrer par rôle et trier par durée de travail
     const availableUsers = usersStats
-      .filter(user => user.role === 'employe') // Seulement les employés pour les tâches normales
-      .sort((a, b) => a.total_duration - b.total_duration); // Moins chargés en premier
+      .filter(user => user.role === 'employe' && user.is_active)
+      .sort((a, b) => a.total_duration - b.total_duration);
 
     if (availableUsers.length === 0) {
       throw new Error("Aucun utilisateur disponible pour l'assignation");
     }
 
-    // 3. Assigner les tâches
     const assignments = [];
     let userIndex = 0;
 
     for (const task of tasks) {
-      // Pour les tâches de validation, trouver un directeur
       if (task.title.toLowerCase().includes('validation')) {
-        const director = usersStats.find(u => u.role === 'directeur');
+        const director = usersStats.find(u => u.role === 'directeur' && u.is_active);
         if (director) {
           assignments.push({
             taskId: task.id,
@@ -252,7 +327,6 @@ const assignTasksAutomatically = async (workflowId, tasks) => {
           });
         }
       } else {
-        // Assignation round-robin aux employés
         const user = availableUsers[userIndex % availableUsers.length];
         assignments.push({
           taskId: task.id,
@@ -262,7 +336,6 @@ const assignTasksAutomatically = async (workflowId, tasks) => {
       }
     }
 
-    // 4. Sauvegarder les assignations
     for (const assignment of assignments) {
       await pool.query(
         `UPDATE tasks SET assigned_to = $1 WHERE id = $2`,
@@ -285,5 +358,6 @@ module.exports = {
   deleteUserController,
   logout,
   getUserSessionsController,
-  assignTasksAutomatically
+  assignTasksAutomatically,
+  toggleUserStatus
 };
