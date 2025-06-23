@@ -172,11 +172,9 @@ const AssignedTasks = () => {
       .catch(err => console.error("Erreur récupération workflows", err));
   }, []); 
   
-  const getWorkflowName = (id) => {
-    if (!Array.isArray(workflows)) return '---';
-    const wf = workflows.find(w => w.id === id);
-    return wf ? wf.name : '---';
-  };
+  const getWorkflowName = (task) => {
+  return task.workflow_name || '---';
+};
 
   const renderStatus = (status) => {
     switch (status) {
@@ -226,18 +224,6 @@ const AssignedTasks = () => {
                 <option value="completed">Terminée</option>
               </Form.Select>
             </div>
-            <div className="col-md-2">
-              <Form.Select
-                value={priorityFilter}
-                onChange={e => setPriorityFilter(e.target.value)}
-                className="form-select-modern"
-              >
-                <option value="">Toutes priorités</option>
-                <option value="Haute">Haute</option>
-                <option value="Moyenne">Moyenne</option>
-                <option value="Basse">Basse</option>
-              </Form.Select>
-            </div>
             <div className="col-md-3">
               <Form.Control
                 type="text"
@@ -255,7 +241,7 @@ const AssignedTasks = () => {
                 className="form-control-modern"
               />
             </div>
-            <div className="col-md-2">
+            <div className="col-md-4">
               <Form.Control
                 type="text"
                 placeholder="Rechercher..."
@@ -287,7 +273,6 @@ const AssignedTasks = () => {
                       <th>Workflow</th>
                       <th>Échéance</th>
                       <th>Créée par</th>
-                      <th>Priorité</th>
                       <th>Statut</th>
                       <th className="pe-4">Actions</th>
                     </tr>
@@ -297,52 +282,47 @@ const AssignedTasks = () => {
                       <tr 
                         key={task.id}
                         className={
-                          new Date(task.due_date) < new Date() && task.status !== 'completed' 
+                          new Date(task.due_date) < new Date() && task.status !== 'completed' && 
+                          task.status !== 'rejected'
                             ? 'table-warning' 
                             : ''
                         }
                       >
                         <td className="ps-4 fw-semibold">{task.title}</td>
-                        <td>{getWorkflowName(task.workflow_id)}</td>
+                        <td>{getWorkflowName(task)}</td>
                         <td>
-                          <div className="d-flex flex-column">
-                            <span>{new Date(task.due_date).toLocaleDateString()}</span>
-                            <small className={
-                              task.status === "completed" 
-                                ? "text-success"
-                                : new Date(task.due_date) < new Date()
-                                ? "text-danger"
-                                : "text-muted"
-                            }>
-                              {(() => {
-                                const today = new Date();
-                                const dueDate = new Date(task.due_date);
-                                const diffTime = dueDate - today;
-                                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  <div className="d-flex flex-column">
+    <span>{new Date(task.due_date).toLocaleDateString()}</span>
+    <small className={
+      task.status === "completed" 
+        ? "text-success"
+        : task.status === "rejected"
+        ? "text-warning"  // ou une autre classe de couleur pour "refusé"
+        : new Date(task.due_date) < new Date()
+        ? "text-danger"
+        : "text-muted"
+    }>
+      {(() => {
+        const today = new Date();
+        const dueDate = new Date(task.due_date);
+        const diffTime = dueDate - today;
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
-                                if (task.status === "completed") {
-                                  return "✅ Terminée";
-                                }
+        if (task.status === "completed") {
+          return "✅ Terminée";
+        }
+        if (task.status === "rejected") {
+          return "❌ Refusé";  // ou l'icône de votre choix
+        }
 
-                                return diffDays >= 0 
-                                  ? `${diffDays} jour(s) restant(s)` 
-                                  : "⛔ Dépassée";
-                              })()}
-                            </small>
-                          </div>
-                        </td>
+        return diffDays >= 0 
+          ? `${diffDays} jour(s) restant(s)` 
+          : "⛔ Dépassée";
+      })()}
+    </small>
+  </div>
+</td>
                         <td>{task.created_by_name}</td>
-                        <td>
-                          <span 
-                            className="badge rounded-pill"
-                            style={{
-                              backgroundColor: getPriorityColor(task.priority),
-                              color: 'white'
-                            }}
-                          >
-                            {task.priority}
-                          </span>
-                        </td>
                         <td>
                           <span 
                             className="badge rounded-pill"

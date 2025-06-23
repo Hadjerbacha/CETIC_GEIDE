@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Form, Button, Card, Alert, Modal } from 'react-bootstrap';
+import { Form, Button, Card, Alert } from 'react-bootstrap';
 import { jwtDecode } from 'jwt-decode';
 
 const DetailsTask = () => {
@@ -11,9 +11,8 @@ const DetailsTask = () => {
   const [comment, setComment] = useState('');
   const [responseFile, setResponseFile] = useState(null);
   const [successMessage, setSuccessMessage] = useState('');
-  const [showStatusModal, setShowStatusModal] = useState(false);
-  const [selectedStatus, setSelectedStatus] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
+  const [actionType, setActionType] = useState(null); // 'complete' or 'reject'
 
   const token = localStorage.getItem('token');
 
@@ -41,21 +40,34 @@ const DetailsTask = () => {
 
   const handleCommentChange = (e) => setComment(e.target.value);
   const handleFileChange = (e) => setResponseFile(e.target.files[0]);
+  const handleRejectionReasonChange = (e) => setRejectionReason(e.target.value);
+
+  const resetAction = () => {
+    setActionType(null);
+    setRejectionReason('');
+  };
 
   const handleUpdate = async () => {
     try {
-      // 1. Mise à jour du commentaire
-      await axios.patch(`http://localhost:5000/api/tasks/${id}/comment`, {
-        user_id: task.created_by,
-        assignment_note: comment
-      }, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
+      if (actionType === 'reject' && !rejectionReason) {
+        alert('Veuillez fournir une raison pour le refus');
+        return;
+      }
 
-      // 2. Envoi du fichier de réponse
-      if (responseFile) {
+      // 1. Mise à jour du commentaire si on est en mode complétion ou si commentaire existe
+      if (comment && (actionType === 'complete' || !actionType)) {
+        await axios.patch(`http://localhost:5000/api/tasks/${id}/comment`, {
+          user_id: task.created_by,
+          assignment_note: comment
+        }, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+      }
+
+      // 2. Envoi du fichier de réponse si on est en mode complétion
+      if (responseFile && actionType === 'complete') {
         const formData = new FormData();
         formData.append('responseFile', responseFile);
         formData.append('comment', comment);
@@ -72,74 +84,56 @@ const DetailsTask = () => {
         );
       }
 
-      setSuccessMessage('Mise à jour réussie !');
-      setTimeout(() => setSuccessMessage(''), 3000);
+      // 3. Mise à jour du statut si actionType est défini
+      if (actionType) {
+        const updateData = {
+          status: actionType === 'complete' ? 'completed' : 'rejected'
+        };
+
+        if (actionType === 'reject') {
+          updateData.rejection_reason = rejectionReason;
+        }
+
+        await axios.patch(`http://localhost:5000/api/tasks/${id}/status`, updateData, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        // Envoyer une notification au créateur
+        const decodedToken = jwtDecode(token);
+        const currentUserId = decodedToken.id;
+        
+        await axios.post('http://localhost:5000/api/notifications', {
+          user_id: task.created_by,
+          sender_id: currentUserId,
+          message: actionType === 'complete' 
+            ? `La tâche "${task.title}" a été marquée comme terminée` 
+            : `La tâche "${task.title}" a été refusée`,
+          type: 'task',
+          related_task_id: task.id,
+          is_read: false
+        }, {
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
+        });
+
+        setSuccessMessage(`Statut mis à jour: ${actionType === 'complete' ? 'Terminée' : 'Refusée'}`);
+        setTimeout(() => {
+          setSuccessMessage('');
+          navigate('/mes-taches');
+        }, 2000);
+      } else {
+        setSuccessMessage('Mise à jour réussie !');
+        setTimeout(() => setSuccessMessage(''), 3000);
+      }
+
+      resetAction();
     } catch (error) {
       console.error('Erreur lors de la mise à jour :', error);
       alert(error.response?.data?.error || 'Erreur lors de la mise à jour.');
     }
-  };
-
-  const handleStatusChange = async () => {
-    try {
-      if (selectedStatus === 'rejected' && !rejectionReason) {
-        alert('Veuillez fournir une raison pour le refus');
-        return;
-      }
-
-      const updateData = {
-        status: selectedStatus
-      };
-
-      if (selectedStatus === 'rejected') {
-        updateData.rejection_reason = rejectionReason;
-      }
-
-      await axios.patch(`http://localhost:5000/api/tasks/${id}/status`, updateData, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      // Envoyer une notification au créateur
-      const decodedToken = jwtDecode(token);
-      const currentUserId = decodedToken.id;
-      
-      await axios.post('http://localhost:5000/api/notifications', {
-        user_id: task.created_by,
-        sender_id: currentUserId,
-        message: selectedStatus === 'completed' 
-          ? `La tâche "${task.title}" a été marquée comme terminée` 
-          : `La tâche "${task.title}" a été refusée`,
-        type: 'task',
-        related_task_id: task.id,
-        is_read: false
-      }, {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-
-      setSuccessMessage(`Statut mis à jour: ${selectedStatus === 'completed' ? 'Terminée' : 'Refusée'}`);
-      setTimeout(() => {
-        setSuccessMessage('');
-        navigate('/mes-taches');
-      }, 2000);
-    } catch (error) {
-      console.error('Erreur lors du changement de statut:', error);
-      alert(error.response?.data?.error || 'Erreur lors du changement de statut.');
-    }
-  };
-
-  const openStatusModal = (status) => {
-    setSelectedStatus(status);
-    setShowStatusModal(true);
-  };
-
-  const closeStatusModal = () => {
-    setShowStatusModal(false);
-    setSelectedStatus('');
-    setRejectionReason('');
   };
 
   const renderStatus = (status) => {
@@ -203,93 +197,87 @@ const DetailsTask = () => {
 
           <hr />
 
-          <Form.Group>
-            <Form.Label><strong>Commentaire :</strong></Form.Label>
-            <Form.Control
-              as="textarea"
-              rows={4}
-              value={comment}
-              onChange={handleCommentChange}
-            />
-          </Form.Group>
+          {/* Comment and file section - visible only when completing task */}
+          {actionType === 'complete' && (
+            <>
+              <Form.Group>
+                <Form.Label><strong>Commentaire :</strong></Form.Label>
+                <Form.Control
+                  as="textarea"
+                  rows={4}
+                  value={comment}
+                  onChange={handleCommentChange}
+                  placeholder="Ajoutez un commentaire (optionnel)"
+                />
+              </Form.Group>
 
-          <Form.Group className="mt-3">
-            <Form.Label>Fichier de réponse :</Form.Label>
-            <Form.Control type="file" onChange={handleFileChange} />
-          </Form.Group>
+              <Form.Group className="mt-3">
+                <Form.Label>Fichier de réponse :</Form.Label>
+                <Form.Control 
+                  type="file" 
+                  onChange={handleFileChange} 
+                  placeholder="Ajoutez un fichier de réponse (optionnel)"
+                />
+              </Form.Group>
+            </>
+          )}
+
+          {/* Rejection reason section - visible only when rejecting task */}
+          {actionType === 'reject' && (
+            <Form.Group>
+              <Form.Label><strong>Raison du refus :</strong></Form.Label>
+              <Form.Control
+                as="textarea"
+                rows={4}
+                value={rejectionReason}
+                onChange={handleRejectionReasonChange}
+                placeholder="Veuillez indiquer la raison du refus (obligatoire)"
+                required
+              />
+            </Form.Group>
+          )}
 
           {successMessage && <Alert variant="success" className="mt-3">{successMessage}</Alert>}
 
           <div className="d-flex justify-content-between mt-4">
-            <Button variant="secondary" onClick={() => navigate('/mes-taches')}>
-              ⬅️ Retour
+  <Button variant="secondary" onClick={() => navigate('/mes-taches')}>
+    ⬅️ Retour
+  </Button>
+
+  <div className="d-flex gap-2">
+    {task.status !== 'completed' && (
+      <>
+        {actionType ? (
+          <>
+            <Button variant="secondary" onClick={resetAction}>
+              Annuler
             </Button>
-
-            <div className="d-flex gap-2">
-              {task.status !== 'completed' && (
-                <Button 
-                  variant="danger" 
-                  onClick={() => openStatusModal('rejected')}
-                >
-                  Refuser la tâche
-                </Button>
-              )}
-              
-              {task.status !== 'completed' && (
-                <Button 
-                  variant="success" 
-                  onClick={() => openStatusModal('completed')}
-                >
-                  Terminer la tâche
-                </Button>
-              )}
-
-              <Button variant="primary" onClick={handleUpdate}>
-                Mettre à jour
-              </Button>
-            </div>
-          </div>
+            <Button variant="primary" onClick={handleUpdate}>
+              Mettre à jour
+            </Button>
+          </>
+        ) : (
+          <>
+            <Button 
+              variant="danger" 
+              onClick={() => setActionType('reject')}
+            >
+              Refuser la tâche
+            </Button>
+            <Button 
+              variant="success" 
+              onClick={() => setActionType('complete')}
+            >
+              Terminer la tâche
+            </Button>
+          </>
+        )}
+      </>
+    )}
+  </div>
+</div>
         </Card.Body>
       </Card>
-
-      {/* Status Change Modal */}
-      <Modal show={showStatusModal} onHide={closeStatusModal} centered style={{ zIndex: 1050 }}>
-        <Modal.Header closeButton>
-          <Modal.Title>
-            {selectedStatus === 'completed' ? 'Terminer la tâche' : 'Refuser la tâche'}
-          </Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          {selectedStatus === 'completed' ? (
-            <>
-              <p>Voulez-vous vraiment marquer cette tâche comme terminée ?</p>
-              <p>Vous pouvez ajouter un commentaire et un fichier de réponse avant de confirmer.</p>
-            </>
-          ) : (
-            <Form.Group>
-              <Form.Label>Raison du refus :</Form.Label>
-              <Form.Control
-                as="textarea"
-                rows={3}
-                value={rejectionReason}
-                onChange={(e) => setRejectionReason(e.target.value)}
-                placeholder="Veuillez indiquer la raison du refus..."
-              />
-            </Form.Group>
-          )}
-        </Modal.Body>
-        <Modal.Footer>
-          <Button variant="secondary" onClick={closeStatusModal}>
-            Annuler
-          </Button>
-          <Button 
-            variant={selectedStatus === 'completed' ? 'success' : 'danger'} 
-            onClick={handleStatusChange}
-          >
-            Confirmer
-          </Button>
-        </Modal.Footer>
-      </Modal>
     </div>
   );
 };

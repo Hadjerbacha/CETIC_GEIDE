@@ -161,13 +161,19 @@ router.get('/', authMiddleware, async (req, res) => {
 
   
 // 📥 Récupérer uniquement les tâches assignées à l'utilisateur connecté
+// 📥 Récupérer uniquement les tâches assignées à l'utilisateur connecté
 router.get('/mes-taches', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
 
     // Récupérer les tâches où l'utilisateur est dans le tableau assigned_to
+    // avec une jointure LEFT JOIN pour inclure les informations du workflow
     const tasksResult = await pool.query(
-      `SELECT * FROM tasks WHERE $1 = ANY(assigned_to) ORDER BY id DESC`,
+      `SELECT t.*, w.name as workflow_name 
+       FROM tasks t
+       LEFT JOIN workflow w ON t.workflow_id = w.id
+       WHERE $1 = ANY(t.assigned_to) 
+       ORDER BY t.id DESC`,
       [userId]
     );
     const tasks = tasksResult.rows;
@@ -193,7 +199,8 @@ router.get('/mes-taches', authMiddleware, async (req, res) => {
     const enrichedTasks = tasks.map(task => ({
       ...task,
       assigned_names: (task.assigned_to || []).map(id => usersMap[id] || `ID ${id}`),
-      created_by_name: usersMap[task.created_by] || `ID ${task.created_by}`
+      created_by_name: usersMap[task.created_by] || `ID ${task.created_by}`,
+      workflow_name: task.workflow_name || '---' // Ajout du nom du workflow
     }));
 
     res.json(enrichedTasks);

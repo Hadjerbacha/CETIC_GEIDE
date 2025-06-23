@@ -884,7 +884,25 @@ const Doc = () => {
     }
   };
 
+const handleDeleteWorkflow = async () => {
+  if (!existingWorkflow) return;
 
+  try {
+    const response = await axios.delete(
+      `http://localhost:5000/api/workflows/${existingWorkflow.id}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    if (response.status === 200) {
+      toast.success('Workflow supprimé avec succès');
+      setExistingWorkflow(null);
+      setShowConfirmModal(false);
+    }
+  } catch (error) {
+    console.error('Erreur suppression workflow:', error);
+    toast.error('Échec de la suppression du workflow');
+  }
+};
 
   return (
     <>
@@ -1840,63 +1858,79 @@ const Doc = () => {
                 </Modal.Footer>
               </Modal>
 
-              <Modal
-                show={showConfirmModal}
-                onHide={() => setShowConfirmModal(false)}
-                centered
-                style={{ zIndex: 1050 }}
-              >
-                <Modal.Header closeButton>
-                  <Modal.Title>Créer un nouveau workflow ?</Modal.Title>
-                </Modal.Header>
-                <Modal.Body>
-                  {existingWorkflow ? (
-                    <div className="text-center">
-                      <Alert variant="warning">
-                        Un workflow existe déjà pour ce document !
-                      </Alert>
-                      <p><strong>Nom:</strong> {existingWorkflow.name}</p>
-                      <p><strong>Statut:</strong> {existingWorkflow.status}</p>
-                      <Button
-                        variant="primary"
-                        onClick={() => {
-                          setShowConfirmModal(false);
-                          navigate(`/workflowz/${existingWorkflow.id}`);
-                        }}
-                      >
-                        Voir le workflow existant
-                      </Button>
-                    </div>
-                  ) : (
-                    <>
-                      <p>Vous êtes sur le point de créer le workflow pour le document :</p>
-                      <strong>{modalDoc?.name}</strong>
-                      <hr />
-                      <Form.Group>
-                        <Form.Label>Nom du workflow</Form.Label>
-                        <Form.Control
-                          type="text"
-                          value={autoWfName}
-                          onChange={e => setAutoWfName(e.target.value)}
-                        />
-                      </Form.Group>
-                    </>
-                  )}
-                </Modal.Body>
+      <div className="d-flex justify-content-center">    
+  <Modal
+  show={showConfirmModal}
+  onHide={() => setShowConfirmModal(false)}
+  centered
+  style={{ zIndex: 1050 }} // Ajustez la largeur selon vos besoins
+  dialogClassName="custom-workflow-modal" // Classe personnalisée pour des ajustements supplémentaires
+>
+  <Modal.Header closeButton size="xl">
+    <Modal.Title>
+      {existingWorkflow 
+        ? 'Workflow existant détecté' 
+        : 'Créer un nouveau workflow ?'}
+    </Modal.Title>
+  </Modal.Header>
+  <Modal.Body>
+    {existingWorkflow ? (
+      <div className="text-center">
+        <Alert variant="warning">
+          Un workflow existe déjà pour ce document !
+        </Alert>
+        <p><strong>Nom:</strong> {existingWorkflow.name}</p>
+        <p><strong>Statut:</strong> {existingWorkflow.status}</p>
+        <div className="d-flex justify-content-center gap-3 mt-4">
+          <Button
+            variant="primary"
+            onClick={() => {
+              setShowConfirmModal(false);
+              navigate(`/workflowz/${existingWorkflow.id}`);
+            }}
+          >
+            Voir le workflow existant
+          </Button>
+          <Button
+            variant="danger"
+            onClick={handleDeleteWorkflow}
+          >
+            Annuler le workflow
+          </Button>
+        </div>
+      </div>
+    ) : (
+      <>
+        <p>Vous êtes sur le point de créer le workflow pour le document :</p>
+        <strong>{modalDoc?.name}</strong>
+        <hr />
+        <Form.Group>
+          <Form.Label>Nom du workflow</Form.Label>
+          <Form.Control
+            type="text"
+            value={autoWfName}
+            onChange={e => setAutoWfName(e.target.value)}
+          />
+        </Form.Group>
+      </>
+    )}
+  </Modal.Body>
 
-                <Modal.Footer>
-                  <Button variant="secondary" onClick={() => setShowConfirmModal(false)}>
-                    Annuler
-                  </Button>
-                  <Button
-                    variant="primary"
-                    onClick={handleConfirmCreate}
-                    disabled={!!existingWorkflow}
-                  >
-                    Créer
-                  </Button>
-                </Modal.Footer>
-              </Modal>
+  <Modal.Footer>
+    <Button variant="secondary" onClick={() => setShowConfirmModal(false)}>
+      Annuler
+    </Button>
+    {!existingWorkflow && (
+      <Button
+        variant="primary"
+        onClick={handleConfirmCreate}
+      >
+        Créer
+      </Button>
+    )}
+  </Modal.Footer>
+</Modal>
+</div>   
             </Card.Body>
           </Card>
         </Container>

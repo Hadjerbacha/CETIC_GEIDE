@@ -24,7 +24,21 @@ const Logs = require('./routes/logs');
 const app = express();
 const PORT = process.env.PORT || 5000;
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const jwt = require('jsonwebtoken');
 
+// Ajoutez ce middleware avant vos routes
+app.use((req, res, next) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      req.user = decoded;
+    } catch (err) {
+      console.error('JWT verification failed:', err);
+    }
+  }
+  next();
+});
 
 // Middleware
 const corsOptions = {
