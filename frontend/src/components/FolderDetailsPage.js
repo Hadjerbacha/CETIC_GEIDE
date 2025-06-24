@@ -220,15 +220,15 @@ const handleCreateFolder = async (e) => {
 
 const handleShareFolder = async (userIds, groupIds) => {
   try {
-    // Get current user ID (you'll need to implement this)
-    const currentUserId = localStorage.getItem('userId'); // Or from your auth context
-    
-    // 1. Share the folder
+    // 1. S'assurer que groupIds est bien un tableau
+    const groupsToShare = Array.isArray(groupIds) ? groupIds : [];
+
+    // 2. Envoyer la requête avec les groupes
     const res = await axios.put(
       `http://localhost:5000/api/folders/${id}/share`,
       {
-        share_users: userIds,
-        share_groups: groupIds
+        share_users: userIds || [],  // Garder l'existant pour les users
+        share_groups: groupsToShare  // Correction pour les groupes
       },
       {
         headers: {
@@ -238,42 +238,38 @@ const handleShareFolder = async (userIds, groupIds) => {
       }
     );
 
-    // 2. Update local state
+    // Le reste du code reste inchangé
     setFolder(res.data);
 
-    // 3. Send notifications to shared users
     if (userIds?.length > 0) {
       for (const userId of userIds) {
-        try {
-          await axios.post(
-            'http://localhost:5000/api/notifications',
-            {
-              user_id: userId, // The user being notified
-              sender_id: userId, // The user who shared the folder
-              message: `Le dossier "${res.data.name}" a été partagé avec vous`,
-              type: 'SHARED_FOLDER',
-              is_read: false,
+        await axios.post(
+          'http://localhost:5000/api/notifications',
+          {
+            user_id: userId,
+            sender_id: userId,
+            message: `Le dossier "${res.data.name}" a été partagé avec vous`,
+            type: 'SHARED_FOLDER',
+            is_read: false,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
             },
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-                'Content-Type': 'application/json',
-              },
-            }
-          );
-        } catch (notifErr) {
-          console.error("Failed to send notification to", userId, notifErr.response?.data);
-        }
+          }
+        );
       }
     }
 
     toast.success("Partage mis à jour avec succès!");
     return true;
   } catch (err) {
-    // ... existing error handling ...
+    console.error("Erreur de partage:", err.response?.data || err.message);
+    toast.error(err.response?.data?.error || "Échec du partage");
+    return false;
   }
 };
-
   const handleImportFolder = async () => {
     if (!folderName || !pendingFile || pendingFile.length === 0) {
       alert("Veuillez fournir un nom de dossier et au moins un fichier.");
@@ -711,28 +707,6 @@ const handleShareFolder = async (userIds, groupIds) => {
               />
             </Form.Group>
 
-            <Form.Group>
-              <Form.Label>Groupes</Form.Label>
-              <Select
-                              value={
-                                selectedGroup
-                                  ? {
-                                    value: selectedGroup,
-                                    label: allGroups.find(group => group.id === selectedGroup)?.nom,
-                                  }
-                                  : null
-                              }
-                              options={allGroups.map(group => ({
-                                value: group.id,
-                                label: group.nom,
-                              }))}
-                              onChange={(selectedOption) => {
-                                setSelectedGroup(selectedOption ? selectedOption.value : null);
-                              }}
-                              placeholder="Sélectionner un groupe..."
-                              classNamePrefix="select"
-                            />
-            </Form.Group>
           </Form>
         </Modal.Body>
         <Modal.Footer>
@@ -749,7 +723,7 @@ const handleShareFolder = async (userIds, groupIds) => {
               setShowShareModal(false);
             }}
           >
-            Enregistrer le partage
+            partager
           </Button>
         </Modal.Footer>
       </Modal>

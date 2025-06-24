@@ -733,7 +733,7 @@ router.put('/:id/share', auth, async (req, res) => {
       shared_users: share_users,
       shared_groups: share_groups
     });
-    
+    console.log('Received share data:', { share_users, share_groups });
   } catch (err) {
     console.error('Erreur lors du partage du dossier:', err);
     res.status(500).json({ 
