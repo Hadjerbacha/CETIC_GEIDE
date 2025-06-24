@@ -1383,19 +1383,38 @@ router.put('/:id', auth, async (req, res) => {
     `, [name, summary, tags, prio, metadata, is_completed, documentId]);
 
     // 4. Si le document vient juste d’être complété, on lui attribue une version
-    if (is_completed) {
-      const versionRes = await pool.query(`
-        SELECT MAX(version) as max_version 
-        FROM documents 
-        WHERE name = $1 AND version IS NOT NULL AND id != $2
-      `, [name, documentId]);
+  // 4. Si le document vient juste d’être complété, on lui attribue une version
+if (is_completed) {
+  const versionRes = await pool.query(`
+    SELECT MAX(version) as max_version 
+    FROM documents 
+    WHERE name = $1 AND version IS NOT NULL AND id != $2
+  `, [name, documentId]);
 
-      const lastVersion = versionRes.rows[0].max_version || 0;
+  const lastVersion = versionRes.rows[0].max_version || 0;
+  const currentVersion = lastVersion + 1; // Déclaration correcte de la variable
 
-      await pool.query(`
-        UPDATE documents SET version = $1 WHERE id = $2
-      `, [lastVersion + 1, documentId]);
+  await pool.query(`
+    UPDATE documents SET version = $1 WHERE id = $2 and is_completed=true
+  `, [currentVersion, documentId]);
+
+  // Envoyer une notification seulement si c'est une nouvelle version (pas la première)
+  if (lastVersion > 0) {
+    // Récupérer les utilisateurs ayant accès à ce document
+    const usersRes = await pool.query(
+      `SELECT user_id FROM document_permissions WHERE document_id = $1 AND can_read = true`,
+      [documentId]
+    );
+    
+    const userIds = usersRes.rows.map(row => row.user_id);
+    
+    if (userIds.length > 0) {
+      await sendNotification(documentId, name, currentVersion, userIds); // Utilisation de currentVersion
     }
+  }
+}
+
+    
 
     // 5. Ajout/MAJ dans la table spécialisée
     switch (category) {
@@ -1559,6 +1578,8 @@ router.put('/:id', auth, async (req, res) => {
         collectionId = insert.rows[0].id;
       }
 
+      
+
       await pool.query(`
         INSERT INTO document_collections (document_id, collection_id, is_saved, collection_name)
         VALUES ($1, $2, true, $3)
@@ -1576,6 +1597,35 @@ router.put('/:id', auth, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
+
+// Fonction pour envoyer des notifications
+const sendNotification = async (documentId, documentName, version, userIds) => {
+  try {
+    // 1. Récupérer les informations de l'utilisateur admin
+    const adminRes = await pool.query('SELECT id FROM users WHERE role = $1', ['admin']);
+    const adminId = adminRes.rows[0]?.id;
+
+    // 2. Ajouter l'admin à la liste des destinataires si pas déjà présent
+    if (adminId && !userIds.includes(adminId)) {
+      userIds.push(adminId);
+    }
+
+    // 3. Envoyer une notification à chaque utilisateur
+    for (const userId of userIds) {
+      await pool.query(
+        `INSERT INTO notifications (user_id, document_id, message, is_read) 
+         VALUES ($1, $2, $3, false)`,
+        [
+          userId,
+          documentId,
+          `Une nouvelle version (v${version}) du document "${documentName}" est disponible.`
+        ]
+      );
+    }
+  } catch (err) {
+    console.error('Erreur lors de l\'envoi des notifications:', err);
+  }
+};
 // Renommez la route pour correspondre à ce que le frontend appelle
 router.get('/:id/metadata', auth, async (req, res) => {
   const documentId = req.params.id;
