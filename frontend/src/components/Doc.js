@@ -56,7 +56,7 @@ const Doc = () => {
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [existingWorkflow, setExistingWorkflow] = useState(null);
-  const categories = ['Contrat', 'Rapport', 'facture', 'cv', 'demande_conge', 'autre'];
+  const categories = ['Contrat', 'facture', 'cv', 'demande_conge', 'Rapport', 'autre'];
   const [selectedCategory, setSelectedCategory] = useState('');
   const [categoryClickCount, setCategoryClickCount] = useState(0);
   const [summary, setSummary] = useState('');
@@ -450,138 +450,138 @@ const Doc = () => {
     };
   };
 
-  const filteredDocuments = latestDocs.filter((doc) => {
-    // 1. Exclusion des fichiers média
-    const filePath = doc.file_path?.toString() || '';
-    const extension = filePath.split('.').pop().toLowerCase();
-    const docCategory = doc.category ? doc.category.toString().toLowerCase() : '';
+const filteredDocuments = latestDocs.filter((doc) => {
+  // 1. Exclusion des fichiers média
+  const filePath = doc.file_path?.toString() || '';
+  const extension = filePath.split('.').pop().toLowerCase();
+  const docCategory = doc.category ? doc.category.toString().toLowerCase() : '';
 
-    const photoExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'svg'];
-    const videoExtensions = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'wmv', 'mpeg', '3gp'];
+  const photoExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'svg'];
+  const videoExtensions = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'wmv', 'mpeg', '3gp'];
 
-    const isPhoto = photoExtensions.includes(extension);
-    const isVideo = videoExtensions.includes(extension);
-    const isMediaCategory = ['media', 'média'].includes(docCategory);
+  const isPhoto = photoExtensions.includes(extension);
+  const isVideo = videoExtensions.includes(extension);
+  const isMediaCategory = ['media', 'média', 'photo', 'video', 'vidéo'].includes(docCategory);
 
-    // Exclusion de tous les fichiers média (par extension ou par catégorie)
-    if (isPhoto || isVideo || isMediaCategory) return false;
+  // Exclure les médias et les documents sans extension
+  if (!extension || isPhoto || isVideo || isMediaCategory) return false;
 
-    // 2. Normalisation des données pour la recherche avancée
-    const docName = doc.name ? doc.name.toString().toLowerCase() : '';
-    const docDate = doc.date ? new Date(doc.date) : null;
-    const docContent = doc.text_content ? doc.text_content.toString().toLowerCase() : '';
-    const docSummary = doc.summary ? doc.summary.toString().toLowerCase() : '';
-    const docDescription = doc.description ? doc.description.toString().toLowerCase() : '';
-    const docTags = Array.isArray(doc.tags) ? doc.tags.map(t => t.toString().toLowerCase()) : [];
-    const docFolder = doc.folder ? doc.folder.toString().toLowerCase() : '';
-    const docAuthor = doc.author ? doc.author.toString().toLowerCase() : '';
-    const docPriority = doc.priority ? doc.priority.toString().toLowerCase() : '';
-    const docCreationDate = doc.creation_date ? new Date(doc.creation_date).toISOString().split('T')[0] : '';
+  // 2. Normalisation des données
+  const docName = doc.name ? doc.name.toString().toLowerCase() : '';
+  const docDate = doc.date ? new Date(doc.date) : null;
+  const docContent = doc.text_content ? doc.text_content.toString().toLowerCase() : '';
+  const docSummary = doc.summary ? doc.summary.toString().toLowerCase() : '';
+  const docDescription = doc.description ? doc.description.toString().toLowerCase() : '';
+  const docTags = Array.isArray(doc.tags) ? doc.tags.map(t => t.toString().toLowerCase()) : [];
+  const docFolder = doc.folder ? doc.folder.toString().toLowerCase() : '';
+  const docAuthor = doc.author ? doc.author.toString().toLowerCase() : '';
+  const docPriority = doc.priority ? doc.priority.toString().toLowerCase() : '';
+  const docCreationDate = doc.creation_date ? new Date(doc.creation_date).toISOString().split('T')[0] : '';
 
-    // [Le reste du code reste inchangé...]
-    // 3. Filtrage par type de fichier
-    const matchesType = filterType === 'Tous les documents' ||
-      extension === filterType.toLowerCase();
+  // 3. Filtres généraux
+  const matchesType = filterType === 'Tous les documents' || extension === filterType.toLowerCase();
+  const matchesDate = (!startDate || (docDate && docDate >= new Date(startDate))) && 
+                     (!endDate || (docDate && docDate <= new Date(endDate)));
+  const searchLower = searchQuery.toLowerCase();
+  const matchesSearch = useAdvancedFilter ? (
+    docContent.includes(searchLower) ||
+    docSummary.includes(searchLower) ||
+    docDescription.includes(searchLower) ||
+    docFolder.includes(searchLower) ||
+    docAuthor.includes(searchLower) ||
+    docTags.some(tag => tag.includes(searchLower))
+  ) : (docName.includes(searchLower));
+  const matchesCategory = !selectedCategory || docCategory === selectedCategory.toLowerCase();
 
-    // 4. Filtrage par date
-    const matchesDate = (!startDate || (docDate && docDate >= new Date(startDate))) &&
-      (!endDate || (docDate && docDate <= new Date(endDate)));
+  // 4. Filtres avancés spécifiques
+  const matchesAdvancedFilters = (() => {
+    if (!showAdvancedFilters) return true;
 
-    // 5. Recherche globale
-    const searchLower = searchQuery.toLowerCase();
-    const matchesSearch = useAdvancedFilter ? (
-      docContent.includes(searchLower) ||
-      docSummary.includes(searchLower) ||
-      docDescription.includes(searchLower) ||
-      docFolder.includes(searchLower) ||
-      docAuthor.includes(searchLower) ||
-      docTags.some(tag => tag.includes(searchLower))
-    ) : (
-      docName.includes(searchLower)
+    const filters = Object.fromEntries(
+      Object.entries(searchFilters).map(([k, v]) => [k, v?.toString().toLowerCase() || ''])
     );
 
-    // 6. Filtrage par catégorie (sans les options média)
-    const matchesCategory = (() => {
-      if (!selectedCategory) return true;
-      const selectedCat = selectedCategory.toLowerCase();
-      return docCategory === selectedCat;
-    })();
+    // Filtres communs à toutes les catégories
+    const commonFilters = {
+      description: !filters.description || docDescription.includes(filters.description),
+      summary: !filters.summary || docSummary.includes(filters.summary),
+      tags: !filters.tags || filters.tags.split(',').map(t => t.trim()).every(tag => docTags.some(dt => dt.includes(tag))),
+      priority: !filters.priority || docPriority === filters.priority,
+      author: !filters.author || docAuthor.includes(filters.author),
+      folder: !filters.folder || docFolder.includes(filters.folder),
+      creation_date: !filters.creation_date || docCreationDate === filters.creation_date
+    };
 
-    // 7. Filtres avancés spécifiques
-    const matchesAdvancedFilters = (() => {
-      if (!showAdvancedFilters) return true;
+    // Filtres spécifiques par catégorie
+    switch (docCategory) {
+      case 'facture':
+        return (
+          commonFilters.description &&
+          commonFilters.summary &&
+          commonFilters.tags &&
+          (!filters.numero_facture || doc.numero_facture?.toString().toLowerCase().includes(filters.numero_facture)) &&
+          (!filters.montant || Number(doc.montant) === Number(filters.montant)) &&
+          (!filters.date_facture || (doc.date_facture && new Date(doc.date_facture).toISOString().split('T')[0] === filters.date_facture)) &&
+          (!filters.nom_entreprise || doc.nom_entreprise?.toString().toLowerCase().includes(filters.nom_entreprise)) &&
+          (!filters.produit || doc.produit?.toString().toLowerCase().includes(filters.produit))
+        );
 
-      // Convertir les filtres de recherche en minuscules
-      const filters = Object.fromEntries(
-        Object.entries(searchFilters).map(([k, v]) =>
-          [k, v ? v.toString().toLowerCase() : ''])
-      );
+      case 'cv':
+        return (
+          commonFilters.description &&
+          commonFilters.summary &&
+          commonFilters.tags &&
+          (!filters.nom_candidat || doc.nom_candidat?.toLowerCase().includes(filters.nom_candidat)) &&
+          (!filters.metier || doc.metier?.toLowerCase().includes(filters.metier)) &&
+          (!filters.date_cv || (doc.date_cv && new Date(doc.date_cv).toISOString().split('T')[0] === filters.date_cv))
+        );
 
-      // Filtres communs à toutes les catégories
-      const commonFilters = {
-        description: !filters.description || docDescription.includes(filters.description),
-        summary: !filters.summary || docSummary.includes(filters.summary),
-        tags: !filters.tags || filters.tags.split(',')
-          .map(t => t.trim())
-          .every(tag => docTags.some(dt => dt.includes(tag))),
-        priority: !filters.priority || docPriority === filters.priority,
-        author: !filters.author || docAuthor.includes(filters.author),
-        folder: !filters.folder || docFolder.includes(filters.folder),
-        creation_date: !filters.creation_date || docCreationDate === filters.creation_date
-      };
+      case 'demande_conge':
+        return (
+          commonFilters.description &&
+          commonFilters.summary &&
+          commonFilters.tags &&
+          (!filters.num_demande || doc.num_demande?.toString().includes(filters.num_demande)) &&
+          (!filters.date_debut || (doc.date_debut && new Date(doc.date_debut).toISOString().split('T')[0] === filters.date_debut)) &&
+          (!filters.date_fin || (doc.date_fin && new Date(doc.date_fin).toISOString().split('T')[0] === filters.date_fin)) &&
+          (!filters.motif || doc.motif?.toLowerCase().includes(filters.motif))
+        );
 
-      // [Le reste du code des filtres avancés reste inchangé...]
-      switch (selectedCategory.toLowerCase()) {
-        case 'facture':
-          return commonFilters.description &&
-            commonFilters.summary &&
-            commonFilters.tags &&
-            (!filters.numero_facture || doc.numero_facture?.toString().includes(filters.numero_facture)) &&
-            (!filters.montant || Number(doc.montant) === Number(filters.montant)) &&
-            (!filters.date_facture || (doc.date_facture && new Date(doc.date_facture).toISOString().split('T')[0] === filters.date_facture));
+      case 'contrat':
+        return (
+          commonFilters.description &&
+          commonFilters.summary &&
+          commonFilters.tags &&
+          (!filters.numero_contrat || doc.numero_contrat?.toString().includes(filters.numero_contrat)) &&
+          (!filters.type_contrat || doc.type_contrat?.toLowerCase() === filters.type_contrat) &&
+          (!filters.partie_prenante || doc.partie_prenante?.toLowerCase().includes(filters.partie_prenante)) &&
+          (!filters.date_signature || (doc.date_signature && new Date(doc.date_signature).toISOString().split('T')[0] === filters.date_signature)) &&
+          (!filters.date_echeance || (doc.date_echeance && new Date(doc.date_echeance).toISOString().split('T')[0] === filters.date_echeance)) &&
+          (!filters.montant || Number(doc.montant) === Number(filters.montant)) &&
+          (!filters.statut || doc.statut?.toLowerCase() === filters.statut)
+        );
 
-        case 'cv':
-          return commonFilters.description &&
-            commonFilters.summary &&
-            commonFilters.tags &&
-            (!filters.nom_candidat || doc.nom_candidat?.toLowerCase().includes(filters.nom_candidat)) &&
-            (!filters.metier || doc.metier?.toLowerCase().includes(filters.metier)) &&
-            (!filters.date_cv || (doc.date_cv && new Date(doc.date_cv).toISOString().split('T')[0] === filters.date_cv));
+      case 'rapport':
+        return (
+          commonFilters.description &&
+          commonFilters.summary &&
+          commonFilters.tags &&
+          (!filters.type_rapport || doc.type_rapport?.toLowerCase() === filters.type_rapport) &&
+          (!filters.auteur || doc.auteur?.toLowerCase().includes(filters.auteur)) &&
+          (!filters.date_rapport || (doc.date_rapport && new Date(doc.date_rapport).toISOString().split('T')[0] === filters.date_rapport)) &&
+          (!filters.destinataire || doc.destinataire?.toLowerCase().includes(filters.destinataire))
+        );
 
-        case 'demande_conge':
-          return commonFilters.description &&
-            commonFilters.summary &&
-            commonFilters.tags &&
-            (!filters.numdemande || doc.num_demande?.toString().includes(filters.numdemande)) &&
-            (!filters.dateconge || (doc.date_debut && new Date(doc.date_debut).toISOString().split('T')[0] === filters.dateconge));
+      default:
+        return Object.values(commonFilters).every(v => v);
+    }
+  })();
 
-        case 'contrat':
-          return commonFilters.description &&
-            commonFilters.summary &&
-            commonFilters.tags &&
-            (!filters.numero_contrat || doc.numero_contrat?.toString().includes(filters.numero_contrat)) &&
-            (!filters.type_contrat || doc.type_contrat?.toLowerCase() === filters.type_contrat) &&
-            (!filters.partie_prenante || doc.partie_prenante?.toLowerCase().includes(filters.partie_prenante)) &&
-            (!filters.date_signature || (doc.date_signature && new Date(doc.date_signature).toISOString().split('T')[0] === filters.date_signature)) &&
-            (!filters.statut || doc.statut?.toLowerCase() === filters.statut);
-
-        case 'rapport':
-          return commonFilters.description &&
-            commonFilters.summary &&
-            commonFilters.tags &&
-            (!filters.type_rapport || doc.type_rapport?.toLowerCase() === filters.type_rapport) &&
-            (!filters.auteur || doc.auteur?.toLowerCase().includes(filters.auteur)) &&
-            (!filters.date_rapport || (doc.date_rapport && new Date(doc.date_rapport).toISOString().split('T')[0] === filters.date_rapport)) &&
-            (!filters.destinataire || doc.destinataire?.toLowerCase().includes(filters.destinataire));
-
-        default:
-          return Object.values(commonFilters).every(v => v);
-      }
-    })();
-
-    // 8. Application combinée de tous les filtres
-    return matchesType && matchesDate && matchesSearch && matchesCategory && matchesAdvancedFilters;
+  // Application combinée de tous les filtres
+  return matchesType && matchesDate && matchesSearch && matchesCategory && matchesAdvancedFilters;
 });
+
+
   const handleOpenConfirm = async (doc) => {
     setModalDoc(doc);
     setAutoWfName(`WF_${doc.name}`);
@@ -679,7 +679,7 @@ const Doc = () => {
     }
   };
 
-  const handleShareDocument = async () => {
+   const handleShareDocument = async () => {
     const visibilityValue = shareAccessType === 'custom' ? 'custom' : 'public';
 
     try {
@@ -719,6 +719,7 @@ const Doc = () => {
       toast.error('Erreur lors du partage du document');
     }
   };
+
 
   const handleCategoryClick = async (category) => {
     try {
@@ -884,25 +885,25 @@ const Doc = () => {
     }
   };
 
-const handleDeleteWorkflow = async () => {
-  if (!existingWorkflow) return;
+  const handleDeleteWorkflow = async () => {
+    if (!existingWorkflow) return;
 
-  try {
-    const response = await axios.delete(
-      `http://localhost:5000/api/workflows/${existingWorkflow.id}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
+    try {
+      const response = await axios.delete(
+        `http://localhost:5000/api/workflows/${existingWorkflow.id}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
-    if (response.status === 200) {
-      toast.success('Workflow supprimé avec succès');
-      setExistingWorkflow(null);
-      setShowConfirmModal(false);
+      if (response.status === 200) {
+        toast.success('Workflow supprimé avec succès');
+        setExistingWorkflow(null);
+        setShowConfirmModal(false);
+      }
+    } catch (error) {
+      console.error('Erreur suppression workflow:', error);
+      toast.error('Échec de la suppression du workflow');
     }
-  } catch (error) {
-    console.error('Erreur suppression workflow:', error);
-    toast.error('Échec de la suppression du workflow');
-  }
-};
+  };
 
   return (
     <>
@@ -1080,33 +1081,71 @@ const handleDeleteWorkflow = async () => {
                         <h5 className="mb-3">🔎 Recherche avancée - Demande de congé</h5>
                         <Form>
                           <div className="d-flex align-items-end gap-3 flex-wrap">
+                            {/* Numéro demande */}
                             <Form.Group className="mb-0">
                               <Form.Label>Numéro demande</Form.Label>
                               <Form.Control
                                 type="text"
-                                value={searchFilters.numdemande || ''}
-                                onChange={(e) => setSearchFilters({ ...searchFilters, numdemande: e.target.value })}
+                                value={searchFilters.numdemande || searchFilters.num_demande || ''}
+                                onChange={(e) => setSearchFilters({
+                                  ...searchFilters,
+                                  numdemande: e.target.value,
+                                  num_demande: e.target.value
+                                })}
                               />
                             </Form.Group>
+
+                            {/* Date début */}
                             <Form.Group className="mb-0">
-                              <Form.Label>Date congé</Form.Label>
+                              <Form.Label>Date début</Form.Label>
                               <Form.Control
                                 type="date"
-                                value={searchFilters.dateconge || ''}
-                                onChange={(e) => setSearchFilters({ ...searchFilters, dateconge: e.target.value })}
+                                value={searchFilters.date_debut || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, date_debut: e.target.value })}
                               />
                             </Form.Group>
-                            <div className="d-flex align-items-end">
-                              <Button className="btn-purple" onClick={filteredDocuments}>
+
+                            {/* Date fin */}
+                            <Form.Group className="mb-0">
+                              <Form.Label>Date fin</Form.Label>
+                              <Form.Control
+                                type="date"
+                                value={searchFilters.date_fin || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, date_fin: e.target.value })}
+                              />
+                            </Form.Group>
+
+                            {/* Motif */}
+                            <Form.Group className="mb-0">
+                              <Form.Label>Motif</Form.Label>
+                              <Form.Control
+                                type="text"
+                                value={searchFilters.motif || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, motif: e.target.value })}
+                              />
+                            </Form.Group>
+
+                            <div className="d-flex align-items-end gap-2">
+                              <Button
+                                variant="outline-secondary"
+                                onClick={() => setSearchFilters({})}
+                              >
+                                Réinitialiser
+                              </Button>
+                              <Button
+                                className="btn-purple"
+                                onClick={() => {
+                                  console.log("Filtres appliqués:", searchFilters);
+                                  filteredDocuments();
+                                }}
+                              >
                                 Rechercher
                               </Button>
-
                             </div>
                           </div>
                         </Form>
                       </>
                     )}
-
                     {selectedCategory === 'cv' && (
                       <>
                         <h5 className="mb-3">🔎 Recherche avancée - CV</h5>
@@ -1235,6 +1274,14 @@ const handleDeleteWorkflow = async () => {
                                 onChange={(e) => setSearchFilters({ ...searchFilters, date_signature: e.target.value })}
                               />
                             </Form.Group>
+                            <Form.Group className="mb-0">
+                              <Form.Label>Montant</Form.Label>
+                              <Form.Control
+                                type="number"
+                                value={searchFilters.montant || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, montant: e.target.value })}
+                              />
+                            </Form.Group>
 
                             <Form.Group className="mb-0">
                               <Form.Label>Statut</Form.Label>
@@ -1254,53 +1301,7 @@ const handleDeleteWorkflow = async () => {
                       </>
                     )}
 
-                    {selectedCategory === 'Rapport' && (
-                      <>
-                        <h5 className="mb-3">🔎 Recherche avancée - Rapports</h5>
-                        <Form>
-                          <div className="d-flex align-items-end gap-3 flex-wrap">
-                            <Form.Group className="mb-0">
-                              <Form.Label>Type de rapport</Form.Label>
-                              <Form.Control
-                                value={searchFilters.type_rapport || ''}
-                                onChange={(e) => setSearchFilters({ ...searchFilters, type_rapport: e.target.value })}
-                              />
-                            </Form.Group>
-
-                            <Form.Group className="mb-0">
-                              <Form.Label>Auteur</Form.Label>
-                              <Form.Control
-                                value={searchFilters.auteur || ''}
-                                onChange={(e) => setSearchFilters({ ...searchFilters, auteur: e.target.value })}
-                              />
-                            </Form.Group>
-
-                            <Form.Group className="mb-0">
-                              <Form.Label>Date rapport</Form.Label>
-                              <Form.Control
-                                type="date"
-                                value={searchFilters.date_rapport || ''}
-                                onChange={(e) => setSearchFilters({ ...searchFilters, date_rapport: e.target.value })}
-                              />
-                            </Form.Group>
-
-                            <Form.Group className="mb-0">
-                              <Form.Label>Destinataire</Form.Label>
-                              <Form.Control
-                                value={searchFilters.destinataire || ''}
-                                onChange={(e) => setSearchFilters({ ...searchFilters, destinataire: e.target.value })}
-                              />
-                            </Form.Group>
-
-                            <div className="d-flex align-items-end">
-                              <Button className="btn-purple" onClick={filteredDocuments}>
-                                Rechercher
-                              </Button>
-                            </div>
-                          </div>
-                        </Form>
-                      </>
-                    )}
+                  
                     {['autre', 'photo', 'video'].includes(selectedCategory) && (
                       <>
                         <h5 className="mb-3">
@@ -1308,7 +1309,7 @@ const handleDeleteWorkflow = async () => {
                         </h5>
                         <Form>
                           <div className="d-flex align-items-end gap-3 flex-wrap">
-                            {/* Description - Modifié pour avoir la même hauteur */}
+                            {/* Description - Modifié pour avoir la même hauteur
                             <Form.Group className="mb-0 flex-grow-1">
                               <Form.Label>Description</Form.Label>
                               <Form.Control
@@ -1319,7 +1320,7 @@ const handleDeleteWorkflow = async () => {
                                 onChange={(e) => setSearchFilters({ ...searchFilters, description: e.target.value })}
                               />
                             </Form.Group>
-
+ */}
                             {/* Tags */}
                             <Form.Group className="mb-0" style={{ minWidth: '200px' }}>
                               <Form.Label>Tags</Form.Label>
@@ -1858,79 +1859,79 @@ const handleDeleteWorkflow = async () => {
                 </Modal.Footer>
               </Modal>
 
-      <div className="d-flex justify-content-center">    
-  <Modal
-  show={showConfirmModal}
-  onHide={() => setShowConfirmModal(false)}
-  centered
-  style={{ zIndex: 1050 }} // Ajustez la largeur selon vos besoins
-  dialogClassName="custom-workflow-modal" // Classe personnalisée pour des ajustements supplémentaires
->
-  <Modal.Header closeButton size="xl">
-    <Modal.Title>
-      {existingWorkflow 
-        ? 'Workflow existant détecté' 
-        : 'Créer un nouveau workflow ?'}
-    </Modal.Title>
-  </Modal.Header>
-  <Modal.Body>
-    {existingWorkflow ? (
-      <div className="text-center">
-        <Alert variant="warning">
-          Un workflow existe déjà pour ce document !
-        </Alert>
-        <p><strong>Nom:</strong> {existingWorkflow.name}</p>
-        <p><strong>Statut:</strong> {existingWorkflow.status}</p>
-        <div className="d-flex justify-content-center gap-3 mt-4">
-          <Button
-            variant="primary"
-            onClick={() => {
-              setShowConfirmModal(false);
-              navigate(`/workflowz/${existingWorkflow.id}`);
-            }}
-          >
-            Voir le workflow existant
-          </Button>
-          <Button
-            variant="danger"
-            onClick={handleDeleteWorkflow}
-          >
-            Annuler le workflow
-          </Button>
-        </div>
-      </div>
-    ) : (
-      <>
-        <p>Vous êtes sur le point de créer le workflow pour le document :</p>
-        <strong>{modalDoc?.name}</strong>
-        <hr />
-        <Form.Group>
-          <Form.Label>Nom du workflow</Form.Label>
-          <Form.Control
-            type="text"
-            value={autoWfName}
-            onChange={e => setAutoWfName(e.target.value)}
-          />
-        </Form.Group>
-      </>
-    )}
-  </Modal.Body>
+              <div className="d-flex justify-content-center">
+                <Modal
+                  show={showConfirmModal}
+                  onHide={() => setShowConfirmModal(false)}
+                  centered
+                  style={{ zIndex: 1050 }} // Ajustez la largeur selon vos besoins
+                  dialogClassName="custom-workflow-modal" // Classe personnalisée pour des ajustements supplémentaires
+                >
+                  <Modal.Header closeButton size="xl">
+                    <Modal.Title>
+                      {existingWorkflow
+                        ? 'Workflow existant détecté'
+                        : 'Créer un nouveau workflow ?'}
+                    </Modal.Title>
+                  </Modal.Header>
+                  <Modal.Body>
+                    {existingWorkflow ? (
+                      <div className="text-center">
+                        <Alert variant="warning">
+                          Un workflow existe déjà pour ce document !
+                        </Alert>
+                        <p><strong>Nom:</strong> {existingWorkflow.name}</p>
+                        <p><strong>Statut:</strong> {existingWorkflow.status}</p>
+                        <div className="d-flex justify-content-center gap-3 mt-4">
+                          <Button
+                            variant="primary"
+                            onClick={() => {
+                              setShowConfirmModal(false);
+                              navigate(`/workflowz/${existingWorkflow.id}`);
+                            }}
+                          >
+                            Voir le workflow existant
+                          </Button>
+                          <Button
+                            variant="danger"
+                            onClick={handleDeleteWorkflow}
+                          >
+                            Annuler le workflow
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <p>Vous êtes sur le point de créer le workflow pour le document :</p>
+                        <strong>{modalDoc?.name}</strong>
+                        <hr />
+                        <Form.Group>
+                          <Form.Label>Nom du workflow</Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={autoWfName}
+                            onChange={e => setAutoWfName(e.target.value)}
+                          />
+                        </Form.Group>
+                      </>
+                    )}
+                  </Modal.Body>
 
-  <Modal.Footer>
-    <Button variant="secondary" onClick={() => setShowConfirmModal(false)}>
-      Annuler
-    </Button>
-    {!existingWorkflow && (
-      <Button
-        variant="primary"
-        onClick={handleConfirmCreate}
-      >
-        Créer
-      </Button>
-    )}
-  </Modal.Footer>
-</Modal>
-</div>   
+                  <Modal.Footer>
+                    <Button variant="secondary" onClick={() => setShowConfirmModal(false)}>
+                      Annuler
+                    </Button>
+                    {!existingWorkflow && (
+                      <Button
+                        variant="primary"
+                        onClick={handleConfirmCreate}
+                      >
+                        Créer
+                      </Button>
+                    )}
+                  </Modal.Footer>
+                </Modal>
+              </div>
             </Card.Body>
           </Card>
         </Container>

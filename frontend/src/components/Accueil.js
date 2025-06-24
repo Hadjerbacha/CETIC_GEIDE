@@ -5,6 +5,8 @@ import { useNavigate } from "react-router-dom";
 import { jwtDecode } from "jwt-decode";
 import "bootstrap/dist/css/bootstrap.min.css";
 import './Dashboard.css';
+import { faPhotoFilm } from '@fortawesome/free-solid-svg-icons'; // nouvelle icône
+
 import { 
   FontAwesomeIcon
 } from '@fortawesome/react-fontawesome';
@@ -126,6 +128,7 @@ useEffect(() => {
 
    const quickLinks = [
     { name: "Tous les documents", icon: faFileInvoice, path: "/documents" },
+    { name: "Media", icon: faPhotoFilm, path: "/media" },
     { name: "folders", icon: faFolder, path: "/folder" },
     { name: "Statistiques", icon: faChartBar, path: "/Statistique" }
   ];

@@ -185,6 +185,7 @@ router.get('/root', auth, async (req, res) => {
 router.get('/:id/children', auth, async (req, res) => {
   try {
     const result = await pool.query(
+      
       `SELECT * FROM folders WHERE parent_id = $1 AND user_id = $2 ORDER BY date DESC`,
       [req.params.id, req.user.id]
     );
@@ -253,8 +254,11 @@ router.get('/', auth, async (req, res) => {
 router.get('/:id', auth, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT * FROM folders WHERE id = $1 AND user_id = $2`,
-      [req.params.id, req.user.id]
+      `SELECT *
+      FROM folders f
+      WHERE f.id = $1 AND (f.user_id = $2 OR $2 = ANY(f.share_users))
+      ORDER BY f.date DESC`,
+      [req.params.id, req.user.id] // Now matches the 2 parameters in the query
     );
     
     if (result.rows.length === 0) {
@@ -267,7 +271,6 @@ router.get('/:id', auth, async (req, res) => {
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
-
 // Récupérer les sous-dossiers
 router.get('/:id/children', auth, async (req, res) => {
   try {
@@ -733,7 +736,7 @@ router.put('/:id/share', auth, async (req, res) => {
       shared_users: share_users,
       shared_groups: share_groups
     });
-    
+    console.log('Received share data:', { share_users, share_groups });
   } catch (err) {
     console.error('Erreur lors du partage du dossier:', err);
     res.status(500).json({ 
