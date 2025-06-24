@@ -434,13 +434,15 @@ router.get('/', auth, async (req, res) => {
     num_demande,  // Changé de numdemande à num_demande
     date_debut,   // Changé de dateconge à date_debut
     date_fin,     // Ajout du filtre date_fin
+    nom_entreprise,  // <-- AJOUTEZ CES DEUX CHAMPS
+    produit,        // <-- AJOUTEZ CES DEUX CHAMPS
     motif         // Ajout du filtre motif
   } = req.query;
 
   try {
     let baseQuery = `
       SELECT DISTINCT d.*, dc.is_saved, dc.collection_name,
-        f.numero_facture, f.montant, f.date_facture,
+        f.numero_facture, f.montant, f.date_facture, f.nom_entreprise, f.produit, 
         cv.nom_candidat, cv.metier, cv.date_cv,
         dcong.num_demande, 
         dcong.date_debut,  // Changé de dateconge à date_debut
@@ -547,6 +549,16 @@ router.get('/', auth, async (req, res) => {
         params.push(date_facture);
         paramIndex++;
       }
+      if (nom_entreprise) {
+        baseQuery += ` AND f.nom_entreprise ILIKE $${paramIndex}`;
+        params.push(`%${nom_entreprise}%`);
+        paramIndex++;
+      }
+      if (produit) {
+        baseQuery += ` AND f.produit ILIKE $${paramIndex}`;
+        params.push(`%${produit}%`);
+        paramIndex++;
+      }
     }
 
     // Filtres spécifiques Demande Congé (MAJ complète)
@@ -589,7 +601,7 @@ router.get('/', auth, async (req, res) => {
       let metadata = {};
 
       if (doc.category === 'facture') {
-        metadata = { numero_facture, montant, date_facture };
+        metadata = { numero_facture, montant, date_facture, nom_entreprise,produit  };
       } else if (doc.category === 'cv') {
         metadata = { nom_candidat, metier, date_cv };
       } else if (doc.category === 'demande_conge') {

@@ -450,143 +450,133 @@ const Doc = () => {
     };
   };
 
-  const filteredDocuments = latestDocs.filter((doc) => {
-    // 1. Exclusion des fichiers média
-    const filePath = doc.file_path?.toString() || '';
-    const extension = filePath.split('.').pop().toLowerCase();
-    const docCategory = doc.category ? doc.category.toString().toLowerCase() : '';
+ const filteredDocuments = latestDocs.filter((doc) => {
+  // 1. Exclusion des fichiers média
+  const filePath = doc.file_path?.toString() || '';
+  const extension = filePath.split('.').pop().toLowerCase();
+  const docCategory = doc.category ? doc.category.toString().toLowerCase() : '';
 
-    const photoExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'svg'];
-    const videoExtensions = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'wmv', 'mpeg', '3gp'];
+  const photoExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'svg'];
+  const videoExtensions = ['mp4', 'mov', 'avi', 'mkv', 'webm', 'flv', 'wmv', 'mpeg', '3gp'];
 
-    const isPhoto = photoExtensions.includes(extension);
-    const isVideo = videoExtensions.includes(extension);
-    const isMediaCategory = ['media', 'média'].includes(docCategory);
+  const isPhoto = photoExtensions.includes(extension);
+  const isVideo = videoExtensions.includes(extension);
+  const isMediaCategory = ['media', 'média'].includes(docCategory);
 
-    // Exclusion de tous les fichiers média (par extension ou par catégorie)
-    if (isPhoto || isVideo || isMediaCategory) return false;
+  if (isPhoto || isVideo || isMediaCategory) return false;
 
-    // 2. Normalisation des données pour la recherche avancée
-    const docName = doc.name ? doc.name.toString().toLowerCase() : '';
-    const docDate = doc.date ? new Date(doc.date) : null;
-    const docContent = doc.text_content ? doc.text_content.toString().toLowerCase() : '';
-    const docSummary = doc.summary ? doc.summary.toString().toLowerCase() : '';
-    const docDescription = doc.description ? doc.description.toString().toLowerCase() : '';
-    const docTags = Array.isArray(doc.tags) ? doc.tags.map(t => t.toString().toLowerCase()) : [];
-    const docFolder = doc.folder ? doc.folder.toString().toLowerCase() : '';
-    const docAuthor = doc.author ? doc.author.toString().toLowerCase() : '';
-    const docPriority = doc.priority ? doc.priority.toString().toLowerCase() : '';
-    const docCreationDate = doc.creation_date ? new Date(doc.creation_date).toISOString().split('T')[0] : '';
+  // 2. Normalisation des données
+  const docName = doc.name ? doc.name.toString().toLowerCase() : '';
+  const docDate = doc.date ? new Date(doc.date) : null;
+  const docContent = doc.text_content ? doc.text_content.toString().toLowerCase() : '';
+  const docSummary = doc.summary ? doc.summary.toString().toLowerCase() : '';
+  const docDescription = doc.description ? doc.description.toString().toLowerCase() : '';
+  const docTags = Array.isArray(doc.tags) ? doc.tags.map(t => t.toString().toLowerCase()) : [];
+  const docFolder = doc.folder ? doc.folder.toString().toLowerCase() : '';
+  const docAuthor = doc.author ? doc.author.toString().toLowerCase() : '';
+  const docPriority = doc.priority ? doc.priority.toString().toLowerCase() : '';
+  const docCreationDate = doc.creation_date ? new Date(doc.creation_date).toISOString().split('T')[0] : '';
 
-    // [Le reste du code reste inchangé...]
-    // 3. Filtrage par type de fichier
-    const matchesType = filterType === 'Tous les documents' ||
-      extension === filterType.toLowerCase();
+  // 3. Filtres généraux
+  const matchesType = filterType === 'Tous les documents' || extension === filterType.toLowerCase();
+  const matchesDate = (!startDate || (docDate && docDate >= new Date(startDate))) && 
+                     (!endDate || (docDate && docDate <= new Date(endDate)));
+  const searchLower = searchQuery.toLowerCase();
+  const matchesSearch = useAdvancedFilter ? (
+    docContent.includes(searchLower) ||
+    docSummary.includes(searchLower) ||
+    docDescription.includes(searchLower) ||
+    docFolder.includes(searchLower) ||
+    docAuthor.includes(searchLower) ||
+    docTags.some(tag => tag.includes(searchLower))
+  ) : (docName.includes(searchLower));
+  const matchesCategory = !selectedCategory || docCategory === selectedCategory.toLowerCase();
 
-    // 4. Filtrage par date
-    const matchesDate = (!startDate || (docDate && docDate >= new Date(startDate))) &&
-      (!endDate || (docDate && docDate <= new Date(endDate)));
+  // 4. Filtres avancés spécifiques
+  const matchesAdvancedFilters = (() => {
+    if (!showAdvancedFilters) return true;
 
-    // 5. Recherche globale
-    const searchLower = searchQuery.toLowerCase();
-    const matchesSearch = useAdvancedFilter ? (
-      docContent.includes(searchLower) ||
-      docSummary.includes(searchLower) ||
-      docDescription.includes(searchLower) ||
-      docFolder.includes(searchLower) ||
-      docAuthor.includes(searchLower) ||
-      docTags.some(tag => tag.includes(searchLower))
-    ) : (
-      docName.includes(searchLower)
+    const filters = Object.fromEntries(
+      Object.entries(searchFilters).map(([k, v]) => [k, v?.toString().toLowerCase() || ''])
     );
 
-    // 6. Filtrage par catégorie (sans les options média)
-    const matchesCategory = (() => {
-      if (!selectedCategory) return true;
-      const selectedCat = selectedCategory.toLowerCase();
-      return docCategory === selectedCat;
-    })();
+    // Filtres communs à toutes les catégories
+    const commonFilters = {
+      description: !filters.description || docDescription.includes(filters.description),
+      summary: !filters.summary || docSummary.includes(filters.summary),
+      tags: !filters.tags || filters.tags.split(',').map(t => t.trim()).every(tag => docTags.some(dt => dt.includes(tag))),
+      priority: !filters.priority || docPriority === filters.priority,
+      author: !filters.author || docAuthor.includes(filters.author),
+      folder: !filters.folder || docFolder.includes(filters.folder),
+      creation_date: !filters.creation_date || docCreationDate === filters.creation_date
+    };
 
-    // 7. Filtres avancés spécifiques
-    const matchesAdvancedFilters = (() => {
-      if (!showAdvancedFilters) return true;
+    // Filtres spécifiques par catégorie
+    switch (docCategory) {
+      case 'facture':
+        return (
+          commonFilters.description &&
+          commonFilters.summary &&
+          commonFilters.tags &&
+          (!filters.numero_facture || doc.numero_facture?.toString().toLowerCase().includes(filters.numero_facture)) &&
+          (!filters.montant || Number(doc.montant) === Number(filters.montant)) &&
+          (!filters.date_facture || (doc.date_facture && new Date(doc.date_facture).toISOString().split('T')[0] === filters.date_facture)) &&
+          (!filters.nom_entreprise || doc.nom_entreprise?.toString().toLowerCase().includes(filters.nom_entreprise)) &&
+          (!filters.produit || doc.produit?.toString().toLowerCase().includes(filters.produit))
+        );
 
-      // Convertir les filtres de recherche en minuscules
-      const filters = Object.fromEntries(
-        Object.entries(searchFilters).map(([k, v]) =>
-          [k, v ? v.toString().toLowerCase() : ''])
-      );
+      case 'cv':
+        return (
+          commonFilters.description &&
+          commonFilters.summary &&
+          commonFilters.tags &&
+          (!filters.nom_candidat || doc.nom_candidat?.toLowerCase().includes(filters.nom_candidat)) &&
+          (!filters.metier || doc.metier?.toLowerCase().includes(filters.metier)) &&
+          (!filters.date_cv || (doc.date_cv && new Date(doc.date_cv).toISOString().split('T')[0] === filters.date_cv))
+        );
 
-      // Filtres communs à toutes les catégories
-      const commonFilters = {
-        description: !filters.description || docDescription.includes(filters.description),
-        summary: !filters.summary || docSummary.includes(filters.summary),
-        tags: !filters.tags || filters.tags.split(',')
-          .map(t => t.trim())
-          .every(tag => docTags.some(dt => dt.includes(tag))),
-        priority: !filters.priority || docPriority === filters.priority,
-        author: !filters.author || docAuthor.includes(filters.author),
-        folder: !filters.folder || docFolder.includes(filters.folder),
-        creation_date: !filters.creation_date || docCreationDate === filters.creation_date
-      };
+      case 'demande_conge':
+        return (
+          commonFilters.description &&
+          commonFilters.summary &&
+          commonFilters.tags &&
+          (!filters.num_demande || doc.num_demande?.toString().includes(filters.num_demande)) &&
+          (!filters.date_debut || (doc.date_debut && new Date(doc.date_debut).toISOString().split('T')[0] === filters.date_debut)) &&
+          (!filters.date_fin || (doc.date_fin && new Date(doc.date_fin).toISOString().split('T')[0] === filters.date_fin)) &&
+          (!filters.motif || doc.motif?.toLowerCase().includes(filters.motif))
+        );
 
-      // [Le reste du code des filtres avancés reste inchangé...]
-      switch (selectedCategory.toLowerCase()) {
-        case 'facture':
-          return commonFilters.description &&
-            commonFilters.summary &&
-            commonFilters.tags &&
-            (!filters.numero_facture || doc.numero_facture?.toString().includes(filters.numero_facture)) &&
-            (!filters.montant || Number(doc.montant) === Number(filters.montant)) &&
-            (!filters.date_facture || (doc.date_facture && new Date(doc.date_facture).toISOString().split('T')[0] === filters.date_facture));
+      case 'contrat':
+        return (
+          commonFilters.description &&
+          commonFilters.summary &&
+          commonFilters.tags &&
+          (!filters.numero_contrat || doc.numero_contrat?.toString().includes(filters.numero_contrat)) &&
+          (!filters.type_contrat || doc.type_contrat?.toLowerCase() === filters.type_contrat) &&
+          (!filters.partie_prenante || doc.partie_prenante?.toLowerCase().includes(filters.partie_prenante)) &&
+          (!filters.date_signature || (doc.date_signature && new Date(doc.date_signature).toISOString().split('T')[0] === filters.date_signature)) &&
+          (!filters.statut || doc.statut?.toLowerCase() === filters.statut)
+        );
 
-        case 'cv':
-          return commonFilters.description &&
-            commonFilters.summary &&
-            commonFilters.tags &&
-            (!filters.nom_candidat || doc.nom_candidat?.toLowerCase().includes(filters.nom_candidat)) &&
-            (!filters.metier || doc.metier?.toLowerCase().includes(filters.metier)) &&
-            (!filters.date_cv || (doc.date_cv && new Date(doc.date_cv).toISOString().split('T')[0] === filters.date_cv));
+      case 'rapport':
+        return (
+          commonFilters.description &&
+          commonFilters.summary &&
+          commonFilters.tags &&
+          (!filters.type_rapport || doc.type_rapport?.toLowerCase() === filters.type_rapport) &&
+          (!filters.auteur || doc.auteur?.toLowerCase().includes(filters.auteur)) &&
+          (!filters.date_rapport || (doc.date_rapport && new Date(doc.date_rapport).toISOString().split('T')[0] === filters.date_rapport)) &&
+          (!filters.destinataire || doc.destinataire?.toLowerCase().includes(filters.destinataire))
+        );
 
-        case 'demande_conge':
-          return commonFilters.description &&
-            commonFilters.summary &&
-            commonFilters.tags &&
-            // Filtre par numéro de demande
-            (!filters.numdemande || doc.num_demande?.toString().includes(filters.numdemande)) &&
-            // Filtre par date de début (remplace dateconge)
-            (!filters.date_debut || (doc.date_debut && new Date(doc.date_debut).toISOString().split('T')[0] === filters.date_debut)) &&
-            // Filtre par date de fin
-            (!filters.date_fin || (doc.date_fin && new Date(doc.date_fin).toISOString().split('T')[0] === filters.date_fin)) &&
-            // Filtre par motif
-            (!filters.motif || (doc.motif && doc.motif.toLowerCase().includes(filters.motif.toLowerCase())));
-        case 'contrat':
-          return commonFilters.description &&
-            commonFilters.summary &&
-            commonFilters.tags &&
-            (!filters.numero_contrat || doc.numero_contrat?.toString().includes(filters.numero_contrat)) &&
-            (!filters.type_contrat || doc.type_contrat?.toLowerCase() === filters.type_contrat) &&
-            (!filters.partie_prenante || doc.partie_prenante?.toLowerCase().includes(filters.partie_prenante)) &&
-            (!filters.date_signature || (doc.date_signature && new Date(doc.date_signature).toISOString().split('T')[0] === filters.date_signature)) &&
-            (!filters.statut || doc.statut?.toLowerCase() === filters.statut);
+      default:
+        return Object.values(commonFilters).every(v => v);
+    }
+  })();
 
-        case 'rapport':
-          return commonFilters.description &&
-            commonFilters.summary &&
-            commonFilters.tags &&
-            (!filters.type_rapport || doc.type_rapport?.toLowerCase() === filters.type_rapport) &&
-            (!filters.auteur || doc.auteur?.toLowerCase().includes(filters.auteur)) &&
-            (!filters.date_rapport || (doc.date_rapport && new Date(doc.date_rapport).toISOString().split('T')[0] === filters.date_rapport)) &&
-            (!filters.destinataire || doc.destinataire?.toLowerCase().includes(filters.destinataire));
-
-        default:
-          return Object.values(commonFilters).every(v => v);
-      }
-    })();
-
-    // 8. Application combinée de tous les filtres
-    return matchesType && matchesDate && matchesSearch && matchesCategory && matchesAdvancedFilters;
-  });
+  // Application combinée de tous les filtres
+  return matchesType && matchesDate && matchesSearch && matchesCategory && matchesAdvancedFilters;
+});
 
 
   const handleOpenConfirm = async (doc) => {
