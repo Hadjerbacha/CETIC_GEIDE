@@ -13,30 +13,62 @@ const DetailsTask = () => {
   const [successMessage, setSuccessMessage] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
   const [actionType, setActionType] = useState(null); // 'complete' or 'reject'
-
+  const [workflowDocument, setWorkflowDocument] = useState(null);
+   const [taskFile, setTaskFile] = useState(null);
   const token = localStorage.getItem('token');
 
-  useEffect(() => {
-    const fetchTask = async () => {
+ useEffect(() => {
+  const fetchTaskAndDocuments = async () => {
       try {
-        const response = await axios.get('http://localhost:5000/api/tasks/mes-taches', {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
+        // 1. Récupérer la tâche spécifique
+        const taskResponse = await axios.get(`http://localhost:5000/api/tasks/mes-taches`, {
+          headers: { Authorization: `Bearer ${token}` }
         });
 
-        const taskData = response.data.find(t => t.id.toString() === id);
-        if (taskData) {
-          setTask(taskData);
-          setComment(taskData.assignment_note || '');
+        const taskData = taskResponse.data.find(t => t.id.toString() === id);
+        if (!taskData) {
+          navigate('/mes-taches');
+          return;
+        }
+
+        setTask(taskData);
+        setComment(taskData.assignment_note || '');
+
+        // 2. Récupérer le fichier attaché directement à la tâche
+        if (taskData.file_path) {
+          setTaskFile({
+            name: 'Fichier attaché à la tâche',
+            path: taskData.file_path
+          });
+        }
+
+        // 3. Si la tâche a un workflow, récupérer le document associé
+        if (taskData.workflow_id) {
+          try {
+            const workflowResponse = await axios.get(
+              `http://localhost:5000/api/workflows/${taskData.workflow_id}`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+
+            if (workflowResponse.data.workflow?.document_id) {
+              const documentResponse = await axios.get(
+                `http://localhost:5000/api/documents/${workflowResponse.data.workflow.document_id}`,
+                { headers: { Authorization: `Bearer ${token}` } }
+              );
+              setWorkflowDocument(documentResponse.data);
+            }
+          } catch (error) {
+            console.error('Erreur récupération workflow/document:', error);
+          }
         }
       } catch (error) {
-        console.error('Erreur lors de la récupération des tâches :', error);
+        console.error('Erreur récupération tâche:', error);
+        navigate('/mes-taches');
       }
     };
 
-    fetchTask();
-  }, [id, token]);
+    fetchTaskAndDocuments();
+  }, [id, token, navigate]);
 
   const handleCommentChange = (e) => setComment(e.target.value);
   const handleFileChange = (e) => setResponseFile(e.target.files[0]);
@@ -185,13 +217,40 @@ const DetailsTask = () => {
           <hr />
 
           <h5>Fichiers liés :</h5>
-          <ul>
-            {task.file_path && (
-              <li>
-                <a href={`http://localhost:5000/${task.file_path}`} target="_blank" rel="noreferrer">
-                  Fichier
+          <ul className="list-unstyled">
+            {/* Fichier attaché directement à la tâche */}
+            {taskFile && (
+              <li className="mb-2">
+                <a 
+                  href={`http://localhost:5000${taskFile.path}`} 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="text-decoration-none"
+                >
+                  <i className="bi bi-file-earmark me-2"></i>
+                  {taskFile.name}
                 </a>
               </li>
+            )}
+
+            {/* Document principal du workflow */}
+            {workflowDocument && (
+              <li className="mb-2">
+                <a 
+                  href={`http://localhost:5000${workflowDocument.file_path}`} 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="text-decoration-none"
+                >
+                  <i className="bi bi-file-earmark-text me-2"></i>
+                  Document du workflow: {workflowDocument.name}
+                </a>
+              </li>
+            )}
+
+            {/* Message si aucun fichier */}
+            {!taskFile && !workflowDocument && (
+              <li className="text-muted">Aucun fichier associé à cette tâche</li>
             )}
           </ul>
 

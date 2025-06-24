@@ -210,33 +210,41 @@ const ActivityLog = () => {
   };
 
   // Filtrer les données selon les critères
-  const filteredData = activities
-    .filter(item => {
-      // Filtre par type d'action
-      if (filters.actionType && item.action_type !== filters.actionType) {
-        return false;
-      }
-      
-      // Filtre par date
-      if (filters.dateFrom && new Date(item.timestamp) < new Date(filters.dateFrom)) {
-        return false;
-      }
-      if (filters.dateTo && new Date(item.timestamp) > new Date(filters.dateTo + 'T23:59:59')) {
-        return false;
-      }
-      
-      // Filtre par utilisateur (géré côté serveur via params.userId)
-      
-      // Filtre par type de vue
-      if (filters.viewType === 'sessions') {
-        return item.action_type === 'login' || item.action_type === 'logout';
-      } else if (filters.viewType === 'activities') {
-        return item.action_type !== 'login' && item.action_type !== 'logout';
-      }
-      
-      return true;
-    })
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+ // Filtrer les données selon les critères
+const filteredData = activities
+  .filter(item => {
+    // Filtre par type d'action
+    if (filters.actionType && item.action_type !== filters.actionType) {
+      return false;
+    }
+    
+    // Convertir les dates en objets Date pour comparaison
+    const itemDate = new Date(item.timestamp);
+    const fromDate = filters.dateFrom ? new Date(filters.dateFrom) : null;
+    const toDate = filters.dateTo ? new Date(filters.dateTo + 'T23:59:59') : null;
+    
+    // Filtre par date "from"
+    if (fromDate && itemDate < fromDate) {
+      return false;
+    }
+    
+    // Filtre par date "to"
+    if (toDate && itemDate > toDate) {
+      return false;
+    }
+    
+    // Filtre par utilisateur (géré côté serveur via params.userId)
+    
+    // Filtre par type de vue
+    if (filters.viewType === 'sessions') {
+      return item.action_type === 'login' || item.action_type === 'logout';
+    } else if (filters.viewType === 'activities') {
+      return item.action_type !== 'login' && item.action_type !== 'logout';
+    }
+    
+    return true;
+  })
+  .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
   return (
     <>
@@ -274,16 +282,28 @@ const ActivityLog = () => {
                 </Col>
                 
                 <Col md={3}>
-                  <Form.Group controlId="dateFrom">
-                    <Form.Label>Date</Form.Label>
-                    <Form.Control
-                      type="date"
-                      value={filters.dateFrom}
-                      onChange={(e) => setFilters({...filters, dateFrom: e.target.value})}
-                      max={filters.dateTo || undefined}
-                    />
-                  </Form.Group>
-                </Col>
+    <Form.Group controlId="dateFrom">
+      <Form.Label>Du</Form.Label>
+      <Form.Control
+        type="date"
+        value={filters.dateFrom}
+        onChange={(e) => setFilters({...filters, dateFrom: e.target.value})}
+        max={filters.dateTo || undefined}
+      />
+    </Form.Group>
+  </Col>
+  
+  <Col md={3}>
+    <Form.Group controlId="dateTo">
+      <Form.Label>Au</Form.Label>
+      <Form.Control
+        type="date"
+        value={filters.dateTo}
+        onChange={(e) => setFilters({...filters, dateTo: e.target.value})}
+        min={filters.dateFrom || undefined}
+      />
+    </Form.Group>
+  </Col>
               
               {currentUser?.role === 'admin' && (
                   <Col md={6}>

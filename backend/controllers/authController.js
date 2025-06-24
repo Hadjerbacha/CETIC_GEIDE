@@ -350,6 +350,29 @@ const assignTasksAutomatically = async (workflowId, tasks) => {
   }
 };
 
+// Dans authController.js, ajoutez cette nouvelle fonction
+const getCurrentUser = async (req, res) => {
+  try {
+    // L'utilisateur est déjà attaché à la requête par le middleware d'authentification
+    if (!req.user) {
+      return res.status(401).json({ message: "Non autorisé" });
+    }
+
+    // Récupérer les données complètes de l'utilisateur depuis la base de données
+    const result = await pool.query('SELECT id, name, prenom, email, role, is_active FROM users WHERE id = $1', [req.user.id]);
+    const user = result.rows[0];
+
+    if (!user) {
+      return res.status(404).json({ message: "Utilisateur non trouvé" });
+    }
+
+    res.json(user);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+};
+
 module.exports = {
   getUsersController,
   login,
@@ -359,5 +382,6 @@ module.exports = {
   logout,
   getUserSessionsController,
   assignTasksAutomatically,
-  toggleUserStatus
+  toggleUserStatus,
+  getCurrentUser
 };

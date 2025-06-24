@@ -64,7 +64,7 @@ const classifyText = async (text, filePath) => {
   }
 
   // Si ce n'est pas un média, utiliser le NLP pour classification
-  const defaultCategories = ["contrat", "facture", "demande_conge", "cv", "autre"];
+  const defaultCategories = ["contrat", "facture", "demande_conge", "cv","rapport", "autre"];
 
   try {
     const response = await axios.post(

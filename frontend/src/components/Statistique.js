@@ -521,7 +521,7 @@ const Statistique = () => {
 
   return (
     <>
-      
+      <Navbar />
       <Container fluid className="stat-container">
         {loading ? (
           <LoadingIndicator />
