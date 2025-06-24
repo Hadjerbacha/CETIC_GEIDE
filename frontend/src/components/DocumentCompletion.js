@@ -27,7 +27,7 @@ const DocumentCompletion = () => {
   const [existingDocument, setExistingDocument] = useState(null);
   const [differenceNote, setDifferenceNote] = useState('');
   const [canAddVersion, setCanAddVersion] = useState(false);
-  const [isNewVersion, setIsNewVersion] = useState(false);
+  const [isNewVersion, setIsNewVersion] = useState(true);
 
   const category = docInfo?.category || '';
 
@@ -56,34 +56,53 @@ const DocumentCompletion = () => {
 
     return () => clearTimeout(timer);
   }, [baseName, extension]);
-
   useEffect(() => {
     const initialize = async () => {
       if (!id || !token) return;
 
       try {
-        // Récupération des infos utilisateur
+        // 1. Récupération des infos utilisateur
         const { id: decodedId, role } = jwtDecode(token);
         setUserId(decodedId);
         setUserRole(role);
 
-        // Vérification des permissions
-        const permRes = await axios.get(`http://localhost:5000/api/documents/${id}/my-permissions`, {
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        setCanAddVersion(role === 'admin' || permRes.data.can_modify);
-
-        // Chargement du document
+        // 2. Chargement du document actuel
         const res = await axios.get(`http://localhost:5000/api/documents/${id}`, {
           headers: { Authorization: `Bearer ${token}` }
         });
         const doc = res.data;
         setDocInfo(doc);
+        setIsCompleted(doc.is_completed);
+
+        // 3. Trouver la dernière version complétée (en excluant le document actuel)
+        const lastCompleted = await getLastCompletedVersion(doc.name, id);
+
+        // 4. Vérification des permissions
+        let canModify = false;
+        if (role === 'admin') {
+          canModify = true;
+        } else {
+          // Vérifier les permissions sur la dernière version complétée si elle existe
+          const docIdToCheck = lastCompleted ? lastCompleted.id : id;
+          try {
+            const permRes = await axios.get(
+              `http://localhost:5000/api/documents/${docIdToCheck}/my-permissions`,
+              { headers: { Authorization: `Bearer ${token}` } }
+            );
+            canModify = permRes.data.can_modify;
+          } catch (permErr) {
+            console.error("Erreur vérification permissions:", permErr);
+            canModify = false;
+          }
+        }
+        setCanAddVersion(canModify);
+
+        // 5. Initialisation des champs du formulaire
         setSummary(doc.summary || '');
         setTags((doc.tags || []).join(', '));
         setPriority(doc.priority || '');
 
-        // Extraction du nom et extension
+        // Extraction nom et extension
         const parts = doc.name.split('.');
         if (parts.length > 1) {
           setExtension(parts.pop());
@@ -93,7 +112,7 @@ const DocumentCompletion = () => {
           setExtension('');
         }
 
-        // Champs spécifiques par catégorie
+        // 6. Initialisation des champs spécifiques
         const defaultFields = {
           facture: {
             numero_facture: '',
@@ -146,11 +165,16 @@ const DocumentCompletion = () => {
         }
 
       } catch (error) {
+        console.error("Erreur initialisation:", error);
         setErrorMessage("Erreur lors du chargement du document.");
       }
     };
 
     initialize();
+
+    return () => {
+      // Cleanup si nécessaire
+    };
   }, [id, token]);
 
   const validateDates = (dateDebut, dateFin) => {
@@ -181,19 +205,44 @@ const DocumentCompletion = () => {
     }
   };
 
+  const getLastCompletedVersion = async (docName, excludeId = null) => {
+    try {
+      const params = {
+        name: docName,
+        exclude_id: excludeId
+      };
+
+      const res = await axios.get(`http://localhost:5000/api/documents/last-completed`, {
+        params,
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      return res.data.document;
+    } catch (error) {
+      console.error("Error fetching last completed version:", error);
+      return null;
+    }
+  };
 
 
   const checkForDuplicate = async (docName) => {
     if (!docName.trim()) return false;
 
     try {
+      // 1. Vérifier si un document avec ce nom existe
       const res = await axios.get(`http://localhost:5000/api/documents/check-name`, {
         params: { name: docName, currentDocId: id },
         headers: { Authorization: `Bearer ${token}` }
       });
 
       if (res.data.exists) {
-        setExistingDocument(res.data.document);
+        // 2. Trouver la dernière version complétée (en excluant le document actuel)
+        const lastCompleted = await getLastCompletedVersion(docName, id);
+
+        if (lastCompleted) {
+          setExistingDocument(lastCompleted);
+        } else {
+          setExistingDocument(res.data.document);
+        }
         return true;
       }
       return false;
@@ -204,8 +253,8 @@ const DocumentCompletion = () => {
   };
 
   const shouldShowCommonFields = (category) => {
-  return !['contrat', 'rapport', 'facture', 'demande_conge','cv'].includes(category);
-};
+    return !['contrat', 'rapport', 'facture', 'demande_conge', 'cv'].includes(category);
+  };
 
   const saveDocument = async () => {
     setIsSaving(true);
@@ -372,18 +421,18 @@ const DocumentCompletion = () => {
 
               {existingDocument && existingDocument.id !== docInfo?.id && (
                 <Alert variant={canAddVersion ? "warning" : "danger"} className="mb-3">
-                  <strong>Un document avec ce nom existe déjà.</strong>
+                  <strong>Un fichier avec ce nom existe déjà.</strong>
                   {canAddVersion ? (
                     <Form.Check
                       type="switch"
                       id="version-switch"
-                      label="Ajouter comme nouvelle version"
+                      label="Ajouter comme nouvelle version (pour un nouveau fichier veuillez changez le nom)"
                       checked={isNewVersion}
                       onChange={() => setIsNewVersion(!isNewVersion)}
                       className="mt-2"
                     />
                   ) : (
-                    <p className="mb-0 mt-2">Vous n'avez pas les droits de modification.</p>
+                    <p className="mb-0 mt-2">Veuillez changer le nom svp.</p>
                   )}
                 </Alert>
               )}
@@ -412,73 +461,73 @@ const DocumentCompletion = () => {
                   </div>
                 </Form.Group>
 
-               {category === 'facture' ? (
-  <>
-    <Form.Group className="mb-3">
-      <Form.Label>Numéro de facture</Form.Label>
-      <Form.Control
-        type="text"
-        value={extraFields.numero_facture || ''}
-        onChange={(e) => setExtraFields({...extraFields, numero_facture: e.target.value})}
-        required
-      />
-    </Form.Group>
-    
-    <Form.Group className="mb-3">
-      <Form.Label>Date de facture</Form.Label>
-      <Form.Control
-        type="date"
-        value={extraFields.date_facture || ''}
-        onChange={(e) => setExtraFields({...extraFields, date_facture: e.target.value})}
-        required
-      />
-    </Form.Group>
-    
-    <Form.Group className="mb-3">
-      <Form.Label>Montant</Form.Label>
-      <Form.Control
-        type="text"
-        value={extraFields.montant || ''}
-        onChange={(e) => setExtraFields({...extraFields, montant: e.target.value})}
-        required
-      />
-    </Form.Group>
-    
-    <Form.Group className="mb-3">
-      <Form.Label>Nom entreprise</Form.Label>
-      <Form.Control
-        type="text"
-        value={extraFields.nom_entreprise || ''}
-        onChange={(e) => setExtraFields({...extraFields, nom_entreprise: e.target.value})}
-        required
-      />
-    </Form.Group>
-    
-    <Form.Group className="mb-3">
-      <Form.Label>Produit</Form.Label>
-      <Form.Control
-        type="text"
-        value={extraFields.produit || ''}
-        onChange={(e) => setExtraFields({...extraFields, produit: e.target.value})}
-        required
-      />
-    </Form.Group>
-  </>
-) : (
-  Object.entries(extraFields).map(([key, value]) => (
-    <Form.Group className="mb-3" key={key}>
-      <Form.Label>
-        {key.replace(/_/g, ' ').charAt(0).toUpperCase() + key.replace(/_/g, ' ').slice(1)}
-      </Form.Label>
-      <Form.Control
-        type={key.toLowerCase().includes('date') ? 'date' : 'text'}
-        value={value || ''}
-        onChange={(e) => setExtraFields(prev => ({ ...prev, [key]: e.target.value }))}
-        required
-      />
-    </Form.Group>
-  ))
-)}
+                {category === 'facture' ? (
+                  <>
+                    <Form.Group className="mb-3">
+                      <Form.Label>Numéro de facture</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={extraFields.numero_facture || ''}
+                        onChange={(e) => setExtraFields({ ...extraFields, numero_facture: e.target.value })}
+                        required
+                      />
+                    </Form.Group>
+
+                    <Form.Group className="mb-3">
+                      <Form.Label>Date de facture</Form.Label>
+                      <Form.Control
+                        type="date"
+                        value={extraFields.date_facture || ''}
+                        onChange={(e) => setExtraFields({ ...extraFields, date_facture: e.target.value })}
+                        required
+                      />
+                    </Form.Group>
+
+                    <Form.Group className="mb-3">
+                      <Form.Label>Montant</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={extraFields.montant || ''}
+                        onChange={(e) => setExtraFields({ ...extraFields, montant: e.target.value })}
+                        required
+                      />
+                    </Form.Group>
+
+                    <Form.Group className="mb-3">
+                      <Form.Label>Nom entreprise</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={extraFields.nom_entreprise || ''}
+                        onChange={(e) => setExtraFields({ ...extraFields, nom_entreprise: e.target.value })}
+                        required
+                      />
+                    </Form.Group>
+
+                    <Form.Group className="mb-3">
+                      <Form.Label>Produit</Form.Label>
+                      <Form.Control
+                        type="text"
+                        value={extraFields.produit || ''}
+                        onChange={(e) => setExtraFields({ ...extraFields, produit: e.target.value })}
+                        required
+                      />
+                    </Form.Group>
+                  </>
+                ) : (
+                  Object.entries(extraFields).map(([key, value]) => (
+                    <Form.Group className="mb-3" key={key}>
+                      <Form.Label>
+                        {key.replace(/_/g, ' ').charAt(0).toUpperCase() + key.replace(/_/g, ' ').slice(1)}
+                      </Form.Label>
+                      <Form.Control
+                        type={key.toLowerCase().includes('date') ? 'date' : 'text'}
+                        value={value || ''}
+                        onChange={(e) => setExtraFields(prev => ({ ...prev, [key]: e.target.value }))}
+                        required
+                      />
+                    </Form.Group>
+                  ))
+                )}
 
                 {shouldShowCommonFields(category) && (
                   <>

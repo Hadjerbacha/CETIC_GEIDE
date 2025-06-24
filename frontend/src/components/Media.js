@@ -1226,7 +1226,7 @@ const filteredDocuments = latestDocs.filter((doc) => {
                         </h5>
                         <Form>
                           <div className="d-flex align-items-end gap-3 flex-wrap">
-                            {/* Description - Modifié pour avoir la même hauteur */}
+                            {/* Description - Modifié pour avoir la même hauteur 
                             <Form.Group className="mb-0 flex-grow-1">
                               <Form.Label>Description</Form.Label>
                               <Form.Control
@@ -1236,7 +1236,7 @@ const filteredDocuments = latestDocs.filter((doc) => {
                                 value={searchFilters.description || ''}
                                 onChange={(e) => setSearchFilters({ ...searchFilters, description: e.target.value })}
                               />
-                            </Form.Group>
+                            </Form.Group>*/}
 
                             {/* Tags */}
                             <Form.Group className="mb-0" style={{ minWidth: '200px' }}>

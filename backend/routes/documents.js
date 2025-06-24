@@ -425,18 +425,31 @@ router.get('/', auth, async (req, res) => {
     endDate,
     searchQuery = '',
     selectedCategory = '',
+    description = '',
+    summary = '',
+    // Filtres facture
     numero_facture,
     montant,
     date_facture,
+    nom_entreprise,
+    produit,
+    // Filtres CV
     nom_candidat,
     metier,
     date_cv,
-    num_demande,  // Changé de numdemande à num_demande
-    date_debut,   // Changé de dateconge à date_debut
-    date_fin,     // Ajout du filtre date_fin
-    nom_entreprise,  // <-- AJOUTEZ CES DEUX CHAMPS
-    produit,        // <-- AJOUTEZ CES DEUX CHAMPS
-    motif         // Ajout du filtre motif
+    // Filtres demande congé
+    num_demande,
+    date_debut,
+    date_fin,
+    motif,
+    // Filtres contrat
+    numero_contrat,
+    type_contrat,
+    partie_prenante,
+    date_signature,
+    date_echeance,
+    montant_contrat,
+    statut
   } = req.query;
 
   try {
@@ -444,15 +457,15 @@ router.get('/', auth, async (req, res) => {
       SELECT DISTINCT d.*, dc.is_saved, dc.collection_name,
         f.numero_facture, f.montant, f.date_facture, f.nom_entreprise, f.produit, 
         cv.nom_candidat, cv.metier, cv.date_cv,
-        dcong.num_demande, 
-        dcong.date_debut,  // Changé de dateconge à date_debut
-        dcong.date_fin,    // Ajout de date_fin
-        dcong.motif        // Ajout de motif
+        dcong.num_demande, dcong.date_debut, dcong.date_fin, dcong.motif,
+        c.numero_contrat, c.type_contrat, c.partie_prenante, 
+        c.date_signature, c.date_echeance, c.montant as montant_contrat, c.statut
       FROM documents d
       LEFT JOIN document_collections dc ON dc.document_id = d.id
       LEFT JOIN factures f ON f.document_id = d.id
       LEFT JOIN cv ON cv.document_id = d.id
-      LEFT JOIN demande_conges dcong ON dcong.document_id = d.id  // Changé de demande_conge à demande_conges
+      LEFT JOIN demande_conges dcong ON dcong.document_id = d.id
+      LEFT JOIN contrats c ON c.document_id = d.id
       ${!isAdmin ? 'LEFT JOIN document_permissions dp ON dp.document_id = d.id' : ''}
       WHERE true
     `;
@@ -464,7 +477,7 @@ router.get('/', auth, async (req, res) => {
       baseQuery += `
         AND (
           d.visibility = 'public'
-          OR (dp.user_id = $1 AND dp.access_type IN ('custom', 'read', 'owner'))
+          OR (dp.user_id = $${paramIndex} AND dp.access_type IN ('custom', 'read', 'owner'))
         )
       `;
       params.push(userId);
@@ -510,6 +523,20 @@ router.get('/', auth, async (req, res) => {
         )
       )`;
       params.push(`%${searchQuery.toLowerCase()}%`);
+      paramIndex++;
+    }
+    // AJOUTEZ ces nouveaux blocs :
+    // Filtre par description
+    if (description) {
+      baseQuery += ` AND LOWER(d.description) LIKE $${paramIndex}`;
+      params.push(`%${description.toLowerCase()}%`);
+      paramIndex++;
+    }
+
+    // Filtre par summary
+    if (summary) {
+      baseQuery += ` AND LOWER(d.summary) LIKE $${paramIndex}`;
+      params.push(`%${summary.toLowerCase()}%`);
       paramIndex++;
     }
 
@@ -561,7 +588,7 @@ router.get('/', auth, async (req, res) => {
       }
     }
 
-    // Filtres spécifiques Demande Congé (MAJ complète)
+    // Filtres spécifiques Demande Congé
     if (selectedCategory === 'demande_conge') {
       if (num_demande) {
         baseQuery += ` AND dcong.num_demande ILIKE $${paramIndex}`;
@@ -585,6 +612,45 @@ router.get('/', auth, async (req, res) => {
       }
     }
 
+    // Filtres spécifiques Contrat
+    if (selectedCategory === 'contrat') {
+      if (numero_contrat) {
+        baseQuery += ` AND c.numero_contrat ILIKE $${paramIndex}`;
+        params.push(`%${numero_contrat}%`);
+        paramIndex++;
+      }
+      if (type_contrat) {
+        baseQuery += ` AND LOWER(c.type_contrat) = $${paramIndex}`;
+        params.push(type_contrat.toLowerCase());
+        paramIndex++;
+      }
+      if (partie_prenante) {
+        baseQuery += ` AND c.partie_prenante ILIKE $${paramIndex}`;
+        params.push(`%${partie_prenante}%`);
+        paramIndex++;
+      }
+      if (date_signature) {
+        baseQuery += ` AND c.date_signature = $${paramIndex}`;
+        params.push(date_signature);
+        paramIndex++;
+      }
+      if (date_echeance) {
+        baseQuery += ` AND c.date_echeance = $${paramIndex}`;
+        params.push(date_echeance);
+        paramIndex++;
+      }
+      if (montant_contrat) {
+        baseQuery += ` AND c.montant = $${paramIndex}`;
+        params.push(montant_contrat);
+        paramIndex++;
+      }
+      if (statut) {
+        baseQuery += ` AND LOWER(c.statut) = $${paramIndex}`;
+        params.push(statut.toLowerCase());
+        paramIndex++;
+      }
+    }
+
     baseQuery += ` ORDER BY d.date DESC`;
 
     const result = await pool.query(baseQuery, params);
@@ -592,24 +658,31 @@ router.get('/', auth, async (req, res) => {
     // Organisation des résultats
     const documents = result.rows.map((doc) => {
       const {
-        numero_facture, montant, date_facture,
+        numero_facture, montant, date_facture, nom_entreprise, produit,
         nom_candidat, metier, date_cv,
-        num_demande, date_debut, date_fin, motif,  // MAJ des noms de champs
+        num_demande, date_debut, date_fin, motif,
+        numero_contrat, type_contrat, partie_prenante,
+        date_signature, date_echeance, montant_contrat, statut,
         ...baseDoc
       } = doc;
 
       let metadata = {};
 
       if (doc.category === 'facture') {
-        metadata = { numero_facture, montant, date_facture, nom_entreprise,produit  };
+        metadata = { numero_facture, montant, date_facture, nom_entreprise, produit };
       } else if (doc.category === 'cv') {
         metadata = { nom_candidat, metier, date_cv };
       } else if (doc.category === 'demande_conge') {
+        metadata = { num_demande, date_debut, date_fin, motif };
+      } else if (doc.category === 'contrat') {
         metadata = {
-          num_demande,
-          date_debut,  // MAJ du nom du champ
-          date_fin,    // Ajout du champ
-          motif        // Ajout du champ
+          numero_contrat,
+          type_contrat,
+          partie_prenante,
+          date_signature,
+          date_echeance,
+          montant: montant_contrat,
+          statut
         };
       }
 
@@ -626,6 +699,30 @@ router.get('/', auth, async (req, res) => {
   }
 });
 
+// Nouveau endpoint pour last-completed
+// GET /api/documents/last-completed
+router.get('/last-completed', async (req, res) => {
+  try {
+    const { name, exclude_id } = req.query;
+    
+    const query = `
+      SELECT * FROM documents 
+      WHERE name = $1 
+      AND is_completed = true
+      ${exclude_id ? 'AND id != $2' : ''}
+      ORDER BY version DESC 
+      LIMIT 1
+    `;
+    
+    const params = exclude_id ? [name, exclude_id] : [name];
+    
+    const result = await pool.query(query, params);
+    
+    res.json({ document: result.rows[0] });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 router.get('/check-name', async (req, res) => {
   const { name, currentDocId } = req.query; // Ajoutez currentDocId pour exclure le document actuel
 

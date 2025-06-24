@@ -450,7 +450,7 @@ const Doc = () => {
     };
   };
 
- const filteredDocuments = latestDocs.filter((doc) => {
+const filteredDocuments = latestDocs.filter((doc) => {
   // 1. Exclusion des fichiers média
   const filePath = doc.file_path?.toString() || '';
   const extension = filePath.split('.').pop().toLowerCase();
@@ -461,9 +461,10 @@ const Doc = () => {
 
   const isPhoto = photoExtensions.includes(extension);
   const isVideo = videoExtensions.includes(extension);
-  const isMediaCategory = ['media', 'média'].includes(docCategory);
+  const isMediaCategory = ['media', 'média', 'photo', 'video', 'vidéo'].includes(docCategory);
 
-  if (isPhoto || isVideo || isMediaCategory) return false;
+  // Exclure les médias et les documents sans extension
+  if (!extension || isPhoto || isVideo || isMediaCategory) return false;
 
   // 2. Normalisation des données
   const docName = doc.name ? doc.name.toString().toLowerCase() : '';
@@ -555,6 +556,8 @@ const Doc = () => {
           (!filters.type_contrat || doc.type_contrat?.toLowerCase() === filters.type_contrat) &&
           (!filters.partie_prenante || doc.partie_prenante?.toLowerCase().includes(filters.partie_prenante)) &&
           (!filters.date_signature || (doc.date_signature && new Date(doc.date_signature).toISOString().split('T')[0] === filters.date_signature)) &&
+          (!filters.date_echeance || (doc.date_echeance && new Date(doc.date_echeance).toISOString().split('T')[0] === filters.date_echeance)) &&
+          (!filters.montant || Number(doc.montant) === Number(filters.montant)) &&
           (!filters.statut || doc.statut?.toLowerCase() === filters.statut)
         );
 
@@ -1270,6 +1273,14 @@ const Doc = () => {
                                 onChange={(e) => setSearchFilters({ ...searchFilters, date_signature: e.target.value })}
                               />
                             </Form.Group>
+                            <Form.Group className="mb-0">
+                              <Form.Label>Montant</Form.Label>
+                              <Form.Control
+                                type="number"
+                                value={searchFilters.montant || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, montant: e.target.value })}
+                              />
+                            </Form.Group>
 
                             <Form.Group className="mb-0">
                               <Form.Label>Statut</Form.Label>
@@ -1343,7 +1354,7 @@ const Doc = () => {
                         </h5>
                         <Form>
                           <div className="d-flex align-items-end gap-3 flex-wrap">
-                            {/* Description - Modifié pour avoir la même hauteur */}
+                            {/* Description - Modifié pour avoir la même hauteur
                             <Form.Group className="mb-0 flex-grow-1">
                               <Form.Label>Description</Form.Label>
                               <Form.Control
@@ -1354,7 +1365,7 @@ const Doc = () => {
                                 onChange={(e) => setSearchFilters({ ...searchFilters, description: e.target.value })}
                               />
                             </Form.Group>
-
+ */}
                             {/* Tags */}
                             <Form.Group className="mb-0" style={{ minWidth: '200px' }}>
                               <Form.Label>Tags</Form.Label>
