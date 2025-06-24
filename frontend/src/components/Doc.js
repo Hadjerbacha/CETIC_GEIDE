@@ -552,9 +552,14 @@ const Doc = () => {
           return commonFilters.description &&
             commonFilters.summary &&
             commonFilters.tags &&
+            // Filtre par numéro de demande
             (!filters.numdemande || doc.num_demande?.toString().includes(filters.numdemande)) &&
-            (!filters.dateconge || (doc.date_debut && new Date(doc.date_debut).toISOString().split('T')[0] === filters.dateconge));
-
+            // Filtre par date de début (remplace dateconge)
+            (!filters.date_debut || (doc.date_debut && new Date(doc.date_debut).toISOString().split('T')[0] === filters.date_debut)) &&
+            // Filtre par date de fin
+            (!filters.date_fin || (doc.date_fin && new Date(doc.date_fin).toISOString().split('T')[0] === filters.date_fin)) &&
+            // Filtre par motif
+            (!filters.motif || (doc.motif && doc.motif.toLowerCase().includes(filters.motif.toLowerCase())));
         case 'contrat':
           return commonFilters.description &&
             commonFilters.summary &&
@@ -581,7 +586,9 @@ const Doc = () => {
 
     // 8. Application combinée de tous les filtres
     return matchesType && matchesDate && matchesSearch && matchesCategory && matchesAdvancedFilters;
-});
+  });
+
+
   const handleOpenConfirm = async (doc) => {
     setModalDoc(doc);
     setAutoWfName(`WF_${doc.name}`);
@@ -884,25 +891,25 @@ const Doc = () => {
     }
   };
 
-const handleDeleteWorkflow = async () => {
-  if (!existingWorkflow) return;
+  const handleDeleteWorkflow = async () => {
+    if (!existingWorkflow) return;
 
-  try {
-    const response = await axios.delete(
-      `http://localhost:5000/api/workflows/${existingWorkflow.id}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
+    try {
+      const response = await axios.delete(
+        `http://localhost:5000/api/workflows/${existingWorkflow.id}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
 
-    if (response.status === 200) {
-      toast.success('Workflow supprimé avec succès');
-      setExistingWorkflow(null);
-      setShowConfirmModal(false);
+      if (response.status === 200) {
+        toast.success('Workflow supprimé avec succès');
+        setExistingWorkflow(null);
+        setShowConfirmModal(false);
+      }
+    } catch (error) {
+      console.error('Erreur suppression workflow:', error);
+      toast.error('Échec de la suppression du workflow');
     }
-  } catch (error) {
-    console.error('Erreur suppression workflow:', error);
-    toast.error('Échec de la suppression du workflow');
-  }
-};
+  };
 
   return (
     <>
@@ -1080,33 +1087,71 @@ const handleDeleteWorkflow = async () => {
                         <h5 className="mb-3">🔎 Recherche avancée - Demande de congé</h5>
                         <Form>
                           <div className="d-flex align-items-end gap-3 flex-wrap">
+                            {/* Numéro demande */}
                             <Form.Group className="mb-0">
                               <Form.Label>Numéro demande</Form.Label>
                               <Form.Control
                                 type="text"
-                                value={searchFilters.numdemande || ''}
-                                onChange={(e) => setSearchFilters({ ...searchFilters, numdemande: e.target.value })}
+                                value={searchFilters.numdemande || searchFilters.num_demande || ''}
+                                onChange={(e) => setSearchFilters({
+                                  ...searchFilters,
+                                  numdemande: e.target.value,
+                                  num_demande: e.target.value
+                                })}
                               />
                             </Form.Group>
+
+                            {/* Date début */}
                             <Form.Group className="mb-0">
-                              <Form.Label>Date congé</Form.Label>
+                              <Form.Label>Date début</Form.Label>
                               <Form.Control
                                 type="date"
-                                value={searchFilters.dateconge || ''}
-                                onChange={(e) => setSearchFilters({ ...searchFilters, dateconge: e.target.value })}
+                                value={searchFilters.date_debut || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, date_debut: e.target.value })}
                               />
                             </Form.Group>
-                            <div className="d-flex align-items-end">
-                              <Button className="btn-purple" onClick={filteredDocuments}>
+
+                            {/* Date fin */}
+                            <Form.Group className="mb-0">
+                              <Form.Label>Date fin</Form.Label>
+                              <Form.Control
+                                type="date"
+                                value={searchFilters.date_fin || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, date_fin: e.target.value })}
+                              />
+                            </Form.Group>
+
+                            {/* Motif */}
+                            <Form.Group className="mb-0">
+                              <Form.Label>Motif</Form.Label>
+                              <Form.Control
+                                type="text"
+                                value={searchFilters.motif || ''}
+                                onChange={(e) => setSearchFilters({ ...searchFilters, motif: e.target.value })}
+                              />
+                            </Form.Group>
+
+                            <div className="d-flex align-items-end gap-2">
+                              <Button
+                                variant="outline-secondary"
+                                onClick={() => setSearchFilters({})}
+                              >
+                                Réinitialiser
+                              </Button>
+                              <Button
+                                className="btn-purple"
+                                onClick={() => {
+                                  console.log("Filtres appliqués:", searchFilters);
+                                  filteredDocuments();
+                                }}
+                              >
                                 Rechercher
                               </Button>
-
                             </div>
                           </div>
                         </Form>
                       </>
                     )}
-
                     {selectedCategory === 'cv' && (
                       <>
                         <h5 className="mb-3">🔎 Recherche avancée - CV</h5>
@@ -1858,79 +1903,79 @@ const handleDeleteWorkflow = async () => {
                 </Modal.Footer>
               </Modal>
 
-      <div className="d-flex justify-content-center">    
-  <Modal
-  show={showConfirmModal}
-  onHide={() => setShowConfirmModal(false)}
-  centered
-  style={{ zIndex: 1050 }} // Ajustez la largeur selon vos besoins
-  dialogClassName="custom-workflow-modal" // Classe personnalisée pour des ajustements supplémentaires
->
-  <Modal.Header closeButton size="xl">
-    <Modal.Title>
-      {existingWorkflow 
-        ? 'Workflow existant détecté' 
-        : 'Créer un nouveau workflow ?'}
-    </Modal.Title>
-  </Modal.Header>
-  <Modal.Body>
-    {existingWorkflow ? (
-      <div className="text-center">
-        <Alert variant="warning">
-          Un workflow existe déjà pour ce document !
-        </Alert>
-        <p><strong>Nom:</strong> {existingWorkflow.name}</p>
-        <p><strong>Statut:</strong> {existingWorkflow.status}</p>
-        <div className="d-flex justify-content-center gap-3 mt-4">
-          <Button
-            variant="primary"
-            onClick={() => {
-              setShowConfirmModal(false);
-              navigate(`/workflowz/${existingWorkflow.id}`);
-            }}
-          >
-            Voir le workflow existant
-          </Button>
-          <Button
-            variant="danger"
-            onClick={handleDeleteWorkflow}
-          >
-            Annuler le workflow
-          </Button>
-        </div>
-      </div>
-    ) : (
-      <>
-        <p>Vous êtes sur le point de créer le workflow pour le document :</p>
-        <strong>{modalDoc?.name}</strong>
-        <hr />
-        <Form.Group>
-          <Form.Label>Nom du workflow</Form.Label>
-          <Form.Control
-            type="text"
-            value={autoWfName}
-            onChange={e => setAutoWfName(e.target.value)}
-          />
-        </Form.Group>
-      </>
-    )}
-  </Modal.Body>
+              <div className="d-flex justify-content-center">
+                <Modal
+                  show={showConfirmModal}
+                  onHide={() => setShowConfirmModal(false)}
+                  centered
+                  style={{ zIndex: 1050 }} // Ajustez la largeur selon vos besoins
+                  dialogClassName="custom-workflow-modal" // Classe personnalisée pour des ajustements supplémentaires
+                >
+                  <Modal.Header closeButton size="xl">
+                    <Modal.Title>
+                      {existingWorkflow
+                        ? 'Workflow existant détecté'
+                        : 'Créer un nouveau workflow ?'}
+                    </Modal.Title>
+                  </Modal.Header>
+                  <Modal.Body>
+                    {existingWorkflow ? (
+                      <div className="text-center">
+                        <Alert variant="warning">
+                          Un workflow existe déjà pour ce document !
+                        </Alert>
+                        <p><strong>Nom:</strong> {existingWorkflow.name}</p>
+                        <p><strong>Statut:</strong> {existingWorkflow.status}</p>
+                        <div className="d-flex justify-content-center gap-3 mt-4">
+                          <Button
+                            variant="primary"
+                            onClick={() => {
+                              setShowConfirmModal(false);
+                              navigate(`/workflowz/${existingWorkflow.id}`);
+                            }}
+                          >
+                            Voir le workflow existant
+                          </Button>
+                          <Button
+                            variant="danger"
+                            onClick={handleDeleteWorkflow}
+                          >
+                            Annuler le workflow
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <p>Vous êtes sur le point de créer le workflow pour le document :</p>
+                        <strong>{modalDoc?.name}</strong>
+                        <hr />
+                        <Form.Group>
+                          <Form.Label>Nom du workflow</Form.Label>
+                          <Form.Control
+                            type="text"
+                            value={autoWfName}
+                            onChange={e => setAutoWfName(e.target.value)}
+                          />
+                        </Form.Group>
+                      </>
+                    )}
+                  </Modal.Body>
 
-  <Modal.Footer>
-    <Button variant="secondary" onClick={() => setShowConfirmModal(false)}>
-      Annuler
-    </Button>
-    {!existingWorkflow && (
-      <Button
-        variant="primary"
-        onClick={handleConfirmCreate}
-      >
-        Créer
-      </Button>
-    )}
-  </Modal.Footer>
-</Modal>
-</div>   
+                  <Modal.Footer>
+                    <Button variant="secondary" onClick={() => setShowConfirmModal(false)}>
+                      Annuler
+                    </Button>
+                    {!existingWorkflow && (
+                      <Button
+                        variant="primary"
+                        onClick={handleConfirmCreate}
+                      >
+                        Créer
+                      </Button>
+                    )}
+                  </Modal.Footer>
+                </Modal>
+              </div>
             </Card.Body>
           </Card>
         </Container>

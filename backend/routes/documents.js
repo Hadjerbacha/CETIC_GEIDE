@@ -85,10 +85,10 @@ const classifyText = async (text, filePath) => {
     return response.data?.category || 'autre';
   } catch (error) {
     console.error('Erreur NLP (ou timeout dépassé) :', error.message);
-    
+
     // Fallback basé sur des mots-clés
     const lowerText = text.toLowerCase();
-    
+
     if (lowerText.includes('contrat') || lowerText.includes('agreement') || lowerText.includes('signature')) {
       return 'contrat';
     }
@@ -361,23 +361,40 @@ router.get('/search', async (req, res) => {
       }
     }
 
-    else if (category === 'demande_conge') {
-      query = `
-        SELECT d.*, dc.*
-        FROM documents d
-        JOIN demande_conges dc ON d.id = dc.document_id
-      `;
+else if (category === 'demande_conge') {
+  query = `
+    SELECT 
+      d.*, 
+      dc.id as demande_id,
+      dc.num_demande,
+      dc.date_debut,
+      dc.date_fin,
+      dc.motif
+    FROM documents d
+    JOIN demande_conges dc ON d.id = dc.document_id
+  `;
 
-      if (filters.numdemande) {
-        values.push(`%${filters.numdemande}%`);
-        whereClauses.push(`dc.numdemande ILIKE $${values.length}`);
-      }
-      if (filters.dateconge) {
-        values.push(filters.dateconge);
-        whereClauses.push(`dc.dateconge = $${values.length}`);
-      }
-    }
-
+  // Filtres pour demande_conge
+  if (filters.numdemande) {
+    values.push(`%${filters.numdemande}%`);
+    whereClauses.push(`dc.num_demande ILIKE $${values.length}`);
+  }
+  
+  if (filters.date_debut) {
+    values.push(filters.date_debut);
+    whereClauses.push(`dc.date_debut >= $${values.length}`);
+  }
+  
+  if (filters.date_fin) {
+    values.push(filters.date_fin);
+    whereClauses.push(`dc.date_fin <= $${values.length}`);
+  }
+  
+  if (filters.motif) {
+    values.push(`%${filters.motif}%`);
+    whereClauses.push(`dc.motif ILIKE $${values.length}`);
+  }
+}
     else {
       return res.status(400).json({ error: 'Catégorie non supportée' });
     }
@@ -414,8 +431,10 @@ router.get('/', auth, async (req, res) => {
     nom_candidat,
     metier,
     date_cv,
-    numdemande,
-    dateconge,
+    num_demande,  // Changé de numdemande à num_demande
+    date_debut,   // Changé de dateconge à date_debut
+    date_fin,     // Ajout du filtre date_fin
+    motif         // Ajout du filtre motif
   } = req.query;
 
   try {
@@ -423,15 +442,15 @@ router.get('/', auth, async (req, res) => {
       SELECT DISTINCT d.*, dc.is_saved, dc.collection_name,
         f.numero_facture, f.montant, f.date_facture,
         cv.nom_candidat, cv.metier, cv.date_cv,
-        cv.nom_candidat AS nom_candidat,
-        cv.metier AS metier,
-        cv.date_cv AS date_cv,
-        dcg.num_demande, dcg.date_debut AS dateconge
+        dcong.num_demande, 
+        dcong.date_debut,  // Changé de dateconge à date_debut
+        dcong.date_fin,    // Ajout de date_fin
+        dcong.motif        // Ajout de motif
       FROM documents d
       LEFT JOIN document_collections dc ON dc.document_id = d.id
       LEFT JOIN factures f ON f.document_id = d.id
       LEFT JOIN cv ON cv.document_id = d.id
-      LEFT JOIN demande_conge dcg ON dcg.document_id = d.id
+      LEFT JOIN demande_conges dcong ON dcong.document_id = d.id  // Changé de demande_conge à demande_conges
       ${!isAdmin ? 'LEFT JOIN document_permissions dp ON dp.document_id = d.id' : ''}
       WHERE true
     `;
@@ -441,11 +460,10 @@ router.get('/', auth, async (req, res) => {
 
     if (!isAdmin) {
       baseQuery += `
-       AND (
-  d.visibility = 'public'
-  OR (dp.user_id = $1 AND dp.access_type IN ('custom', 'read', 'owner'))
-)
-
+        AND (
+          d.visibility = 'public'
+          OR (dp.user_id = $1 AND dp.access_type IN ('custom', 'read', 'owner'))
+        )
       `;
       params.push(userId);
       paramIndex++;
@@ -531,16 +549,26 @@ router.get('/', auth, async (req, res) => {
       }
     }
 
-    // Filtres spécifiques Demande Congé
+    // Filtres spécifiques Demande Congé (MAJ complète)
     if (selectedCategory === 'demande_conge') {
-      if (numdemande) {
-        baseQuery += ` AND dcg.num_demande ILIKE $${paramIndex}`;
-        params.push(`%${numdemande}%`);
+      if (num_demande) {
+        baseQuery += ` AND dcong.num_demande ILIKE $${paramIndex}`;
+        params.push(`%${num_demande}%`);
         paramIndex++;
       }
-      if (dateconge) {
-        baseQuery += ` AND dcg.date_debut = $${paramIndex}`;
-        params.push(dateconge);
+      if (date_debut) {
+        baseQuery += ` AND dcong.date_debut >= $${paramIndex}`;
+        params.push(date_debut);
+        paramIndex++;
+      }
+      if (date_fin) {
+        baseQuery += ` AND dcong.date_fin <= $${paramIndex}`;
+        params.push(date_fin);
+        paramIndex++;
+      }
+      if (motif) {
+        baseQuery += ` AND dcong.motif ILIKE $${paramIndex}`;
+        params.push(`%${motif}%`);
         paramIndex++;
       }
     }
@@ -549,12 +577,12 @@ router.get('/', auth, async (req, res) => {
 
     const result = await pool.query(baseQuery, params);
 
-    // 🔁 Organisation des résultats avec regroupement des métadonnées
+    // Organisation des résultats
     const documents = result.rows.map((doc) => {
       const {
         numero_facture, montant, date_facture,
         nom_candidat, metier, date_cv,
-        numdemande, dateconge,
+        num_demande, date_debut, date_fin, motif,  // MAJ des noms de champs
         ...baseDoc
       } = doc;
 
@@ -565,7 +593,12 @@ router.get('/', auth, async (req, res) => {
       } else if (doc.category === 'cv') {
         metadata = { nom_candidat, metier, date_cv };
       } else if (doc.category === 'demande_conge') {
-        metadata = { numdemande, dateconge };
+        metadata = { 
+          num_demande, 
+          date_debut,  // MAJ du nom du champ
+          date_fin,    // Ajout du champ
+          motif        // Ajout du champ
+        };
       }
 
       return {
@@ -583,13 +616,13 @@ router.get('/', auth, async (req, res) => {
 
 router.get('/check-name', async (req, res) => {
   const { name, currentDocId } = req.query; // Ajoutez currentDocId pour exclure le document actuel
-  
+
   if (!name) return res.status(400).json({ error: 'Nom manquant' });
 
   try {
     let query;
     let params = [name];
-    
+
     if (currentDocId) {
       query = 'SELECT * FROM documents WHERE name = $1 AND id != $2 ORDER BY version DESC LIMIT 1';
       params.push(currentDocId);
@@ -600,8 +633,8 @@ router.get('/check-name', async (req, res) => {
     const doc = await pool.query(query, params);
 
     if (doc.rows.length > 0) {
-      return res.json({ 
-        exists: true, 
+      return res.json({
+        exists: true,
         document: doc.rows[0],
         canAddVersion: true // Vous pourriez ajouter cette info si nécessaire
       });
@@ -660,19 +693,19 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
       const result = await Tesseract.recognize(fullPath, 'eng');
       extractedText = result.data.text;
     } else if (mimeType.startsWith('video/')) {
-  try {
-    extractedText = await transcribeAudio(fullPath);
-    if (!extractedText.trim()) {
-      extractedText = '[Vidéo sans transcription détectée]';
+      try {
+        extractedText = await transcribeAudio(fullPath);
+        if (!extractedText.trim()) {
+          extractedText = '[Vidéo sans transcription détectée]';
+        }
+      } catch (err) {
+        console.warn('⚠️ Transcription Whisper échouée:', err);
+        extractedText = '[Vidéo non transcrite]';
+      }
     }
-  } catch (err) {
-    console.warn('⚠️ Transcription Whisper échouée:', err);
-    extractedText = '[Vidéo non transcrite]';
-  }
-}
 
 
-  const finalCategory = await classifyText(extractedText, req.file.originalname);
+    const finalCategory = await classifyText(extractedText, req.file.originalname);
 
     const existing = await pool.query(
       'SELECT * FROM documents WHERE name = $1 ORDER BY version DESC NULLS LAST LIMIT 1',
@@ -809,7 +842,7 @@ router.post('/', auth, upload.single('file'), async (req, res) => {
       message: 'Document créé (étape 1)',
     });
 
-      await logActivity(req.user.id, 'upload', 'document', documentId, {
+    await logActivity(req.user.id, 'upload', 'document', documentId, {
       fileName: name,
       fileType: mimeType,
       category: finalCategory
@@ -865,7 +898,7 @@ router.get('/latest', auth, async (req, res) => {
     query += ` ORDER BY d.name, d.version DESC`;
 
     const result = await pool.query(query, isAdmin ? [] : [userId]);
-    
+
     // Normalisation des données
     const normalizedRows = result.rows.map(row => ({
       ...row,
@@ -940,7 +973,7 @@ router.get('/incomplete', auth, async (req, res) => {
     query += ` ORDER BY d.name, d.version DESC`;
 
     const result = await pool.query(query, isAdmin ? [] : [userId]);
-    
+
     // Normalisation des données
     const normalizedRows = result.rows.map(row => ({
       ...row,
@@ -1024,13 +1057,13 @@ router.put('/:id/archive', auth, async (req, res) => {
       'UPDATE documents SET is_archived = true, date_archive = NOW() WHERE id = $1 RETURNING *',
       [id]
     );
-    
+
     const updatedDoc = await pool.query(
       'SELECT *, TO_CHAR(date_archive, \'DD/MM/YYYY HH24:MI\') as formatted_date_archive FROM documents WHERE id = $1',
       [id]
     );
-    
-    res.status(200).json({ 
+
+    res.status(200).json({
       message: 'Document archivé avec succès.',
       document: updatedDoc.rows[0]
     });
@@ -1056,7 +1089,7 @@ router.put('/:id/affiche', auth, async (req, res) => {
   }
 
   try {
-    const query = isArchived 
+    const query = isArchived
       ? 'UPDATE documents SET is_archived = true, date_archive = NOW() WHERE id = $1 RETURNING *'
       : 'UPDATE documents SET is_archived = false, date_archive = NULL WHERE id = $1 RETURNING *';
 
@@ -1074,9 +1107,9 @@ router.put('/:id/affiche', auth, async (req, res) => {
     await logActivity(req.user.id, isArchived ? 'archive' : 'unarchive', 'document', docId, {
       action: isArchived ? 'archive' : 'unarchive'
     });
-    res.json({ 
-      message: isArchived ? 'Document archivé' : 'Document désarchivé', 
-      document: updatedDoc.rows[0] 
+    res.json({
+      message: isArchived ? 'Document archivé' : 'Document désarchivé',
+      document: updatedDoc.rows[0]
     });
   } catch (err) {
     console.error('Erreur SQL :', err);
@@ -1167,13 +1200,29 @@ router.put('/:id', auth, async (req, res) => {
     }
 
     if (category === 'demande_conge') {
-      const {
-        numDemande = '',
-        dateConge = null
-      } = extraFields;
 
-      is_completed = Boolean(numDemande && dateConge);
-    }
+  await pool.query(`
+    INSERT INTO demande_conges (
+      document_id, 
+      num_demande, 
+      date_debut, 
+      date_fin, 
+      motif
+    )
+    VALUES ($1, $2, $3, $4, $5)
+    ON CONFLICT (document_id) DO UPDATE 
+    SET 
+      num_demande = EXCLUDED.num_demande,
+      date_debut = EXCLUDED.date_debut,
+      date_fin = EXCLUDED.date_fin,
+      motif = EXCLUDED.motif
+  `, [
+    documentId,
+    req.body.num_demande || '',
+    req.body.date_debut || null,
+    req.body.date_fin || null,
+    req.body.motif || ''
+  ]);}
 
     if (category === 'contrat') {
       const {
@@ -1187,9 +1236,9 @@ router.put('/:id', auth, async (req, res) => {
       } = req.body;
 
       is_completed = Boolean(
-        numero_contrat && 
-        type_contrat && 
-        partie_prenante && 
+        numero_contrat &&
+        type_contrat &&
+        partie_prenante &&
         date_signature
       );
     }
@@ -1204,8 +1253,8 @@ router.put('/:id', auth, async (req, res) => {
       } = req.body;
 
       is_completed = Boolean(
-        type_rapport && 
-        auteur && 
+        type_rapport &&
+        auteur &&
         date_rapport
       );
     }
@@ -1283,6 +1332,29 @@ router.put('/:id', auth, async (req, res) => {
         break;
 
       case 'demande_conge':
+        await pool.query(`
+    INSERT INTO demande_conge ( 
+      document_id, 
+      num_demande, 
+      date_debut, 
+      date_fin, 
+      motif
+    )
+    VALUES ($1, $2, $3, $4, $5)
+    ON CONFLICT (document_id) DO UPDATE 
+    SET 
+      num_demande = $2,
+      date_debut = $3,
+      date_fin = $4,
+      motif = $5
+  `, [
+          documentId,
+          req.body.num_demande || '',
+          req.body.date_debut || null,
+          req.body.date_fin || null,
+          req.body.motif || ''
+        ]);
+        break;
         await pool.query(`
           INSERT INTO demande_conges (document_id, numDemande, dateConge)
           VALUES ($1, $2, $3)
@@ -1400,7 +1472,7 @@ router.get('/:id/metadata', auth, async (req, res) => {
 
   try {
     const docRes = await pool.query('SELECT category FROM documents WHERE id = $1', [documentId]);
-    
+
     if (docRes.rowCount === 0) {
       return res.status(404).json({ error: 'Document non trouvé' });
     }
@@ -1413,14 +1485,48 @@ router.get('/:id/metadata', auth, async (req, res) => {
         const contratRes = await pool.query('SELECT * FROM contrats WHERE document_id = $1', [documentId]);
         meta = contratRes.rows[0] || {};
         break;
-      // ... autres cas ...
+      
+      case 'facture':
+        const factureRes = await pool.query('SELECT * FROM factures WHERE document_id = $1', [documentId]);
+        meta = factureRes.rows[0] || {};
+        break;
+      
+      case 'cv':
+        const cvRes = await pool.query('SELECT * FROM cv WHERE document_id = $1', [documentId]);
+        meta = cvRes.rows[0] || {};
+        break;
+      
+      case 'demande_conge':
+        const demandeRes = await pool.query(`
+          SELECT 
+            num_demande, 
+            date_debut,
+            date_fin,
+            motif
+          FROM demande_conges 
+          WHERE document_id = $1
+        `, [documentId]);
+        
+        // Transformation des dates au format ISO pour le frontend
+        meta = demandeRes.rows[0] || {};
+        if (meta.date_debut) meta.date_debut = new Date(meta.date_debut).toISOString().split('T')[0];
+        if (meta.date_fin) meta.date_fin = new Date(meta.date_fin).toISOString().split('T')[0];
+        break;
+      
+      case 'rapport':
+        const rapportRes = await pool.query('SELECT * FROM rapports WHERE document_id = $1', [documentId]);
+        meta = rapportRes.rows[0] || {};
+        break;
+      
+      default:
+        meta = {};
     }
 
     res.json(meta);
 
   } catch (err) {
     console.error('Erreur récupération métadonnées:', err);
-    res.status(500).json({ error: 'Erreur serveur' });
+    res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
 
@@ -1494,7 +1600,7 @@ router.get('/:id/details', auth, async (req, res) => {
           FROM media_metadata 
           WHERE document_id = $1
         `, [documentId]);
-        
+
         technicalInfo = techRes.rows[0] || {};
       } catch (err) {
       }
@@ -1514,72 +1620,72 @@ router.get('/:id/details', auth, async (req, res) => {
 
   } catch (err) {
     console.error('Erreur récupération détails document :', err.stack);
-    res.status(500).json({ 
+    res.status(500).json({
       error: 'Erreur serveur',
       details: process.env.NODE_ENV === 'development' ? err.message : undefined
     });
   }
 });
 router.post('/:id/share', auth, async (req, res) => {
-    const documentId = parseInt(req.params.id);
-    const userId = req.user.id;
+  const documentId = parseInt(req.params.id);
+  const userId = req.user.id;
 
-    const {
-        visibility,
-        id_share = [],
-        id_group = [],
-        can_modify = false,
-        can_delete = false,
-        can_share = false
-    } = req.body;
+  const {
+    visibility,
+    id_share = [],
+    id_group = [],
+    can_modify = false,
+    can_delete = false,
+    can_share = false
+  } = req.body;
 
-    if (!['public', 'private', 'custom'].includes(visibility)) {
-        return res.status(400).json({ error: "Type de visibilité invalide" });
+  if (!['public', 'private', 'custom'].includes(visibility)) {
+    return res.status(400).json({ error: "Type de visibilité invalide" });
+  }
+
+  try {
+    // 1. Récupération des informations
+    const { rows: [document] } = await pool.query(
+      'SELECT id, name, owner_id FROM documents WHERE id = $1',
+      [documentId]
+    );
+
+    const { rows: [sharer] } = await pool.query(
+      'SELECT name, prenom FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (!document) {
+      return res.status(404).json({ error: "Document non trouvé" });
     }
 
-    try {
-        // 1. Récupération des informations
-        const { rows: [document] } = await pool.query(
-            'SELECT id, name, owner_id FROM documents WHERE id = $1',
-            [documentId]
+    const sharerName = `${sharer.prenom} ${sharer.name}`;
+    const shareDate = new Date().toLocaleString('fr-FR');
+    const isOwner = userId === document.owner_id;
+
+    // 2. Transaction
+    await pool.query('BEGIN');
+
+    // 3. Mise à jour du document
+    await pool.query(
+      'UPDATE documents SET visibility = $1, id_share = $2, id_group = $3 WHERE id = $4',
+      [visibility, id_share, id_group, documentId]
+    );
+
+    // 4. Gestion des permissions
+    if (visibility === 'private') {
+      // Ne rien faire pour private
+    } else {
+      if (visibility === 'public') {
+        // Pour public, donner seulement can_read si non-propriétaire
+        const { rows: allUsers } = await pool.query(
+          'SELECT id FROM users WHERE id != $1',
+          [document.owner_id]
         );
 
-        const { rows: [sharer] } = await pool.query(
-            'SELECT name, prenom FROM users WHERE id = $1',
-            [userId]
-        );
-
-        if (!document) {
-            return res.status(404).json({ error: "Document non trouvé" });
-        }
-
-        const sharerName = `${sharer.prenom} ${sharer.name}`;
-        const shareDate = new Date().toLocaleString('fr-FR');
-        const isOwner = userId === document.owner_id;
-
-        // 2. Transaction
-        await pool.query('BEGIN');
-
-        // 3. Mise à jour du document
-        await pool.query(
-            'UPDATE documents SET visibility = $1, id_share = $2, id_group = $3 WHERE id = $4',
-            [visibility, id_share, id_group, documentId]
-        );
-
-        // 4. Gestion des permissions
-        if (visibility === 'private') {
-            // Ne rien faire pour private
-        } else {
-            if (visibility === 'public') {
-                // Pour public, donner seulement can_read si non-propriétaire
-                const { rows: allUsers } = await pool.query(
-                    'SELECT id FROM users WHERE id != $1',
-                    [document.owner_id]
-                );
-
-                if (allUsers.length > 0) {
-                    await pool.query(
-                        `INSERT INTO document_permissions 
+        if (allUsers.length > 0) {
+          await pool.query(
+            `INSERT INTO document_permissions 
                          (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
                          SELECT id, $1, 'public', true, $2, $3, $4 FROM users WHERE id != $5
                          ON CONFLICT (user_id, document_id) 
@@ -1589,19 +1695,19 @@ router.post('/:id/share', auth, async (req, res) => {
                              can_modify = CASE WHEN $6 THEN EXCLUDED.can_modify ELSE false END,
                              can_delete = CASE WHEN $6 THEN EXCLUDED.can_delete ELSE false END,
                              can_share = CASE WHEN $6 THEN EXCLUDED.can_share ELSE false END`,
-                        [documentId, 
-                         isOwner ? can_modify : false, 
-                         isOwner ? can_delete : false, 
-                         isOwner ? can_share : false,
-                         document.owner_id,
-                         isOwner]
-                    );
-                }
-            } else if (visibility === 'custom') {
-                // Pour custom, appliquer les règles spécifiques
-                if (id_share.length > 0) {
-                    await pool.query(
-                        `INSERT INTO document_permissions 
+            [documentId,
+              isOwner ? can_modify : false,
+              isOwner ? can_delete : false,
+              isOwner ? can_share : false,
+              document.owner_id,
+              isOwner]
+          );
+        }
+      } else if (visibility === 'custom') {
+        // Pour custom, appliquer les règles spécifiques
+        if (id_share.length > 0) {
+          await pool.query(
+            `INSERT INTO document_permissions 
                          (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
                          SELECT unnest($1::int[]), $2, 'shared', true, $3, $4, $5
                          ON CONFLICT (user_id, document_id) 
@@ -1611,18 +1717,18 @@ router.post('/:id/share', auth, async (req, res) => {
                              can_modify = CASE WHEN $6 THEN $3 ELSE false END,
                              can_delete = CASE WHEN $6 THEN $4 ELSE false END,
                              can_share = CASE WHEN $6 THEN $5 ELSE false END`,
-                        [id_share, 
-                         documentId, 
-                         isOwner ? can_modify : false, 
-                         isOwner ? can_delete : false, 
-                         isOwner ? can_share : false,
-                         isOwner]
-                    );
-                }
+            [id_share,
+              documentId,
+              isOwner ? can_modify : false,
+              isOwner ? can_delete : false,
+              isOwner ? can_share : false,
+              isOwner]
+          );
+        }
 
-                if (id_group.length > 0) {
-                    await pool.query(
-                        `INSERT INTO document_permissions 
+        if (id_group.length > 0) {
+          await pool.query(
+            `INSERT INTO document_permissions 
                          (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
                          SELECT gm.user_id, $1, 'group', true, $2, $3, $4
                          FROM group_members gm
@@ -1634,148 +1740,148 @@ router.post('/:id/share', auth, async (req, res) => {
                              can_modify = CASE WHEN $6 THEN $2 ELSE false END,
                              can_delete = CASE WHEN $6 THEN $3 ELSE false END,
                              can_share = CASE WHEN $6 THEN $4 ELSE false END`,
-                        [documentId, 
-                         isOwner ? can_modify : false, 
-                         isOwner ? can_delete : false, 
-                         isOwner ? can_share : false,
-                         id_group,
-                         isOwner]
-                    );
-                }
-            }
+            [documentId,
+              isOwner ? can_modify : false,
+              isOwner ? can_delete : false,
+              isOwner ? can_share : false,
+              id_group,
+              isOwner]
+          );
         }
+      }
+    }
 
-        // 5. Gestion des notifications
-        const notificationsToInsert = [];
+    // 5. Gestion des notifications
+    const notificationsToInsert = [];
 
-        if (visibility === 'public') {
-            const { rows: allUsers } = await pool.query(
-                'SELECT id FROM users WHERE id != $1',
-                [userId]
-            );
+    if (visibility === 'public') {
+      const { rows: allUsers } = await pool.query(
+        'SELECT id FROM users WHERE id != $1',
+        [userId]
+      );
 
-            allUsers.forEach(user => {
-                notificationsToInsert.push([
-                    user.id,
-                    'Nouveau document public disponible',
-                    `Le document "${document.name}" a été rendu public par ${sharerName} le ${shareDate}`,
-                    'document_shared',
-                    documentId,
-                    false,
-                    new Date(),
-                    userId,
-                    null, null, null
-                ]);
-            });
-        } else if (visibility === 'custom') {
-            const usersToNotify = new Set();
+      allUsers.forEach(user => {
+        notificationsToInsert.push([
+          user.id,
+          'Nouveau document public disponible',
+          `Le document "${document.name}" a été rendu public par ${sharerName} le ${shareDate}`,
+          'document_shared',
+          documentId,
+          false,
+          new Date(),
+          userId,
+          null, null, null
+        ]);
+      });
+    } else if (visibility === 'custom') {
+      const usersToNotify = new Set();
 
-            // Notifier les utilisateurs directement partagés
-            for (const targetId of id_share) {
-                if (targetId !== userId) {
-                    usersToNotify.add(targetId);
-                }
-            }
-
-            // Notifier les membres des groupes (sauf ceux déjà notifiés individuellement)
-            if (id_group.length > 0) {
-                const { rows: groupMembers } = await pool.query(
-                    'SELECT DISTINCT user_id FROM group_members WHERE group_id = ANY($1) AND user_id != $2',
-                    [id_group, userId]
-                );
-
-                groupMembers.forEach(member => {
-                    if (!usersToNotify.has(member.user_id)) {
-                        usersToNotify.add(member.user_id);
-                    }
-                });
-            }
-
-            // Créer les notifications
-            Array.from(usersToNotify).forEach(userId => {
-                notificationsToInsert.push([
-                    userId,
-                    id_share.includes(userId)
-                        ? 'Document partagé avec vous'
-                        : 'Document partagé avec votre groupe',
-                    id_share.includes(userId)
-                        ? `${sharerName} vous a partagé le document "${document.name}" le ${shareDate}`
-                        : `${sharerName} a partagé le document "${document.name}" avec votre groupe le ${shareDate}`,
-                    'document_shared',
-                    documentId,
-                    false,
-                    new Date(),
-                    userId,
-                    null, null, null
-                ]);
-            });
+      // Notifier les utilisateurs directement partagés
+      for (const targetId of id_share) {
+        if (targetId !== userId) {
+          usersToNotify.add(targetId);
         }
+      }
 
-        // Insertion des notifications
-        if (notificationsToInsert.length > 0) {
-            await pool.query(
-                `INSERT INTO notifications 
+      // Notifier les membres des groupes (sauf ceux déjà notifiés individuellement)
+      if (id_group.length > 0) {
+        const { rows: groupMembers } = await pool.query(
+          'SELECT DISTINCT user_id FROM group_members WHERE group_id = ANY($1) AND user_id != $2',
+          [id_group, userId]
+        );
+
+        groupMembers.forEach(member => {
+          if (!usersToNotify.has(member.user_id)) {
+            usersToNotify.add(member.user_id);
+          }
+        });
+      }
+
+      // Créer les notifications
+      Array.from(usersToNotify).forEach(userId => {
+        notificationsToInsert.push([
+          userId,
+          id_share.includes(userId)
+            ? 'Document partagé avec vous'
+            : 'Document partagé avec votre groupe',
+          id_share.includes(userId)
+            ? `${sharerName} vous a partagé le document "${document.name}" le ${shareDate}`
+            : `${sharerName} a partagé le document "${document.name}" avec votre groupe le ${shareDate}`,
+          'document_shared',
+          documentId,
+          false,
+          new Date(),
+          userId,
+          null, null, null
+        ]);
+      });
+    }
+
+    // Insertion des notifications
+    if (notificationsToInsert.length > 0) {
+      await pool.query(
+        `INSERT INTO notifications 
                  (user_id, title, message, type, document_id, is_read, created_at, sender_id, related_task_id, decision, related_id)
                  SELECT * FROM UNNEST(
                      $1::int[], $2::varchar[], $3::text[], $4::varchar[], 
                      $5::int[], $6::boolean[], $7::timestamp[], $8::int[],
                      $9::int[], $10::boolean[], $11::int[]
                  )`,
-                [
-                    notificationsToInsert.map(n => n[0]),
-                    notificationsToInsert.map(n => n[1]),
-                    notificationsToInsert.map(n => n[2]),
-                    notificationsToInsert.map(n => n[3]),
-                    notificationsToInsert.map(n => n[4]),
-                    notificationsToInsert.map(n => n[5]),
-                    notificationsToInsert.map(n => n[6]),
-                    notificationsToInsert.map(n => n[7]),
-                    notificationsToInsert.map(n => n[8]),
-                    notificationsToInsert.map(n => n[9]),
-                    notificationsToInsert.map(n => n[10])
-                ]
-            );
-        }
-
-        // Journalisation
-        await logActivity(userId, 'share', 'document', documentId, {
-            visibility: visibility,
-            shared_with_users: visibility === 'public' ? 'all_users' : id_share,
-            shared_with_groups: id_group,
-            permissions: { 
-                can_modify: isOwner ? can_modify : false, 
-                can_delete: isOwner ? can_delete : false, 
-                can_share: isOwner ? can_share : false 
-            },
-            notifications_sent: notificationsToInsert.length,
-            shared_by_owner: isOwner
-        });
-
-        await pool.query('COMMIT');
-
-        res.status(200).json({
-            success: true,
-            message: `Document ${visibility === 'public' ? 'rendu public' : 'partagé'} avec succès`,
-            permissions_updated: true,
-            users_affected: visibility === 'public' ? 'all_users' : id_share.length,
-            is_owner: isOwner,
-            granted_permissions: {
-                can_read: true,
-                can_modify: isOwner ? can_modify : false,
-                can_delete: isOwner ? can_delete : false,
-                can_share: isOwner ? can_share : false
-            }
-        });
-
-    } catch (error) {
-        await pool.query('ROLLBACK');
-        console.error("Erreur lors du partage:", error);
-        res.status(500).json({
-            success: false,
-            error: "Échec de l'opération de partage",
-            details: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
+        [
+          notificationsToInsert.map(n => n[0]),
+          notificationsToInsert.map(n => n[1]),
+          notificationsToInsert.map(n => n[2]),
+          notificationsToInsert.map(n => n[3]),
+          notificationsToInsert.map(n => n[4]),
+          notificationsToInsert.map(n => n[5]),
+          notificationsToInsert.map(n => n[6]),
+          notificationsToInsert.map(n => n[7]),
+          notificationsToInsert.map(n => n[8]),
+          notificationsToInsert.map(n => n[9]),
+          notificationsToInsert.map(n => n[10])
+        ]
+      );
     }
+
+    // Journalisation
+    await logActivity(userId, 'share', 'document', documentId, {
+      visibility: visibility,
+      shared_with_users: visibility === 'public' ? 'all_users' : id_share,
+      shared_with_groups: id_group,
+      permissions: {
+        can_modify: isOwner ? can_modify : false,
+        can_delete: isOwner ? can_delete : false,
+        can_share: isOwner ? can_share : false
+      },
+      notifications_sent: notificationsToInsert.length,
+      shared_by_owner: isOwner
+    });
+
+    await pool.query('COMMIT');
+
+    res.status(200).json({
+      success: true,
+      message: `Document ${visibility === 'public' ? 'rendu public' : 'partagé'} avec succès`,
+      permissions_updated: true,
+      users_affected: visibility === 'public' ? 'all_users' : id_share.length,
+      is_owner: isOwner,
+      granted_permissions: {
+        can_read: true,
+        can_modify: isOwner ? can_modify : false,
+        can_delete: isOwner ? can_delete : false,
+        can_share: isOwner ? can_share : false
+      }
+    });
+
+  } catch (error) {
+    await pool.query('ROLLBACK');
+    console.error("Erreur lors du partage:", error);
+    res.status(500).json({
+      success: false,
+      error: "Échec de l'opération de partage",
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
 });
 
 // routes/documents.js
@@ -1783,7 +1889,7 @@ router.post('/:id/share', auth, async (req, res) => {
 router.post('/archive-requests', auth, async (req, res) => {
   const { documentId } = req.body;
   const requesterId = req.user.id;
-  const requesterName = req.user.prenom && req.user.name 
+  const requesterName = req.user.prenom && req.user.name
     ? `${req.user.prenom} ${req.user.name}`
     : 'Utilisateur inconnu';
   const currentDate = new Date().toLocaleString('fr-FR');
@@ -1837,7 +1943,7 @@ router.post('/archive-requests', auth, async (req, res) => {
     );
 
     const notificationPromises = admins.rows.map(admin => {
-      const message = `Demande d'archivage pour le document "${document.name}"` ;
+      const message = `Demande d'archivage pour le document "${document.name}"`;
 
       return pool.query(
         `INSERT INTO notifications
@@ -1856,7 +1962,7 @@ router.post('/archive-requests', auth, async (req, res) => {
     });
 
     await Promise.all(notificationPromises);
-// Ajoutez ceci après la création de la demande
+    // Ajoutez ceci après la création de la demande
     await logActivity(req.user.id, 'archive_request', 'document', documentId, {
       request_id: newRequest.rows[0].id,
       status: 'pending'
@@ -1902,7 +2008,7 @@ router.put('/:requestId/decision', auth, async (req, res) => {
     );
 
     if (request.rows.length === 0) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         error: 'Demande non trouvée ou déjà traitée',
         requestId
       });
@@ -2019,7 +2125,7 @@ router.put('/archive-requests/:id/process', auth, async (req, res) => {
           request.rows[0].document_id
         ]
       );
-    await logActivity(req.user.id, 'archive_reject', 'document', request.rows[0].document_id, {
+      await logActivity(req.user.id, 'archive_reject', 'document', request.rows[0].document_id, {
         request_id: id
       });
       res.json({ message: 'Demande rejetée' });
@@ -2055,11 +2161,11 @@ router.get('/stats', async (req, res) => {
 });
 router.get('/:id/versions', auth, async (req, res) => {
   const id = parseInt(req.params.id, 10);
-  
+
   try {
     // 1. Récupérer le document original
     const { rows: [doc] } = await pool.query(
-      'SELECT name FROM documents WHERE id = $1', 
+      'SELECT name FROM documents WHERE id = $1',
       [id]
     );
     if (!doc) return res.status(404).json({ error: 'Document introuvable' });
@@ -2077,9 +2183,9 @@ router.get('/:id/versions', auth, async (req, res) => {
 
   } catch (err) {
     console.error('❌ Erreur:', err);
-    res.status(500).json({ 
-      error: 'Erreur serveur', 
-      details: err.message 
+    res.status(500).json({
+      error: 'Erreur serveur',
+      details: err.message
     });
   }
 });
@@ -2347,63 +2453,63 @@ router.post('/categories', auth, async (req, res) => {
 
 // Partage avec un utilisateur
 router.post('/folders/:id/share/user', auth, async (req, res) => {
-    try {
-        const { userId, permissions } = req.body;
-        const folder = await Folder.findByPk(req.params.id);
-        
-        if (!folder) {
-            return res.status(404).json({ error: 'Dossier non trouvé' });
-        }
+  try {
+    const { userId, permissions } = req.body;
+    const folder = await Folder.findByPk(req.params.id);
 
-        const permission = await FolderPermission.create({
-            folder_id: req.params.id,
-            user_id: userId,
-            ...permissions
-        });
-
-        res.status(201).json(permission);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+    if (!folder) {
+      return res.status(404).json({ error: 'Dossier non trouvé' });
     }
+
+    const permission = await FolderPermission.create({
+      folder_id: req.params.id,
+      user_id: userId,
+      ...permissions
+    });
+
+    res.status(201).json(permission);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Partage avec un groupe
 router.post('/folders/:id/share/group', auth, async (req, res) => {
-    try {
-        const { groupId, permissions } = req.body;
-        const folder = await Folder.findByPk(req.params.id);
-        
-        if (!folder) {
-            return res.status(404).json({ error: 'Dossier non trouvé' });
-        }
+  try {
+    const { groupId, permissions } = req.body;
+    const folder = await Folder.findByPk(req.params.id);
 
-        const permission = await FolderPermission.create({
-            folder_id: req.params.id,
-            group_id: groupId,
-            ...permissions
-        });
-
-        res.status(201).json(permission);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+    if (!folder) {
+      return res.status(404).json({ error: 'Dossier non trouvé' });
     }
+
+    const permission = await FolderPermission.create({
+      folder_id: req.params.id,
+      group_id: groupId,
+      ...permissions
+    });
+
+    res.status(201).json(permission);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Récupérer les permissions d'un dossier
 router.get('/folders/:id/permissions', auth, async (req, res) => {
-    try {
-        const permissions = await FolderPermission.findAll({
-            where: { folder_id: req.params.id },
-            include: [
-                { model: User, attributes: ['id', 'name', 'email'] },
-                { model: Group, attributes: ['id', 'nom'] }
-            ]
-        });
-        
-        res.json(permissions);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
+  try {
+    const permissions = await FolderPermission.findAll({
+      where: { folder_id: req.params.id },
+      include: [
+        { model: User, attributes: ['id', 'name', 'email'] },
+        { model: Group, attributes: ['id', 'nom'] }
+      ]
+    });
+
+    res.json(permissions);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // POST /api/documents/check-duplicate
