@@ -1258,6 +1258,42 @@ router.get('/archived', auth, async (req, res) => {
   }
 });
 
+// Fonction pour copier les permissions d'un document à un autre
+const copyDocumentPermissions = async (sourceDocId, targetDocId) => {
+  try {
+    // 1. Récupérer toutes les permissions du document source
+    const permissionsRes = await pool.query(
+      `SELECT user_id, can_read, can_modify, can_delete 
+       FROM document_permissions 
+       WHERE document_id = $1`,
+      [sourceDocId]
+    );
+
+    // 2. Copier chaque permission vers le nouveau document
+    for (const perm of permissionsRes.rows) {
+      await pool.query(
+        `INSERT INTO document_permissions 
+         (document_id, user_id, can_read, can_modify, can_delete) 
+         VALUES ($1, $2, $3, $4, $5)
+         ON CONFLICT (document_id, user_id) DO UPDATE SET
+           can_read = EXCLUDED.can_read,
+           can_modify = EXCLUDED.can_modify,
+           can_delete = EXCLUDED.can_delete`,
+        [
+          targetDocId,
+          perm.user_id,
+          perm.can_read,
+          perm.can_modify,
+          perm.can_delete
+        ]
+      );
+    }
+  } catch (err) {
+    console.error('Erreur lors de la copie des permissions:', err);
+    throw err;
+  }
+};
+
 //complete upload
 router.put('/:id', auth, async (req, res) => {
   const documentId = parseInt(req.params.id, 10);
@@ -1383,7 +1419,7 @@ router.put('/:id', auth, async (req, res) => {
     `, [name, summary, tags, prio, metadata, is_completed, documentId]);
 
     // 4. Si le document vient juste d’être complété, on lui attribue une version
-  // 4. Si le document vient juste d’être complété, on lui attribue une version
+ // 4. Si le document vient juste d'être complété, on lui attribue une version
 if (is_completed) {
   const versionRes = await pool.query(`
     SELECT MAX(version) as max_version 
@@ -1392,7 +1428,7 @@ if (is_completed) {
   `, [name, documentId]);
 
   const lastVersion = versionRes.rows[0].max_version || 0;
-  const currentVersion = lastVersion + 1; // Déclaration correcte de la variable
+  const currentVersion = lastVersion + 1;
 
   await pool.query(`
     UPDATE documents SET version = $1 WHERE id = $2 and is_completed=true
@@ -1400,6 +1436,21 @@ if (is_completed) {
 
   // Envoyer une notification seulement si c'est une nouvelle version (pas la première)
   if (lastVersion > 0) {
+    // Trouver le document de la version précédente
+    const prevVersionRes = await pool.query(
+      `SELECT id FROM documents 
+       WHERE name = $1 AND version = $2 
+       ORDER BY created_at DESC LIMIT 1`,
+      [name, lastVersion]
+    );
+    
+    const prevVersionId = prevVersionRes.rows[0]?.id;
+
+    // Copier les permissions depuis la version précédente
+    if (prevVersionId) {
+      await copyDocumentPermissions(prevVersionId, documentId);
+    }
+
     // Récupérer les utilisateurs ayant accès à ce document
     const usersRes = await pool.query(
       `SELECT user_id FROM document_permissions WHERE document_id = $1 AND can_read = true`,
@@ -1409,11 +1460,10 @@ if (is_completed) {
     const userIds = usersRes.rows.map(row => row.user_id);
     
     if (userIds.length > 0) {
-      await sendNotification(documentId, name, currentVersion, userIds); // Utilisation de currentVersion
+      await sendNotification(documentId, name, currentVersion, userIds);
     }
   }
 }
-
     
 
     // 5. Ajout/MAJ dans la table spécialisée
@@ -1613,8 +1663,9 @@ const sendNotification = async (documentId, documentName, version, userIds) => {
     // 3. Envoyer une notification à chaque utilisateur
     for (const userId of userIds) {
       await pool.query(
-        `INSERT INTO notifications (user_id, document_id, message, is_read) 
-         VALUES ($1, $2, $3, false)`,
+        `INSERT INTO notifications 
+         (user_id, document_id, message, is_read, created_at) 
+         VALUES ($1, $2, $3, false,(NOW() AT TIME ZONE 'Africa/Algiers'))`,
         [
           userId,
           documentId,
@@ -1789,65 +1840,65 @@ router.get('/:id/details', auth, async (req, res) => {
   }
 });
 router.post('/:id/share', auth, async (req, res) => {
-  const documentId = parseInt(req.params.id);
-  const userId = req.user.id;
+    const documentId = parseInt(req.params.id);
+    const userId = req.user.id;
 
-  const {
-    visibility,
-    id_share = [],
-    id_group = [],
-    can_modify = false,
-    can_delete = false,
-    can_share = false
-  } = req.body;
+    const {
+        visibility,
+        id_share = [],
+        id_group = [],
+        can_modify = false,
+        can_delete = false,
+        can_share = false
+    } = req.body;
 
-  if (!['public', 'private', 'custom'].includes(visibility)) {
-    return res.status(400).json({ error: "Type de visibilité invalide" });
-  }
-
-  try {
-    // 1. Récupération des informations
-    const { rows: [document] } = await pool.query(
-      'SELECT id, name, owner_id FROM documents WHERE id = $1',
-      [documentId]
-    );
-
-    const { rows: [sharer] } = await pool.query(
-      'SELECT name, prenom FROM users WHERE id = $1',
-      [userId]
-    );
-
-    if (!document) {
-      return res.status(404).json({ error: "Document non trouvé" });
+    if (!['public', 'private', 'custom'].includes(visibility)) {
+        return res.status(400).json({ error: "Type de visibilité invalide" });
     }
 
-    const sharerName = `${sharer.prenom} ${sharer.name}`;
-    const shareDate = new Date().toLocaleString('fr-FR');
-    const isOwner = userId === document.owner_id;
-
-    // 2. Transaction
-    await pool.query('BEGIN');
-
-    // 3. Mise à jour du document
-    await pool.query(
-      'UPDATE documents SET visibility = $1, id_share = $2, id_group = $3 WHERE id = $4',
-      [visibility, id_share, id_group, documentId]
-    );
-
-    // 4. Gestion des permissions
-    if (visibility === 'private') {
-      // Ne rien faire pour private
-    } else {
-      if (visibility === 'public') {
-        // Pour public, donner seulement can_read si non-propriétaire
-        const { rows: allUsers } = await pool.query(
-          'SELECT id FROM users WHERE id != $1',
-          [document.owner_id]
+    try {
+        // 1. Récupération des informations
+        const { rows: [document] } = await pool.query(
+            'SELECT id, name, owner_id FROM documents WHERE id = $1',
+            [documentId]
         );
 
-        if (allUsers.length > 0) {
-          await pool.query(
-            `INSERT INTO document_permissions 
+        const { rows: [sharer] } = await pool.query(
+            'SELECT name, prenom FROM users WHERE id = $1',
+            [userId]
+        );
+
+        if (!document) {
+            return res.status(404).json({ error: "Document non trouvé" });
+        }
+
+        const sharerName = `${sharer.prenom} ${sharer.name}`;
+        const shareDate = new Date().toLocaleString('fr-FR');
+        const isOwner = userId === document.owner_id;
+
+        // 2. Transaction
+        await pool.query('BEGIN');
+
+        // 3. Mise à jour du document
+        await pool.query(
+            'UPDATE documents SET visibility = $1, id_share = $2, id_group = $3 WHERE id = $4',
+            [visibility, id_share, id_group, documentId]
+        );
+
+        // 4. Gestion des permissions
+        if (visibility === 'private') {
+            // Ne rien faire pour private
+        } else {
+            if (visibility === 'public') {
+                // Pour public, donner seulement can_read si non-propriétaire
+                const { rows: allUsers } = await pool.query(
+                    'SELECT id FROM users WHERE id != $1',
+                    [document.owner_id]
+                );
+
+                if (allUsers.length > 0) {
+                    await pool.query(
+                        `INSERT INTO document_permissions 
                          (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
                          SELECT id, $1, 'public', true, $2, $3, $4 FROM users WHERE id != $5
                          ON CONFLICT (user_id, document_id) 
@@ -1857,19 +1908,19 @@ router.post('/:id/share', auth, async (req, res) => {
                              can_modify = CASE WHEN $6 THEN EXCLUDED.can_modify ELSE false END,
                              can_delete = CASE WHEN $6 THEN EXCLUDED.can_delete ELSE false END,
                              can_share = CASE WHEN $6 THEN EXCLUDED.can_share ELSE false END`,
-            [documentId,
-              isOwner ? can_modify : false,
-              isOwner ? can_delete : false,
-              isOwner ? can_share : false,
-              document.owner_id,
-              isOwner]
-          );
-        }
-      } else if (visibility === 'custom') {
-        // Pour custom, appliquer les règles spécifiques
-        if (id_share.length > 0) {
-          await pool.query(
-            `INSERT INTO document_permissions 
+                        [documentId, 
+                         isOwner ? can_modify : false, 
+                         isOwner ? can_delete : false, 
+                         isOwner ? can_share : false,
+                         document.owner_id,
+                         isOwner]
+                    );
+                }
+            } else if (visibility === 'custom') {
+                // Pour custom, appliquer les règles spécifiques
+                if (id_share.length > 0) {
+                    await pool.query(
+                        `INSERT INTO document_permissions 
                          (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
                          SELECT unnest($1::int[]), $2, 'shared', true, $3, $4, $5
                          ON CONFLICT (user_id, document_id) 
@@ -1879,18 +1930,18 @@ router.post('/:id/share', auth, async (req, res) => {
                              can_modify = CASE WHEN $6 THEN $3 ELSE false END,
                              can_delete = CASE WHEN $6 THEN $4 ELSE false END,
                              can_share = CASE WHEN $6 THEN $5 ELSE false END`,
-            [id_share,
-              documentId,
-              isOwner ? can_modify : false,
-              isOwner ? can_delete : false,
-              isOwner ? can_share : false,
-              isOwner]
-          );
-        }
+                        [id_share, 
+                         documentId, 
+                         isOwner ? can_modify : false, 
+                         isOwner ? can_delete : false, 
+                         isOwner ? can_share : false,
+                         isOwner]
+                    );
+                }
 
-        if (id_group.length > 0) {
-          await pool.query(
-            `INSERT INTO document_permissions 
+                if (id_group.length > 0) {
+                    await pool.query(
+                        `INSERT INTO document_permissions 
                          (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
                          SELECT gm.user_id, $1, 'group', true, $2, $3, $4
                          FROM group_members gm
@@ -1902,148 +1953,148 @@ router.post('/:id/share', auth, async (req, res) => {
                              can_modify = CASE WHEN $6 THEN $2 ELSE false END,
                              can_delete = CASE WHEN $6 THEN $3 ELSE false END,
                              can_share = CASE WHEN $6 THEN $4 ELSE false END`,
-            [documentId,
-              isOwner ? can_modify : false,
-              isOwner ? can_delete : false,
-              isOwner ? can_share : false,
-              id_group,
-              isOwner]
-          );
+                        [documentId, 
+                         isOwner ? can_modify : false, 
+                         isOwner ? can_delete : false, 
+                         isOwner ? can_share : false,
+                         id_group,
+                         isOwner]
+                    );
+                }
+            }
         }
-      }
-    }
 
-    // 5. Gestion des notifications
-    const notificationsToInsert = [];
+        // 5. Gestion des notifications
+        const notificationsToInsert = [];
 
-    if (visibility === 'public') {
-      const { rows: allUsers } = await pool.query(
-        'SELECT id FROM users WHERE id != $1',
-        [userId]
-      );
+        if (visibility === 'public') {
+            const { rows: allUsers } = await pool.query(
+                'SELECT id FROM users WHERE id != $1',
+                [userId]
+            );
 
-      allUsers.forEach(user => {
-        notificationsToInsert.push([
-          user.id,
-          'Nouveau document public disponible',
-          `Le document "${document.name}" a été rendu public par ${sharerName} le ${shareDate}`,
-          'document_shared',
-          documentId,
-          false,
-          new Date(),
-          userId,
-          null, null, null
-        ]);
-      });
-    } else if (visibility === 'custom') {
-      const usersToNotify = new Set();
+            allUsers.forEach(user => {
+                notificationsToInsert.push([
+                    user.id,
+                    'Nouveau document public disponible',
+                    `Le document "${document.name}" a été rendu public par ${sharerName} le ${shareDate}`,
+                    'document_shared',
+                    documentId,
+                    false,
+                    new Date(),
+                    userId,
+                    null, null, null
+                ]);
+            });
+        } else if (visibility === 'custom') {
+            const usersToNotify = new Set();
 
-      // Notifier les utilisateurs directement partagés
-      for (const targetId of id_share) {
-        if (targetId !== userId) {
-          usersToNotify.add(targetId);
+            // Notifier les utilisateurs directement partagés
+            for (const targetId of id_share) {
+                if (targetId !== userId) {
+                    usersToNotify.add(targetId);
+                }
+            }
+
+            // Notifier les membres des groupes (sauf ceux déjà notifiés individuellement)
+            if (id_group.length > 0) {
+                const { rows: groupMembers } = await pool.query(
+                    'SELECT DISTINCT user_id FROM group_members WHERE group_id = ANY($1) AND user_id != $2',
+                    [id_group, userId]
+                );
+
+                groupMembers.forEach(member => {
+                    if (!usersToNotify.has(member.user_id)) {
+                        usersToNotify.add(member.user_id);
+                    }
+                });
+            }
+
+            // Créer les notifications
+            Array.from(usersToNotify).forEach(userId => {
+                notificationsToInsert.push([
+                    userId,
+                    id_share.includes(userId)
+                        ? 'Document partagé avec vous'
+                        : 'Document partagé avec votre groupe',
+                    id_share.includes(userId)
+                        ? `${sharerName} vous a partagé le document "${document.name}" le ${shareDate}`
+                        : `${sharerName} a partagé le document "${document.name}" avec votre groupe le ${shareDate}`,
+                    'document_shared',
+                    documentId,
+                    false,
+                    new Date(),
+                    userId,
+                    null, null, null
+                ]);
+            });
         }
-      }
 
-      // Notifier les membres des groupes (sauf ceux déjà notifiés individuellement)
-      if (id_group.length > 0) {
-        const { rows: groupMembers } = await pool.query(
-          'SELECT DISTINCT user_id FROM group_members WHERE group_id = ANY($1) AND user_id != $2',
-          [id_group, userId]
-        );
-
-        groupMembers.forEach(member => {
-          if (!usersToNotify.has(member.user_id)) {
-            usersToNotify.add(member.user_id);
-          }
-        });
-      }
-
-      // Créer les notifications
-      Array.from(usersToNotify).forEach(userId => {
-        notificationsToInsert.push([
-          userId,
-          id_share.includes(userId)
-            ? 'Document partagé avec vous'
-            : 'Document partagé avec votre groupe',
-          id_share.includes(userId)
-            ? `${sharerName} vous a partagé le document "${document.name}" le ${shareDate}`
-            : `${sharerName} a partagé le document "${document.name}" avec votre groupe le ${shareDate}`,
-          'document_shared',
-          documentId,
-          false,
-          new Date(),
-          userId,
-          null, null, null
-        ]);
-      });
-    }
-
-    // Insertion des notifications
-    if (notificationsToInsert.length > 0) {
-      await pool.query(
-        `INSERT INTO notifications 
+        // Insertion des notifications
+        if (notificationsToInsert.length > 0) {
+            await pool.query(
+                `INSERT INTO notifications 
                  (user_id, title, message, type, document_id, is_read, created_at, sender_id, related_task_id, decision, related_id)
                  SELECT * FROM UNNEST(
                      $1::int[], $2::varchar[], $3::text[], $4::varchar[], 
                      $5::int[], $6::boolean[], $7::timestamp[], $8::int[],
                      $9::int[], $10::boolean[], $11::int[]
                  )`,
-        [
-          notificationsToInsert.map(n => n[0]),
-          notificationsToInsert.map(n => n[1]),
-          notificationsToInsert.map(n => n[2]),
-          notificationsToInsert.map(n => n[3]),
-          notificationsToInsert.map(n => n[4]),
-          notificationsToInsert.map(n => n[5]),
-          notificationsToInsert.map(n => n[6]),
-          notificationsToInsert.map(n => n[7]),
-          notificationsToInsert.map(n => n[8]),
-          notificationsToInsert.map(n => n[9]),
-          notificationsToInsert.map(n => n[10])
-        ]
-      );
+                [
+                    notificationsToInsert.map(n => n[0]),
+                    notificationsToInsert.map(n => n[1]),
+                    notificationsToInsert.map(n => n[2]),
+                    notificationsToInsert.map(n => n[3]),
+                    notificationsToInsert.map(n => n[4]),
+                    notificationsToInsert.map(n => n[5]),
+                    notificationsToInsert.map(n => n[6]),
+                    notificationsToInsert.map(n => n[7]),
+                    notificationsToInsert.map(n => n[8]),
+                    notificationsToInsert.map(n => n[9]),
+                    notificationsToInsert.map(n => n[10])
+                ]
+            );
+        }
+
+        // Journalisation
+        await logActivity(userId, 'share', 'document', documentId, {
+            visibility: visibility,
+            shared_with_users: visibility === 'public' ? 'all_users' : id_share,
+            shared_with_groups: id_group,
+            permissions: { 
+                can_modify: isOwner ? can_modify : false, 
+                can_delete: isOwner ? can_delete : false, 
+                can_share: isOwner ? can_share : false 
+            },
+            notifications_sent: notificationsToInsert.length,
+            shared_by_owner: isOwner
+        });
+
+        await pool.query('COMMIT');
+
+        res.status(200).json({
+            success: true,
+            message: `Document ${visibility === 'public' ? 'rendu public' : 'partagé'} avec succès`,
+            permissions_updated: true,
+            users_affected: visibility === 'public' ? 'all_users' : id_share.length,
+            is_owner: isOwner,
+            granted_permissions: {
+                can_read: true,
+                can_modify: isOwner ? can_modify : false,
+                can_delete: isOwner ? can_delete : false,
+                can_share: isOwner ? can_share : false
+            }
+        });
+
+    } catch (error) {
+        await pool.query('ROLLBACK');
+        console.error("Erreur lors du partage:", error);
+        res.status(500).json({
+            success: false,
+            error: "Échec de l'opération de partage",
+            details: process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     }
-
-    // Journalisation
-    await logActivity(userId, 'share', 'document', documentId, {
-      visibility: visibility,
-      shared_with_users: visibility === 'public' ? 'all_users' : id_share,
-      shared_with_groups: id_group,
-      permissions: {
-        can_modify: isOwner ? can_modify : false,
-        can_delete: isOwner ? can_delete : false,
-        can_share: isOwner ? can_share : false
-      },
-      notifications_sent: notificationsToInsert.length,
-      shared_by_owner: isOwner
-    });
-
-    await pool.query('COMMIT');
-
-    res.status(200).json({
-      success: true,
-      message: `Document ${visibility === 'public' ? 'rendu public' : 'partagé'} avec succès`,
-      permissions_updated: true,
-      users_affected: visibility === 'public' ? 'all_users' : id_share.length,
-      is_owner: isOwner,
-      granted_permissions: {
-        can_read: true,
-        can_modify: isOwner ? can_modify : false,
-        can_delete: isOwner ? can_delete : false,
-        can_share: isOwner ? can_share : false
-      }
-    });
-
-  } catch (error) {
-    await pool.query('ROLLBACK');
-    console.error("Erreur lors du partage:", error);
-    res.status(500).json({
-      success: false,
-      error: "Échec de l'opération de partage",
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
 });
 
 // routes/documents.js

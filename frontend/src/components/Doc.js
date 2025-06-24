@@ -56,7 +56,7 @@ const Doc = () => {
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [existingWorkflow, setExistingWorkflow] = useState(null);
-  const categories = ['Contrat', 'Rapport', 'facture', 'cv', 'demande_conge', 'autre'];
+  const categories = ['Contrat', 'facture', 'cv', 'demande_conge', 'Rapport', 'autre'];
   const [selectedCategory, setSelectedCategory] = useState('');
   const [categoryClickCount, setCategoryClickCount] = useState(0);
   const [summary, setSummary] = useState('');
@@ -679,7 +679,7 @@ const filteredDocuments = latestDocs.filter((doc) => {
     }
   };
 
-  const handleShareDocument = async () => {
+   const handleShareDocument = async () => {
     const visibilityValue = shareAccessType === 'custom' ? 'custom' : 'public';
 
     try {
@@ -719,6 +719,7 @@ const filteredDocuments = latestDocs.filter((doc) => {
       toast.error('Erreur lors du partage du document');
     }
   };
+
 
   const handleCategoryClick = async (category) => {
     try {
@@ -1300,53 +1301,7 @@ const filteredDocuments = latestDocs.filter((doc) => {
                       </>
                     )}
 
-                    {selectedCategory === 'Rapport' && (
-                      <>
-                        <h5 className="mb-3">🔎 Recherche avancée - Rapports</h5>
-                        <Form>
-                          <div className="d-flex align-items-end gap-3 flex-wrap">
-                            <Form.Group className="mb-0">
-                              <Form.Label>Type de rapport</Form.Label>
-                              <Form.Control
-                                value={searchFilters.type_rapport || ''}
-                                onChange={(e) => setSearchFilters({ ...searchFilters, type_rapport: e.target.value })}
-                              />
-                            </Form.Group>
-
-                            <Form.Group className="mb-0">
-                              <Form.Label>Auteur</Form.Label>
-                              <Form.Control
-                                value={searchFilters.auteur || ''}
-                                onChange={(e) => setSearchFilters({ ...searchFilters, auteur: e.target.value })}
-                              />
-                            </Form.Group>
-
-                            <Form.Group className="mb-0">
-                              <Form.Label>Date rapport</Form.Label>
-                              <Form.Control
-                                type="date"
-                                value={searchFilters.date_rapport || ''}
-                                onChange={(e) => setSearchFilters({ ...searchFilters, date_rapport: e.target.value })}
-                              />
-                            </Form.Group>
-
-                            <Form.Group className="mb-0">
-                              <Form.Label>Destinataire</Form.Label>
-                              <Form.Control
-                                value={searchFilters.destinataire || ''}
-                                onChange={(e) => setSearchFilters({ ...searchFilters, destinataire: e.target.value })}
-                              />
-                            </Form.Group>
-
-                            <div className="d-flex align-items-end">
-                              <Button className="btn-purple" onClick={filteredDocuments}>
-                                Rechercher
-                              </Button>
-                            </div>
-                          </div>
-                        </Form>
-                      </>
-                    )}
+                  
                     {['autre', 'photo', 'video'].includes(selectedCategory) && (
                       <>
                         <h5 className="mb-3">
