@@ -361,8 +361,8 @@ router.get('/search', async (req, res) => {
       }
     }
 
-else if (category === 'demande_conge') {
-  query = `
+    else if (category === 'demande_conge') {
+      query = `
     SELECT 
       d.*, 
       dc.id as demande_id,
@@ -374,27 +374,27 @@ else if (category === 'demande_conge') {
     JOIN demande_conges dc ON d.id = dc.document_id
   `;
 
-  // Filtres pour demande_conge
-  if (filters.numdemande) {
-    values.push(`%${filters.numdemande}%`);
-    whereClauses.push(`dc.num_demande ILIKE $${values.length}`);
-  }
-  
-  if (filters.date_debut) {
-    values.push(filters.date_debut);
-    whereClauses.push(`dc.date_debut >= $${values.length}`);
-  }
-  
-  if (filters.date_fin) {
-    values.push(filters.date_fin);
-    whereClauses.push(`dc.date_fin <= $${values.length}`);
-  }
-  
-  if (filters.motif) {
-    values.push(`%${filters.motif}%`);
-    whereClauses.push(`dc.motif ILIKE $${values.length}`);
-  }
-}
+      // Filtres pour demande_conge
+      if (filters.numdemande) {
+        values.push(`%${filters.numdemande}%`);
+        whereClauses.push(`dc.num_demande ILIKE $${values.length}`);
+      }
+
+      if (filters.date_debut) {
+        values.push(filters.date_debut);
+        whereClauses.push(`dc.date_debut >= $${values.length}`);
+      }
+
+      if (filters.date_fin) {
+        values.push(filters.date_fin);
+        whereClauses.push(`dc.date_fin <= $${values.length}`);
+      }
+
+      if (filters.motif) {
+        values.push(`%${filters.motif}%`);
+        whereClauses.push(`dc.motif ILIKE $${values.length}`);
+      }
+    }
     else {
       return res.status(400).json({ error: 'Catégorie non supportée' });
     }
@@ -593,8 +593,8 @@ router.get('/', auth, async (req, res) => {
       } else if (doc.category === 'cv') {
         metadata = { nom_candidat, metier, date_cv };
       } else if (doc.category === 'demande_conge') {
-        metadata = { 
-          num_demande, 
+        metadata = {
+          num_demande,
           date_debut,  // MAJ du nom du champ
           date_fin,    // Ajout du champ
           motif        // Ajout du champ
@@ -1201,7 +1201,7 @@ router.put('/:id', auth, async (req, res) => {
 
     if (category === 'demande_conge') {
 
-  await pool.query(`
+      await pool.query(`
     INSERT INTO demande_conges (
       document_id, 
       num_demande, 
@@ -1217,12 +1217,13 @@ router.put('/:id', auth, async (req, res) => {
       date_fin = EXCLUDED.date_fin,
       motif = EXCLUDED.motif
   `, [
-    documentId,
-    req.body.num_demande || '',
-    req.body.date_debut || null,
-    req.body.date_fin || null,
-    req.body.motif || ''
-  ]);}
+        documentId,
+        req.body.num_demande || '',
+        req.body.date_debut || null,
+        req.body.date_fin || null,
+        req.body.motif || ''
+      ]);
+    }
 
     if (category === 'contrat') {
       const {
@@ -1485,17 +1486,19 @@ router.get('/:id/metadata', auth, async (req, res) => {
         const contratRes = await pool.query('SELECT * FROM contrats WHERE document_id = $1', [documentId]);
         meta = contratRes.rows[0] || {};
         break;
-      
+
       case 'facture':
         const factureRes = await pool.query('SELECT * FROM factures WHERE document_id = $1', [documentId]);
         meta = factureRes.rows[0] || {};
+        // Formatage des dates pour le frontend
+        if (meta.date_facture) meta.date_facture = new Date(meta.date_facture).toISOString().split('T')[0];
         break;
-      
+
       case 'cv':
         const cvRes = await pool.query('SELECT * FROM cv WHERE document_id = $1', [documentId]);
         meta = cvRes.rows[0] || {};
         break;
-      
+
       case 'demande_conge':
         const demandeRes = await pool.query(`
           SELECT 
@@ -1506,18 +1509,18 @@ router.get('/:id/metadata', auth, async (req, res) => {
           FROM demande_conges 
           WHERE document_id = $1
         `, [documentId]);
-        
+
         // Transformation des dates au format ISO pour le frontend
         meta = demandeRes.rows[0] || {};
         if (meta.date_debut) meta.date_debut = new Date(meta.date_debut).toISOString().split('T')[0];
         if (meta.date_fin) meta.date_fin = new Date(meta.date_fin).toISOString().split('T')[0];
         break;
-      
+
       case 'rapport':
         const rapportRes = await pool.query('SELECT * FROM rapports WHERE document_id = $1', [documentId]);
         meta = rapportRes.rows[0] || {};
         break;
-      
+
       default:
         meta = {};
     }

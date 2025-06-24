@@ -96,7 +96,7 @@ const DocumentCompletion = () => {
         // Champs spécifiques par catégorie
         const defaultFields = {
           facture: {
-            num_facture: '',
+            numero_facture: '',
             nom_entreprise: '',
             produit: '',
             montant: '',
@@ -153,35 +153,35 @@ const DocumentCompletion = () => {
     initialize();
   }, [id, token]);
 
-   const validateDates = (dateDebut, dateFin) => {
-  if (!dateDebut || !dateFin) return true; // La validation de champ vide est déjà gérée ailleurs
-  return new Date(dateFin) >= new Date(dateDebut);
-};
+  const validateDates = (dateDebut, dateFin) => {
+    if (!dateDebut || !dateFin) return true; // La validation de champ vide est déjà gérée ailleurs
+    return new Date(dateFin) >= new Date(dateDebut);
+  };
 
- const validateCategoryFields = (category, values) => {
-  switch (category) {
-    case 'facture':
-      return values.num_facture && values.nom_entreprise && values.montant && values.date_facture;
-    case 'cv':
-      return values.num_cv && values.nom_candidat && values.metier && values.lieu;
-    case 'demande_conge':
-      return (
-        values.num_demande && 
-        values.date_debut && 
-        values.date_fin && 
-        values.motif &&
-        validateDates(values.date_debut, values.date_fin)
-      );
-    case 'contrat':
-      return values.numero_contrat && values.type_contrat && values.partie_prenante && values.date_signature;
-    case 'rapport':
-      return values.type_rapport && values.auteur && values.date_rapport;
-    default:
-      return true;
-  }
-};
+  const validateCategoryFields = (category, values) => {
+    switch (category) {
+      case 'facture':
+        return values.num_facture && values.nom_entreprise && values.montant && values.date_facture;
+      case 'cv':
+        return values.num_cv && values.nom_candidat && values.metier && values.lieu;
+      case 'demande_conge':
+        return (
+          values.num_demande &&
+          values.date_debut &&
+          values.date_fin &&
+          values.motif &&
+          validateDates(values.date_debut, values.date_fin)
+        );
+      case 'contrat':
+        return values.numero_contrat && values.type_contrat && values.partie_prenante && values.date_signature;
+      case 'rapport':
+        return values.type_rapport && values.auteur && values.date_rapport;
+      default:
+        return true;
+    }
+  };
 
- 
+
 
   const checkForDuplicate = async (docName) => {
     if (!docName.trim()) return false;
@@ -204,8 +204,8 @@ const DocumentCompletion = () => {
   };
 
   const shouldShowCommonFields = (category) => {
-    return !['contrat', 'rapport'].includes(category);
-  };
+  return !['contrat', 'rapport', 'facture', 'demande_conge','cv'].includes(category);
+};
 
   const saveDocument = async () => {
     setIsSaving(true);
@@ -268,60 +268,60 @@ const DocumentCompletion = () => {
   };
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  setErrorMessage(null);
-  setSuccessMessage(null);
+    e.preventDefault();
+    setErrorMessage(null);
+    setSuccessMessage(null);
 
-  // Validation des champs obligatoires selon la catégorie
-  if (!validateCategoryFields(category, extraFields)) {
-    if (category === 'demande_conge' && 
-        extraFields.date_debut && 
-        extraFields.date_fin && 
+    // Validation des champs obligatoires selon la catégorie
+    if (!validateCategoryFields(category, extraFields)) {
+      if (category === 'demande_conge' &&
+        extraFields.date_debut &&
+        extraFields.date_fin &&
         !validateDates(extraFields.date_debut, extraFields.date_fin)) {
-      setErrorMessage("La date de fin doit être postérieure à la date de début");
-    } else {
+        setErrorMessage("La date de fin doit être postérieure à la date de début");
+      } else {
+        setErrorMessage("Veuillez remplir tous les champs obligatoires");
+      }
+      return;
+    }
+
+    // Validation pour les nouvelles versions
+    if (isNewVersion && !differenceNote.trim()) {
+      setErrorMessage("Veuillez décrire les modifications pour la nouvelle version");
+      return;
+    }
+
+    // Validation des champs communs
+    const isCommonFieldsValid = shouldShowCommonFields(category)
+      ? baseName.trim() && summary.trim() && tags.trim() && priority.trim()
+      : baseName.trim();
+
+    if (!isCommonFieldsValid) {
       setErrorMessage("Veuillez remplir tous les champs obligatoires");
+      return;
     }
-    return;
-  }
 
-  // Validation pour les nouvelles versions
-  if (isNewVersion && !differenceNote.trim()) {
-    setErrorMessage("Veuillez décrire les modifications pour la nouvelle version");
-    return;
-  }
-
-  // Validation des champs communs
-  const isCommonFieldsValid = shouldShowCommonFields(category)
-    ? baseName.trim() && summary.trim() && tags.trim() && priority.trim()
-    : baseName.trim();
-
-  if (!isCommonFieldsValid) {
-    setErrorMessage("Veuillez remplir tous les champs obligatoires");
-    return;
-  }
-
-  // Validation des conflits de noms
-  if (existingDocument && existingDocument.id !== docInfo?.id && !canAddVersion) {
-    setErrorMessage("Un document avec ce nom existe déjà et vous n'avez pas les droits de modification");
-    return;
-  }
-
-  try {
-    setIsSaving(true);
-
-    if (isNewVersion) {
-      await handleSaveAsVersion();
-    } else {
-      await saveDocument();
+    // Validation des conflits de noms
+    if (existingDocument && existingDocument.id !== docInfo?.id && !canAddVersion) {
+      setErrorMessage("Un document avec ce nom existe déjà et vous n'avez pas les droits de modification");
+      return;
     }
-  } catch (error) {
-    console.error("Erreur lors de l'enregistrement:", error);
-    setErrorMessage(error.response?.data?.message || error.message || "Une erreur est survenue lors de l'enregistrement");
-  } finally {
-    setIsSaving(false);
-  }
-};
+
+    try {
+      setIsSaving(true);
+
+      if (isNewVersion) {
+        await handleSaveAsVersion();
+      } else {
+        await saveDocument();
+      }
+    } catch (error) {
+      console.error("Erreur lors de l'enregistrement:", error);
+      setErrorMessage(error.response?.data?.message || error.message || "Une erreur est survenue lors de l'enregistrement");
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
 
   const isFormValid = () => {
@@ -412,31 +412,73 @@ const DocumentCompletion = () => {
                   </div>
                 </Form.Group>
 
-               {Object.entries(extraFields).map(([key, value]) => (
-  <Form.Group className="mb-3" key={key}>
-    <Form.Label>
-      {key.replace(/_/g, ' ').charAt(0).toUpperCase() + key.replace(/_/g, ' ').slice(1)}
-    </Form.Label>
-    <Form.Control
-      type={key.toLowerCase().includes('date') ? 'date' : 'text'}
-      value={value}
-      onChange={(e) => setExtraFields(prev => ({ ...prev, [key]: e.target.value }))}
-      required={validateCategoryFields(category, extraFields)}
-      isInvalid={
-        key === 'date_fin' && 
-        extraFields.date_debut && 
-        extraFields.date_fin && 
-        !validateDates(extraFields.date_debut, extraFields.date_fin)
-      }
-    />
-    {key === 'date_fin' && extraFields.date_debut && extraFields.date_fin && 
-     !validateDates(extraFields.date_debut, extraFields.date_fin) && (
-      <Form.Text className="text-danger">
-        ⚠️ La date de fin doit être après la date de début
-      </Form.Text>
-    )}
-  </Form.Group>
-))}
+               {category === 'facture' ? (
+  <>
+    <Form.Group className="mb-3">
+      <Form.Label>Numéro de facture</Form.Label>
+      <Form.Control
+        type="text"
+        value={extraFields.numero_facture || ''}
+        onChange={(e) => setExtraFields({...extraFields, numero_facture: e.target.value})}
+        required
+      />
+    </Form.Group>
+    
+    <Form.Group className="mb-3">
+      <Form.Label>Date de facture</Form.Label>
+      <Form.Control
+        type="date"
+        value={extraFields.date_facture || ''}
+        onChange={(e) => setExtraFields({...extraFields, date_facture: e.target.value})}
+        required
+      />
+    </Form.Group>
+    
+    <Form.Group className="mb-3">
+      <Form.Label>Montant</Form.Label>
+      <Form.Control
+        type="text"
+        value={extraFields.montant || ''}
+        onChange={(e) => setExtraFields({...extraFields, montant: e.target.value})}
+        required
+      />
+    </Form.Group>
+    
+    <Form.Group className="mb-3">
+      <Form.Label>Nom entreprise</Form.Label>
+      <Form.Control
+        type="text"
+        value={extraFields.nom_entreprise || ''}
+        onChange={(e) => setExtraFields({...extraFields, nom_entreprise: e.target.value})}
+        required
+      />
+    </Form.Group>
+    
+    <Form.Group className="mb-3">
+      <Form.Label>Produit</Form.Label>
+      <Form.Control
+        type="text"
+        value={extraFields.produit || ''}
+        onChange={(e) => setExtraFields({...extraFields, produit: e.target.value})}
+        required
+      />
+    </Form.Group>
+  </>
+) : (
+  Object.entries(extraFields).map(([key, value]) => (
+    <Form.Group className="mb-3" key={key}>
+      <Form.Label>
+        {key.replace(/_/g, ' ').charAt(0).toUpperCase() + key.replace(/_/g, ' ').slice(1)}
+      </Form.Label>
+      <Form.Control
+        type={key.toLowerCase().includes('date') ? 'date' : 'text'}
+        value={value || ''}
+        onChange={(e) => setExtraFields(prev => ({ ...prev, [key]: e.target.value }))}
+        required
+      />
+    </Form.Group>
+  ))
+)}
 
                 {shouldShowCommonFields(category) && (
                   <>
