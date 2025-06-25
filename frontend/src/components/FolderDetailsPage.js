@@ -121,7 +121,6 @@ const usId = getUserIdFromToken();
     }
   };
 
-  console.log(id);
 
   
   const fetchFolder = async () => {
@@ -396,7 +395,7 @@ const handleShareFolder = async (userIds, groupIds) => {
 
         // Rediriger vers la page parent ou la page d'accueil après un délai
         setTimeout(() => {
-          navigate(folder.parent_id ? `/folder/${folder.parent_id}` : '/');
+          navigate('/folder/');
         }, 1500);
 
       } catch (err) {
