@@ -218,6 +218,28 @@ const NotificationsPage = () => {
     }
   };
 
+const handleVersionDecision = async (notif, decision) => {
+  try {
+    // 1. Envoyer la décision au backend
+    const response = await axios.put(
+      `http://localhost:5000/api/notifications/${notif.id}/decision`,
+      { decision },
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    // 2. Marquer la notification comme lue (optionnel)
+    await markAsRead(notif.id);
+
+    // 3. Afficher un message et rafraîchir
+    alert(response.data.message);
+    fetchNotifications();
+
+  } catch (error) {
+    console.error('Erreur:', error);
+    alert(`Erreur lors du traitement: ${error.response?.data?.message || error.message}`);
+  }
+};
+
   return (
     <>
       <Navbar />
@@ -278,7 +300,7 @@ const NotificationsPage = () => {
                       </div>
                       <div className="notification-actions">
                         {notif.document_id && (
-                          (currentUser?.role === 'admin' ||  notif.type=== 'document_shared' || notif.document_id?.is_archived) && (
+                          (currentUser?.role === 'admin' ||  notif.type=== 'document_shared' || notif.decision=== true || notif.document_id?.is_archived) && (
                             <Button
                               variant="outline-primary"
                               size="sm"
@@ -317,6 +339,27 @@ const NotificationsPage = () => {
                               size="sm"
                               className="action-btn"
                               onClick={() => handleArchiveDecision(notif, false)}
+                              title="Refuser"
+                            >
+                              <i className="bi bi-x-lg"></i>
+                            </Button>
+                          </ButtonGroup>
+                        )}
+                         {currentUser?.role === 'admin' && notif.type === 'request' && !notif.is_read && (
+                          <ButtonGroup>
+                            <Button
+                              variant="outline-success"
+                              size="sm"
+                              onClick={() => handleVersionDecision(notif, true)}
+                              title="Accepter"
+                            >
+                              <i className="bi"></i> Accepter
+                            </Button>
+                            <Button
+                              variant="outline-danger"
+                              size="sm"
+                              className="action-btn"
+                              onClick={() => handleVersionDecision(notif, false)}
                               title="Refuser"
                             >
                               <i className="bi bi-x-lg"></i>
