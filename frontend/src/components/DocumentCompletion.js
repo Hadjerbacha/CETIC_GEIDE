@@ -185,7 +185,7 @@ const DocumentCompletion = () => {
   const validateCategoryFields = (category, values) => {
     switch (category) {
       case 'facture':
-        return values.num_facture && values.nom_entreprise && values.montant && values.date_facture;
+        return values.numero_facture && values.nom_entreprise && values.montant && values.date_facture;
       case 'cv':
         return values.num_cv && values.nom_candidat && values.metier && values.lieu;
       case 'demande_conge':

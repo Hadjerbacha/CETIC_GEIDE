@@ -1321,14 +1321,14 @@ router.put('/:id', auth, async (req, res) => {
 
     if (category === 'facture') {
       const {
-        num_facture = '',
+        numero_facture = '',
         nom_entreprise = '',
         produit = '',
         montant = 0,
         date_facture = null
       } = req.body;
 
-      is_completed = Boolean(num_facture && nom_entreprise && produit && montant && date_facture);
+      is_completed = Boolean(numero_facture && nom_entreprise && produit && montant && date_facture);
     }
 
     if (category === 'cv') {
@@ -1480,7 +1480,7 @@ if (is_completed) {
               date_facture = $6;
         `, [
           documentId,
-          req.body.num_facture || '',
+          req.body.numero_facture || '',
           req.body.nom_entreprise || '',
           req.body.produit || '',
           req.body.montant || 0,
