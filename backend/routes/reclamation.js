@@ -37,23 +37,27 @@ router.post('/', upload.single('file'), async (req, res) => {
             return res.status(400).json({ message: "Champs obligatoires manquants." });
         }
 
-        await pool.query(
+        // Capture the result of the INSERT query
+        const result = await pool.query(
             `INSERT INTO reclamations (category, reclamation, priority, file_path)
-             VALUES ($1, $2, $3, $4)`,
+             VALUES ($1, $2, $3, $4) RETURNING id`,
             [category, reclamation, priority || 'moyenne', filePath]
         );
-// Log de la création de réclamation
-    await logActivity(
-      req.user?.id || 'system', // Si pas d'authentification
-      'reclamation_create',
-      'reclamation',
-      result.rows[0].id,
-      {
+
+        // Now you can use result.rows[0].id
+       // In your logActivity call:
+await logActivity(
+    req.user?.id || null,  // Use NULL instead of 'system' when no user
+    'reclamation_create',
+    'reclamation',
+    result.rows[0].id,
+    {
         category,
         priority,
         has_file: !!filePath
-      }
-    );
+    }
+);
+
         res.status(200).json({ message: 'Réclamation enregistrée avec succès.' });
     } catch (error) {
         console.error("Erreur réclamation :", error);
