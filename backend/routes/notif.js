@@ -93,7 +93,91 @@ router.post('/', async (req, res) => {
     res.status(500).json({ message: 'Erreur serveur' });
   }
 });
+router.put('/:id/decision', verifyToken, async (req, res) => {
+  const { id } = req.params;
+  const { decision } = req.body; // true = acceptée, false = refusée
+  const userId = req.user.id; // ID de l'utilisateur qui prend la décision
 
+  try {
+    // 1. Récupérer la notification de demande originale
+    const originalNotifQuery = await pool.query(
+      `SELECT * FROM notifications 
+       WHERE id = $1 AND type = 'request'`,
+      [id]
+    );
+
+    if (originalNotifQuery.rows.length === 0) {
+      return res.status(404).json({ 
+        success: false,
+        message: "Notification de demande introuvable ou déjà traitée" 
+      });
+    }
+
+    const originalNotif = originalNotifQuery.rows[0];
+
+    // 2. Mettre à jour la décision dans la notification originale
+    await pool.query(
+      `UPDATE notifications 
+       SET decision = $1, is_read = true 
+       WHERE id = $2`,
+      [decision, id]
+    );
+
+    // 3. Créer une notification de réponse pour l'expéditeur
+    const message = decision
+      ? `Votre demande d'accès aux versions du document #${originalNotif.document_id} a été approuvée.`
+      : `Votre demande d'accès aux versions du document #${originalNotif.document_id} a été refusée.`;
+
+    const newNotif = await pool.query(
+      `INSERT INTO notifications 
+       (user_id, sender_id, message, type, document_id, decision, is_read, created_at) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, NOW()) 
+       RETURNING *`,
+      [
+        originalNotif.sender_id,
+        userId,
+        message,
+        'info',
+        originalNotif.document_id,
+        decision,
+        false
+      ]
+    );
+
+      await pool.query(
+      `UPDATE documents 
+       SET access = $1 
+       WHERE id = $2`,
+      [decision ?true :false, originalNotif.document_id]
+    );
+
+    // Log de l'activité
+    await logActivity(
+      userId,
+      'notification_decision',
+      'notification',
+      id,
+      {
+        decision: decision,
+        recipient_id: originalNotif.sender_id,
+        document_id: originalNotif.document_id
+      }
+    );
+
+    res.json({
+      success: true,
+      message: `Demande ${decision ? 'acceptée' : 'refusée'} avec succès`,
+      notification: newNotif.rows[0]
+    });
+
+  } catch (error) {
+    console.error('Erreur:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors du traitement de la décision'
+    });
+  }
+});
 
 // 📬 Récupérer les notifications simples d’un utilisateur
 router.get('/:user_id', async (req, res) => {

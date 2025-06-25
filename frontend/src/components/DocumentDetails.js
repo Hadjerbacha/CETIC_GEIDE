@@ -499,7 +499,7 @@ const DocumentDetails = () => {
                         </Button>
                       )}
                       {document.version > 1 && (
-                        (currentUser?.role === 'admin' || document.access === 'true')
+                        (currentUser?.role === 'admin' || document.access === 'true' )
                         && <Button
                           variant="outline-secondary"
                           className="mt-2 rounded-pill fw-semibold px-4 py-2"
