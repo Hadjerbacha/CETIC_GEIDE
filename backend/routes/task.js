@@ -1310,7 +1310,32 @@ router.post('/:id/generate-from-template', authMiddleware, async (req, res) => {
       depends_on: 1
     }
   ]
-}
+},
+rapport: {
+    workflowName: 'Workflow Document Rapport',
+    workflowDescription: 'Validation des documents et rapports',
+    tasks: [
+      { 
+        title: 'Vérification document', 
+        description: 'Vérification du contenu et de la forme du document', 
+        type: 'validation',
+        priority: "medium",
+        role: 'manager',
+        order: 1,
+        durationDays: 2
+      },
+      { 
+        title: 'Validation finale', 
+        description: 'Approbation et validation définitive du document', 
+        type: 'validation',
+        priority: "medium",
+        role: 'directeur',
+        order: 2,
+        durationDays: 1,
+        depends_on: 1
+      }
+    ]
+  }
   };
 
   try {

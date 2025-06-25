@@ -421,15 +421,15 @@ const handleShareFolder = async (userIds, groupIds) => {
               <ButtonGroup className="mt-3 d-flex gap-2">
 
                 <Button
-                  variant={folder?.workflow_id ? 'secondary' : 'success'}
-                  onClick={createWorkflow}
-                  disabled={folder?.workflow_id}
-                  className="d-flex align-items-center px-3 rounded-pill shadow-sm"
-                  title="Créer un workflow pour ce dossier"
-                >
-                  <FiFileText className="me-2" />
-                  {folder?.workflow_id ? 'Workflow appliqué' : 'Créer un workflow'}
-                </Button>
+  variant={folder?.workflow_id ? 'secondary' : 'success'}
+  onClick={createWorkflow}
+  disabled={folder?.workflow_id || (documents.length === 0 && subfolders.length === 0)}
+  className="d-flex align-items-center px-3 rounded-pill shadow-sm"
+  title={folder?.workflow_id ? 'Workflow déjà appliqué' : (documents.length === 0 && subfolders.length === 0) ? 'Workflow disponible seulement pour les dossiers contenant des fichiers' : 'Créer un workflow pour ce dossier'}
+>
+  <FiFileText className="me-2" />
+  {folder?.workflow_id ? 'Workflow appliqué' : 'Créer un workflow'}
+</Button>
 
                 <Button
                   variant="outline-primary"

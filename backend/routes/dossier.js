@@ -393,6 +393,8 @@ const getTemplateByFolderName = (folderName) => {
     return 'conge';
   } else if (lowerName.includes('cv') || lowerName.includes('curriculum')) {
     return 'cv';
+  } else if (lowerName.includes('rapport') || lowerName.includes('document')) {
+    return 'rapport';
   }
   return null;
 };
@@ -512,6 +514,29 @@ const workflowTemplates = {
         description: 'Décider d’une suite (entretien, réserve, rejet) et archiver le CV',
         type: 'validation',
         role: 'gestionnaire RH',
+        order: 2,
+        durationDays: 1,
+        depends_on: 1
+      }
+    ]
+  },
+  rapport: {
+    name: 'Workflow Document Rapport',
+    description: 'Validation des documents et rapports',
+    tasks: [
+      { 
+        title: 'Vérification document', 
+        description: 'Vérification du contenu et de la forme du document', 
+        type: 'validation',
+        role: 'manager',
+        order: 1,
+        durationDays: 2
+      },
+      { 
+        title: 'Validation finale', 
+        description: 'Approbation et validation définitive du document', 
+        type: 'validation',
+        role: 'directeur',
         order: 2,
         durationDays: 1,
         depends_on: 1

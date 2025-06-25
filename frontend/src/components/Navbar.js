@@ -126,6 +126,11 @@ const Navbar = () => {
       path: '/activites',
       icon: <FaIcons.FaHistory />,
     },
+    currentUser?.role !== 'admin' && {
+      title: 'Groupe de travail',
+      path: '/groupeUser',
+      icon: <FaIcons.FaUser />,
+    },
     currentUser?.role === 'admin' && {
       title: 'Archive',
       path: '/archive',

@@ -51,11 +51,16 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   const id = req.params.id;
   const { nom, description, user_ids } = req.body;
+  
   try {
+    // Récupérer le groupe avant modification pour le log
+    const oldGroup = await pool.query('SELECT * FROM groups WHERE id = $1', [id]);
+    
     const result = await pool.query(
       'UPDATE groups SET nom = $1, description = $2, user_ids = $3 WHERE id = $4 RETURNING *',
       [nom, description, user_ids, id]
     );
+    
     // Log de la modification du groupe
     await logActivity(
       req.user?.id || 'system',
@@ -81,8 +86,13 @@ router.put('/:id', async (req, res) => {
 // Delete group
 router.delete('/:id', async (req, res) => {
   const id = req.params.id;
+  
   try {
+    // Récupérer le groupe avant suppression pour le log
+    const group = await pool.query('SELECT * FROM groups WHERE id = $1', [id]);
+    
     await pool.query('DELETE FROM groups WHERE id = $1', [id]);
+    
     // Log de la suppression du groupe
     await logActivity(
       req.user?.id || 'system',
@@ -94,6 +104,7 @@ router.delete('/:id', async (req, res) => {
         member_count: group.rows[0]?.user_ids?.length || 0
       }
     );
+    
     res.json({ message: 'Group deleted' });
   } catch (err) {
     res.status(500).json({ error: err.message });

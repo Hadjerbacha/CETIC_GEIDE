@@ -582,7 +582,7 @@ router.post('/:id/complete', authMiddleware, async (req, res) => {
           [
             taskWithAssignee.rows[0].assigned_to[0],
             userId,
-            `Une nouvelle tâche vous a été assignée et est maintenant disponible`,
+            `Une nouvelle tâche vous a été assignée :`,
             'task',
             task.id,
             false

@@ -188,7 +188,7 @@ useEffect(() => {
                   {assignedTasks.length > 0 ? (
                     <ul className="task-list">
                       {assignedTasks.map((task, index) => (
-                        <li key={index} className="task-item" onClick={() => navigate(`/tasks/${task.id}`)}>
+                        <li key={index} className="task-item" onClick={() => navigate(`/details_taches/${task.id}`)}>
                           <div className="task-icon">
                             <FontAwesomeIcon 
                               icon={task.status === 'completed' ? faCheckCircle : faExclamationTriangle} 
@@ -201,11 +201,6 @@ useEffect(() => {
                               <FontAwesomeIcon icon={faCalendarAlt} className="mr-1" />
                               {new Date(task.due_date).toLocaleDateString()}
                             </p>
-                          </div>
-                          <div className="task-meta">
-                            <span className={`task-status ${task.status}`}>
-                              {task.status === 'completed' ? 'Terminée' : 'En cours'}
-                            </span>
                           </div>
                         </li>
                       ))}
