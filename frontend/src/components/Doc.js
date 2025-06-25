@@ -526,16 +526,19 @@ const filteredDocuments = latestDocs.filter((doc) => {
           (!filters.produit || doc.produit?.toString().toLowerCase().includes(filters.produit))
         );
 
-      case 'cv':
-        return (
-          commonFilters.description &&
-          commonFilters.summary &&
-          commonFilters.tags &&
-          (!filters.nom_candidat || doc.nom_candidat?.toLowerCase().includes(filters.nom_candidat)) &&
-          (!filters.metier || doc.metier?.toLowerCase().includes(filters.metier)) &&
-          (!filters.date_cv || (doc.date_cv && new Date(doc.date_cv).toISOString().split('T')[0] === filters.date_cv))
-        );
-
+  case 'cv':
+  return (
+    commonFilters.description &&
+    commonFilters.summary &&
+    commonFilters.tags &&
+    (!filters.nom_candidat || (doc.nom_candidat && doc.nom_candidat.toString().toLowerCase().includes(filters.nom_candidat))) &&
+    (!filters.metier || (doc.metier && doc.metier.toString().toLowerCase().includes(filters.metier))) &&
+    (!filters.domaine || (doc.domaine && doc.domaine.toString().toLowerCase().includes(filters.domaine))) &&
+    (!filters.experience || (doc.experience && doc.experience.toString().toLowerCase().includes(filters.experience))) &&
+    (!filters.lieu || (doc.lieu && doc.lieu.toString().toLowerCase().includes(filters.lieu))) &&
+    (!filters.num_cv || (doc.num_cv && doc.num_cv.toString().toLowerCase().includes(filters.num_cv))) && // Nouveau filtre
+    (!filters.date_cv || (doc.date_cv && new Date(doc.date_cv).toISOString().split('T')[0] === filters.date_cv))
+  );
       case 'demande_conge':
         return (
           commonFilters.description &&
@@ -1147,36 +1150,61 @@ const filteredDocuments = latestDocs.filter((doc) => {
                       </>
                     )}
                     {selectedCategory === 'cv' && (
-                      <>
-                        <h5 className="mb-3">🔎 Recherche avancée - CV</h5>
-                        <Form>
-                          <div className="d-flex align-items-end gap-3 flex-wrap">
-                            <Form.Group className="mb-0">
-                              <Form.Label>Nom candidat</Form.Label>
-                              <Form.Control
-                                type="text"
-                                value={searchFilters.nom_candidat || ''}
-                                onChange={(e) => setSearchFilters({ ...searchFilters, nom_candidat: e.target.value })}
-                              />
-                            </Form.Group>
-                            <Form.Group className="mb-0">
-                              <Form.Label>Métier</Form.Label>
-                              <Form.Control
-                                type="text"
-                                value={searchFilters.metier || ''}
-                                onChange={(e) => setSearchFilters({ ...searchFilters, metier: e.target.value })}
-                              />
-                            </Form.Group>
-                            <div className="d-flex align-items-end">
-                              <Button className="btn-purple" onClick={filteredDocuments}>
-                                Rechercher
-                              </Button>
-
-                            </div>
-                          </div>
-                        </Form>
-                      </>
-                    )}
+  <>
+    <h5 className="mb-3">🔎 Recherche avancée - CV</h5>
+    
+    <Form>
+      <div className="d-flex align-items-end gap-3 flex-wrap">
+         <Form.Group className="mb-0">
+          <Form.Label>Numéro CV</Form.Label>
+          <Form.Control
+            type="text"
+            value={searchFilters.num_cv || ''}
+            onChange={(e) => setSearchFilters({ ...searchFilters, num_cv: e.target.value })}
+          />
+        </Form.Group>
+        <Form.Group className="mb-0">
+          <Form.Label>Nom candidat</Form.Label>
+          <Form.Control
+            type="text"
+            value={searchFilters.nom_candidat || ''}
+            onChange={(e) => setSearchFilters({ ...searchFilters, nom_candidat: e.target.value })}
+          />
+        </Form.Group>
+        <Form.Group className="mb-0">
+          <Form.Label>Métier</Form.Label>
+          <Form.Control
+            type="text"
+            value={searchFilters.metier || ''}
+            onChange={(e) => setSearchFilters({ ...searchFilters, metier: e.target.value })}
+          />
+        </Form.Group>
+        <Form.Group className="mb-0">
+          <Form.Label>Domaine</Form.Label>
+          <Form.Control
+            type="text"
+            value={searchFilters.domaine || ''}
+            onChange={(e) => setSearchFilters({ ...searchFilters, domaine: e.target.value })}
+          />
+        </Form.Group>
+        <Form.Group className="mb-0">
+          <Form.Label>Expérience</Form.Label>
+          <Form.Control
+            type="text"
+            value={searchFilters.experience || ''}
+            onChange={(e) => setSearchFilters({ ...searchFilters, experience: e.target.value })}
+          />
+        </Form.Group>
+       
+        <div className="d-flex align-items-end gap-2">
+          <Button className="btn-purple" onClick={() => setSearchFilters({})}>
+            Rechercher
+          </Button>
+        </div>
+      </div>
+    </Form>
+  </>
+)}
 
                     {selectedCategory === 'facture' && (
                       <>

@@ -541,23 +541,54 @@ router.get('/', auth, async (req, res) => {
     }
 
     // Filtres spécifiques pour CV
-    if (selectedCategory === 'cv') {
-      if (nom_candidat) {
-        baseQuery += ` AND LOWER(cv.nom_candidat) ILIKE $${paramIndex}`;
-        params.push(`%${nom_candidat.toLowerCase()}%`);
-        paramIndex++;
-      }
-      if (metier) {
-        baseQuery += ` AND LOWER(cv.metier) ILIKE $${paramIndex}`;
-        params.push(`%${metier.toLowerCase()}%`);
-        paramIndex++;
-      }
-      if (date_cv) {
-        baseQuery += ` AND cv.date_cv = $${paramIndex}`;
-        params.push(date_cv);
-        paramIndex++;
-      }
-    }
+if (selectedCategory.toLowerCase() === 'cv') {
+  // Changez LEFT JOIN en INNER JOIN pour ne garder que les documents avec CV
+  baseQuery = baseQuery.replace('LEFT JOIN cv ON cv.document_id = d.id', 'INNER JOIN cv ON cv.document_id = d.id');
+  
+  // Ajoutez le filtre de catégorie (en supposant que le champ s'appelle 'category')
+  baseQuery += ` AND LOWER(d.category) = $${paramIndex}`;
+  params.push('cv');
+  paramIndex++;
+
+  if (num_cv) {
+    baseQuery += ` AND cv.num_cv ILIKE $${paramIndex}`;
+    params.push(`%${num_cv}%`);
+    paramIndex++;
+  }
+
+  if (nom_candidat) {
+    baseQuery += ` AND cv.nom_candidat ILIKE $${paramIndex}`;
+    params.push(`%${nom_candidat}%`);
+    paramIndex++;
+  }
+
+  if (metier) {
+    baseQuery += ` AND cv.metier ILIKE $${paramIndex}`;
+    params.push(`%${metier}%`);
+    paramIndex++;
+  }
+
+  // Pour les autres champs
+  if (domaine) {
+    baseQuery += ` AND cv.domaine ILIKE $${paramIndex}`;
+    params.push(`%${domaine}%`);
+    paramIndex++;
+  }
+}
+
+  // Ajoutez ces filtres supplémentaires si besoin
+  if (req.query.domaine) {
+    baseQuery += ` AND cv.domaine ILIKE $${paramIndex}`;
+    params.push(`%${req.query.domaine}%`);
+    paramIndex++;
+  }
+
+  if (req.query.experience) {
+    baseQuery += ` AND cv.experience ILIKE $${paramIndex}`;
+    params.push(`%${req.query.experience}%`);
+    paramIndex++;
+  }
+
 
     // Filtres spécifiques Facture
     if (selectedCategory === 'facture') {
@@ -1023,6 +1054,15 @@ router.get('/latest', auth, async (req, res) => {
         montant_contrat: row.montant_contrat,
         statut_contrat: row.statut
       } : {}),
+      ...(row.cv_id && {  // <-- Ajoutez cette section pour les CV
+    nom_candidat: row.nom_candidat,
+    metier: row.metier,
+    experience: row.experience,
+    domaine: row.domaine,
+    num_cv: row.num_cv,
+    lieu: row.lieu,
+    date_cv: row.date_cv
+  }),
       ...(row.rapport_id ? {
         type_rapport: row.type_rapport,
         auteur: row.auteur,
