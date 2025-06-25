@@ -15,10 +15,12 @@ const DetailsTask = () => {
   const [actionType, setActionType] = useState(null); // 'complete' or 'reject'
   const [workflowDocument, setWorkflowDocument] = useState(null);
    const [taskFile, setTaskFile] = useState(null);
+   const [workflowFolder, setWorkflowFolder] = useState(null);
+    const [folderFiles, setFolderFiles] = useState([]);
   const token = localStorage.getItem('token');
 
  useEffect(() => {
-  const fetchTaskAndDocuments = async () => {
+    const fetchTaskAndDocuments = async () => {
       try {
         // 1. Récupérer la tâche spécifique
         const taskResponse = await axios.get(`http://localhost:5000/api/tasks/mes-taches`, {
@@ -42,7 +44,7 @@ const DetailsTask = () => {
           });
         }
 
-        // 3. Si la tâche a un workflow, récupérer le document associé
+        // 3. Si la tâche a un workflow, récupérer le workflow et les documents associés
         if (taskData.workflow_id) {
           try {
             const workflowResponse = await axios.get(
@@ -50,15 +52,34 @@ const DetailsTask = () => {
               { headers: { Authorization: `Bearer ${token}` } }
             );
 
-            if (workflowResponse.data.workflow?.document_id) {
+            const workflow = workflowResponse.data.workflow;
+
+            // Si le workflow a un document_id, récupérer le document
+            if (workflow?.document_id) {
               const documentResponse = await axios.get(
-                `http://localhost:5000/api/documents/${workflowResponse.data.workflow.document_id}`,
+                `http://localhost:5000/api/documents/${workflow.document_id}`,
                 { headers: { Authorization: `Bearer ${token}` } }
               );
               setWorkflowDocument(documentResponse.data);
             }
+
+            // Si le workflow a un folder_id, récupérer le dossier et ses fichiers
+            if (workflow?.folder_id) {
+              const folderResponse = await axios.get(
+                `http://localhost:5000/api/folders/${workflow.folder_id}`,
+                { headers: { Authorization: `Bearer ${token}` } }
+              );
+              setWorkflowFolder(folderResponse.data);
+
+              // Récupérer les fichiers du dossier
+              const filesResponse = await axios.get(
+                `http://localhost:5000/api/folders/${workflow.folder_id}/files`,
+                { headers: { Authorization: `Bearer ${token}` } }
+              );
+              setFolderFiles(filesResponse.data);
+            }
           } catch (error) {
-            console.error('Erreur récupération workflow/document:', error);
+            console.error('Erreur récupération workflow/document/folder:', error);
           }
         }
       } catch (error) {
@@ -248,8 +269,38 @@ const DetailsTask = () => {
               </li>
             )}
 
+            {/* Dossier principal du workflow avec ses fichiers */}
+            {workflowFolder && (
+              <li className="mb-3">
+                <div className="d-flex align-items-center mb-2">
+                  <i className="bi bi-folder me-2"></i>
+                  <span className="fw-bold">Dossier du workflow: {workflowFolder.name}</span>
+                </div>
+                
+                {folderFiles.length > 0 ? (
+                  <ul className="list-unstyled ps-4">
+                    {folderFiles.map((file) => (
+                      <li key={file.id} className="mb-2">
+                        <a 
+                          href={`http://localhost:5000${file.file_path.startsWith('/') ? '' : '/'}${file.file_path}`} 
+                          target="_blank" 
+                          rel="noreferrer"
+                          className="text-decoration-none"
+                        >
+                          <i className="bi bi-file-earmark me-2"></i>
+                          {file.name}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-muted ps-4">Aucun fichier dans ce dossier</p>
+                )}
+              </li>
+            )}
+
             {/* Message si aucun fichier */}
-            {!taskFile && !workflowDocument && (
+            {!taskFile && !workflowDocument && !workflowFolder && (
               <li className="text-muted">Aucun fichier associé à cette tâche</li>
             )}
           </ul>
@@ -298,13 +349,13 @@ const DetailsTask = () => {
 
           {successMessage && <Alert variant="success" className="mt-3">{successMessage}</Alert>}
 
-          <div className="d-flex justify-content-between mt-4">
+         <div className="d-flex justify-content-between mt-4">
   <Button variant="secondary" onClick={() => navigate('/mes-taches')}>
     ⬅️ Retour
   </Button>
 
   <div className="d-flex gap-2">
-    {task.status !== 'completed' && (
+    {task.status !== 'rejected' && ( // Modifié: afficher les boutons tant que la tâche n'est pas rejetée
       <>
         {actionType ? (
           <>
@@ -323,12 +374,14 @@ const DetailsTask = () => {
             >
               Refuser la tâche
             </Button>
-            <Button 
-              variant="success" 
-              onClick={() => setActionType('complete')}
-            >
-              Terminer la tâche
-            </Button>
+            {task.status !== 'completed' && ( // Afficher le bouton Terminer seulement si pas déjà terminée
+              <Button 
+                variant="success" 
+                onClick={() => setActionType('complete')}
+              >
+                Terminer la tâche
+              </Button>
+            )}
           </>
         )}
       </>

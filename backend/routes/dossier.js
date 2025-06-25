@@ -252,25 +252,38 @@ router.get('/', auth, async (req, res) => {
 
 // Récupérer un dossier spécifique
 router.get('/:id', auth, async (req, res) => {
+  // 🛡️ 1) Contrôle et conversion des paramètres ----------------------------
+  const dossierId   = parseInt(req.params.id, 10);
+  const currentUser = parseInt(req.user?.id, 10);   // « ? » au cas où auth planterait
+
+  if (isNaN(dossierId) || isNaN(currentUser)) {
+    return res.status(400).json({ error: 'ID de dossier ou d’utilisateur invalide' });
+  }
+
   try {
-    const result = await pool.query(
-      `SELECT *
-      FROM folders f
-      WHERE f.id = $1 AND (f.user_id = $2 OR $2 = ANY(f.share_users))
-      ORDER BY f.date DESC`,
-      [req.params.id, req.user.id] // Now matches the 2 parameters in the query
+    // 🛡️ 2) Requête paramétrée ---------------------------------------------
+    const { rows } = await pool.query(
+      `
+      SELECT *
+      FROM   folders f
+      WHERE  f.id = $1
+        AND (f.user_id = $2 OR $2 = ANY(f.share_users))
+      LIMIT  1
+      `,
+      [dossierId, currentUser]
     );
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Dossier non trouvé' });
+
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Dossier non trouvé ou accès refusé' });
     }
-    
-    res.status(200).json(result.rows[0]);
+    res.status(200).json(rows[0]);
+
   } catch (err) {
-    console.error('Erreur lors de la récupération du dossier:', err.stack);
+    console.error('Erreur lors de la récupération du dossier:', err);
     res.status(500).json({ error: 'Erreur serveur', details: err.message });
   }
 });
+
 // Récupérer les sous-dossiers
 router.get('/:id/children', auth, async (req, res) => {
   try {
@@ -786,6 +799,59 @@ router.patch('/:id/soft-delete', auth, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+router.get('/:folderId/files', auth, async (req, res) => {
+  const folderId = parseInt(req.params.folderId, 10);
+  const userId = req.user.id;
+
+  // Validation de l'ID du dossier
+  if (isNaN(folderId)) {
+    return res.status(400).json({ error: 'ID de dossier invalide' });
+  }
+
+  try {
+    // 1. Vérifier que l'utilisateur a accès au dossier
+    const folderAccess = await pool.query(
+      `SELECT 1 FROM folders 
+       WHERE id = $1 AND (user_id = $2 OR $2 = ANY(share_users))`,
+      [folderId, userId]
+    );
+
+    if (folderAccess.rowCount === 0) {
+      return res.status(403).json({ error: 'Accès non autorisé à ce dossier' });
+    }
+
+    // 2. Récupérer les fichiers du dossier
+    const filesResult = await pool.query(
+      `SELECT 
+         id, 
+         name, 
+         file_path, 
+         folder_id, 
+         owner_id, 
+         date, 
+         version
+       FROM documents 
+       WHERE folder_id = $1 
+       ORDER BY date DESC`,
+      [folderId]
+    );
+
+    // 3. Formater les URLs des fichiers pour le client
+    const files = filesResult.rows.map(file => ({
+      ...file,
+      file_url: `http://localhost:5000${file.file_path}`
+    }));
+
+    res.status(200).json(files);
+  } catch (err) {
+    console.error('Erreur récupération fichiers:', err.stack);
+    res.status(500).json({ 
+      error: 'Erreur serveur', 
+      details: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 });
 // Initialisation des tables

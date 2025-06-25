@@ -221,99 +221,9 @@ const Statistique = () => {
     </>
   );
 
-  const renderTaskStats = () => {
-    if (!taskStats) return null;
-    
-    return (
-      <Row className="g-4">
-        <Col lg={6}>
-          <Card className="h-100 chart-card">
-            <Card.Body>
-              <Card.Title>Tasks by Status</Card.Title>
-              <div style={{ height: '300px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <RadialBarChart 
-                    innerRadius="20%" 
-                    outerRadius="100%" 
-                    data={taskStats.byStatus.map((item, index) => ({
-                      ...item,
-                      fill: COLORS[index % COLORS.length]
-                    }))}
-                  >
-                    <br/>
-                    <PolarAngleAxis 
-                      type="number" 
-                      domain={[0, 100]} 
-                      angleAxisId={0} 
-                      tick={{ fill: '#6c757d' }}
-                    />
-                    <br/>
-                    <RadialBar
-                      background
-                      dataKey="value"
-                      cornerRadius={10}
-                    />
-                    <br/>
-                    <br/>
-                    <Legend />
-                    <br/>
-                    <br/>
-                    <Tooltip 
-                      contentStyle={{
-                        background: '#ffffff',
-                        border: 'none',
-                        borderRadius: '8px',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
-                      }}
-                    />
-                    <br/>
-                  </RadialBarChart>
-                </ResponsiveContainer>
-              </div>
-            </Card.Body>
-          </Card>
-        </Col>
-        
-        <Col lg={6}>
-          <Card className="h-100 chart-card">
-            <Card.Body>
-              <Card.Title>Task Completion</Card.Title>
-              <div className="d-flex flex-column align-items-center justify-content-center" style={{ height: '300px' }}>
-                <div className="position-relative" style={{ width: '200px', height: '200px' }}>
-                  <svg viewBox="0 0 36 36" className="circular-chart">
-                    <path
-                      className="circle-bg"
-                      d="M18 2.0845
-                        a 15.9155 15.9155 0 0 1 0 31.831
-                        a 15.9155 15.9155 0 0 1 0 -31.831"
-                    />
-                    <path
-                      className="circle-fill"
-                      strokeDasharray={`${taskStats.completionRate}, 100`}
-                      d="M18 2.0845
-                        a 15.9155 15.9155 0 0 1 0 31.831
-                        a 15.9155 15.9155 0 0 1 0 -31.831"
-                      style={{ stroke: COLORS[3] }}
-                    />
-                    <text x="18" y="20" className="percentage">{taskStats.completionRate}%</text>
-                    <text x="18" y="25" className="label">Completed</text>
-                  </svg>
-                </div>
-                <div className="w-75 mt-4">
-                  <ProgressBar now={taskStats.completionRate} 
-                    variant="success" 
-                    className="progress-lg"
-                    label={`${taskStats.completionRate}%`} 
-                  />
-                </div>
-              </div>
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
-    );
-  };
+  
 
+ 
   const renderDocStats = () => {
     if (!docStats) return null;
     
@@ -481,34 +391,152 @@ const Statistique = () => {
     </Row>
   );
 };
-  const renderWorkflowStats = () => {
-    if (!workflowStats) return null;
-    
-    return (
-      <Row className="g-4">
-        <Col lg={12}>
-          <Card className="chart-card">
+  const renderTaskStats = () => {
+  if (!taskStats) return null;
+  
+  const statusData = taskStats.byStatus.map(item => ({
+    ...item,
+    fill: COLORS[taskStats.byStatus.indexOf(item) % COLORS.length]
+  }));
+
+  const priorityData = taskStats.byPriority.map(item => ({
+    ...item,
+    fill: COLORS[taskStats.byPriority.indexOf(item) % COLORS.length]
+  }));
+
+  return (
+    <>
+      <Row className="g-4 mb-4">
+        <Col lg={6}>
+          <Card className="h-100 chart-card">
             <Card.Body>
-              <Card.Title>Workflows by Status</Card.Title>
+              <Card.Title>Task Status Distribution</Card.Title>
+              <div className="d-flex justify-content-center">
+                <div style={{ width: '100%', height: '300px' }}>
+                  <ResponsiveContainer>
+                    <PieChart>
+                      <Pie
+                        data={statusData}
+                        cx="50%"
+                        cy="50%"
+                        outerRadius={100}
+                        innerRadius={60}
+                        dataKey="value"
+                        label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(1)}%`}
+                      >
+                        {statusData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.fill} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        formatter={(value, name, props) => [`${value} (${props.payload.percentage}%)`, name]}
+                      />
+                      <Legend />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </Card.Body>
+          </Card>
+        </Col>
+
+        <Col lg={6}>
+          <Card className="h-100 chart-card">
+            <Card.Body>
+              <Card.Title>Completion Metrics</Card.Title>
+              <br/>
+              <div className="text-center">
+                <div className="mb-4">
+                  <h5>Completion Rate</h5>
+                  <ProgressBar 
+                    now={taskStats.completionRate} 
+                    variant="success" 
+                    label={`${taskStats.completionRate}%`}
+                    className="mb-3"
+                    style={{ height: '30px' }}
+                  />
+                </div>
+                <br/>
+                <div className="mb-4">
+                  <h5>Rejection Rate</h5>
+                  <ProgressBar 
+                    now={taskStats.rejectionRate} 
+                    variant="danger" 
+                    label={`${taskStats.rejectionRate}%`}
+                    className="mb-3"
+                    style={{ height: '30px' }}
+                  />
+                </div>
+              </div>
+            </Card.Body>
+          </Card>
+        </Col>
+      </Row>
+    </>
+  );
+};
+
+const renderWorkflowStats = () => {
+  if (!workflowStats) return null;
+  
+  return (
+    <>
+      <Row className="g-4 mb-4">
+        <Col lg={6}>
+          <Card className="h-100 chart-card">
+            <Card.Body>
+              <Card.Title>Workflow Status Distribution</Card.Title>
               <div style={{ height: '400px' }}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={workflowStats.byStatus}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="name" tick={{ fill: '#6c757d' }} />
-                    <YAxis tick={{ fill: '#6c757d' }} />
-                    <Tooltip 
-                      contentStyle={{
-                        background: '#ffffff',
-                        border: 'none',
-                        borderRadius: '8px',
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)'
-                      }}
-                    />
-                    <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                <ResponsiveContainer>
+                  <PieChart>
+                    <Pie
+                      data={workflowStats.byStatus}
+                      cx="50%"
+                      cy="50%"
+                      outerRadius={120}
+                      innerRadius={60}
+                      dataKey="value"
+                      label={({ name, percentage }) => `${name}: ${percentage}%`}
+                    >
                       {workflowStats.byStatus.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
-                    </Bar>
+                    </Pie>
+                    <Tooltip 
+                      formatter={(value, name, props) => [`${value} (${props.payload.percentage}%)`, name]}
+                    />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </Card.Body>
+          </Card>
+        </Col>
+      
+
+        <Col lg={6}>
+          <Card className="h-100 chart-card">
+            <Card.Body>
+              <Card.Title>Top Users by Workflows</Card.Title>
+              <div style={{ height: '400px' }}>
+                <ResponsiveContainer>
+                  <BarChart
+                    layout="vertical"
+                    data={workflowStats.byUser}
+                    margin={{ top: 20, right: 30, left: 100, bottom: 20 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" />
+                    <YAxis 
+                      dataKey={row => `${row.prenom} ${row.name}`} 
+                      type="category" 
+                      width={90}
+                    />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="total_workflows" name="Total" fill="#3f51b5" />
+                    <Bar dataKey="completed_workflows" name="Completed" fill="#4CAF50" />
+                    <Bar dataKey="rejected_workflows" name="Rejected" fill="#F44336" />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -516,8 +544,9 @@ const Statistique = () => {
           </Card>
         </Col>
       </Row>
-    );
-  };
+    </>
+  );
+};
 
   return (
     <>

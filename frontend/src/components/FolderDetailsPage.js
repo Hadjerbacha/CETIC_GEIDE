@@ -69,6 +69,7 @@ const usId = getUserIdFromToken();
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [templates, setTemplates] = useState([]);
   const [selectedTemplate, setSelectedTemplate] = useState(null);
+  
   useEffect(() => {
     const fetchFolder = async () => {
       try {
