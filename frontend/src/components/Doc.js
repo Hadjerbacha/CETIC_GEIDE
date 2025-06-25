@@ -871,7 +871,7 @@ const Doc = () => {
       });
 
       const { folderId } = res.data;
-      navigate(`/folder/${folderId}`);
+      navigate(`/folder`);
     } catch (error) {
       console.error('Erreur upload dossier :', error);
     }
