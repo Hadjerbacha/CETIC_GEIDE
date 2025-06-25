@@ -327,7 +327,7 @@ const handleShareFolder = async (userIds, groupIds) => {
     formData.append('can_modify', permissions.modify);
     formData.append('can_delete', permissions.delete);
     formData.append('can_share', permissions.share);
-    formData.append("folder_id", selectedFolderId);
+    formData.append("folder_id", id);
 
     const allowedIds = allowedUsers.map(u => u?.id || u).filter(Boolean);
     formData.append('id_share', JSON.stringify(allowedIds));
@@ -351,7 +351,7 @@ const handleShareFolder = async (userIds, groupIds) => {
       setStep(2); // Facultatif maintenant
       setShowUploadForm(false); // ferme le modal
 
-      console.log("Folder ID reçu :", selectedFolderId);
+      console.log("Folder ID reçu :", id);
       console.log("useParams id :", id);
       // Rediriger vers la page de complétion
       navigate(`/document/${data.id}/complete`);
