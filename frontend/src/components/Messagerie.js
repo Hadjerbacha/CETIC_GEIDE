@@ -6,15 +6,15 @@ import Select from 'react-select';
 import 'react-toastify/dist/ReactToastify.css';
 import { jwtDecode } from 'jwt-decode';
 import { toast } from 'react-toastify';
-import { 
-  Card, 
-  Button, 
-  Form, 
-  Container, 
-  Row, 
-  Col, 
-  ListGroup, 
-  Badge, 
+import {
+  Card,
+  Button,
+  Form,
+  Container,
+  Row,
+  Col,
+  ListGroup,
+  Badge,
   Spinner,
   Tab,
   Tabs
@@ -24,9 +24,7 @@ const API_BASE_URL = 'http://localhost:5000/api';
 
 const MessageriePage = () => {
   const token = localStorage.getItem('token');
-  
-  const GROUPS_API = 'http://localhost:5000/api/groups';
-  const [selectedGroup, setSelectedGroup] = useState(null); // Groupe sélectionné
+  const [selectedGroup, setSelectedGroup] = useState(null);
   const [allGroups, setAllGroups] = useState([]);
   const [messages, setMessages] = useState({ received: [], sent: [] });
   const [users, setUsers] = useState([]);
@@ -36,7 +34,7 @@ const MessageriePage = () => {
   const [messageContent, setMessageContent] = useState('');
   const [activeTab, setActiveTab] = useState('inbox');
   const [userId, setUserId] = useState(null);
-  
+
   const [loading, setLoading] = useState({
     messages: false,
     users: false,
@@ -44,14 +42,6 @@ const MessageriePage = () => {
     sending: false
   });
 
-  const fetchGroups = async () => {
-      try {
-        const res = await axios.get(GROUPS_API);
-        setAllGroups(res.data); // Remplir la liste des groupes
-      } catch (err) {
-        console.error('Erreur récupération groupes:', err);
-      }
-    };
   // Décodage du token pour obtenir l'ID utilisateur
   useEffect(() => {
     if (token) {
@@ -65,26 +55,23 @@ const MessageriePage = () => {
     }
   }, [token]);
 
-    useEffect(() => {
-      fetchUsers();
-      fetchGroups();
-    }, [token]);
-
   // Options pour les destinataires (groupes ou utilisateurs)
   const recipientOptions = useCallback(() => {
     return isGroupMode
       ? groups.map(g => ({ label: g.name, value: g.id, type: 'group' }))
-      : users.map(u => ({ 
-          label: `${u.prenom} ${u.name} (${u.role})`, 
-          value: u.id, 
-          type: 'user' 
-        }));
+      : users.map(u => ({
+        label: `${u.prenom} ${u.name} (${u.role})`,
+        value: u.id,
+        type: 'user'
+      }));
   }, [isGroupMode, groups, users]);
 
   // Messages filtrés selon l'onglet actif
-  const currentMessages = useCallback(() => {
-    return activeTab === 'sent' ? messages.sent : messages.received;
-  }, [activeTab, messages]);
+const currentMessages = useCallback(() => {
+  if (activeTab === 'sent') return messages.sent;
+  if (activeTab === 'group') return messages.group || [];
+  return messages.received;
+}, [activeTab, messages]);
 
   // Récupération des données initiales
   const fetchAllData = useCallback(async () => {
@@ -107,7 +94,8 @@ const MessageriePage = () => {
       });
       setMessages({
         received: res.data.received || [],
-        sent: res.data.sent || []
+        sent: res.data.sent || [],
+        group: res.data.groupMessages || []
       });
     } catch (err) {
       console.error("Erreur lors de la récupération des messages:", err);
@@ -127,6 +115,17 @@ const MessageriePage = () => {
     }
   }, [token]);
 
+  // Récupération des groupes
+  const fetchGroups = useCallback(async () => {
+    try {
+      const res = await axios.get(`${API_BASE_URL}/groups`);
+      setAllGroups(res.data); // Remplir la liste des groupes
+      // Si vous avez besoin de formater les groupes différemment pour le Select
+      setGroups(Array.isArray(res.data) ? res.data : res.data.groups || []);
+    } catch (err) {
+      console.error("Erreur lors de la récupération des groupes:", err);
+    }
+  }, [token]);
 
   // Envoi d'un nouveau message
   const handleSendMessage = async () => {
@@ -136,7 +135,7 @@ const MessageriePage = () => {
     }
 
     setLoading(prev => ({ ...prev, sending: true }));
-    
+
     const messageData = {
       content: messageContent,
       sender_id: userId,
@@ -178,8 +177,8 @@ const MessageriePage = () => {
           <Col>
             <h2 className="text-primary">Messagerie</h2>
             <p className="text-muted">
-              {activeTab === 'inbox' 
-                ? 'Consultez vos messages reçus' 
+              {activeTab === 'inbox'
+                ? 'Consultez vos messages reçus'
                 : 'Consultez vos messages envoyés'}
             </p>
           </Col>
@@ -199,6 +198,7 @@ const MessageriePage = () => {
                 >
                   <Tab eventKey="inbox" title="Reçus" />
                   <Tab eventKey="sent" title="Envoyés" />
+                  <Tab eventKey="group" title="Groupes" />
                 </Tabs>
 
                 {/* Sélection du destinataire */}
@@ -214,31 +214,47 @@ const MessageriePage = () => {
                     }}
                     className="mb-3"
                   />
-                  
+
                   {loading.users || loading.groups ? (
                     <div className="text-center py-2">
                       <Spinner animation="border" size="sm" />
                     </div>
+                  ) : isGroupMode ? (
+                    <Select
+                      value={
+                        selectedGroup
+                          ? {
+                            value: selectedGroup,
+                            label: allGroups.find(group => group.id === selectedGroup)?.nom,
+                          }
+                          : null
+                      }
+                      options={allGroups.map(group => ({
+                        value: group.id,
+                        label: group.nom,
+                      }))}
+                      onChange={(selectedOption) => {
+                        setSelectedGroup(selectedOption ? selectedOption.value : null);
+                        setSelectedRecipient(selectedOption);
+                      }}
+                      placeholder="Sélectionner un groupe..."
+                      classNamePrefix="select"
+                    />
                   ) : (
-                   <Select
-                              value={
-                                selectedGroup
-                                  ? {
-                                    value: selectedGroup,
-                                    label: allGroups.find(group => group.id === selectedGroup)?.nom,
-                                  }
-                                  : null
-                              }
-                              options={allGroups.map(group => ({
-                                value: group.id,
-                                label: group.nom,
-                              }))}
-                              onChange={(selectedOption) => {
-                                setSelectedGroup(selectedOption ? selectedOption.value : null);
-                              }}
-                              placeholder="Sélectionner un groupe..."
-                              classNamePrefix="select"
-                            />
+                    <Select
+                      placeholder="Choisir un contact..."
+                      options={users.map(u => ({
+                        label: `${u.prenom} ${u.name} (${u.role})`,
+                        value: u.id,
+                        type: 'user'
+                      }))}
+                      value={selectedRecipient}
+                      onChange={setSelectedRecipient}
+                      className="basic-multi-select"
+                      classNamePrefix="select"
+                      isClearable
+                      noOptionsMessage={() => "Aucun résultat trouvé"}
+                    />
                   )}
                 </div>
               </Card.Body>
@@ -249,52 +265,60 @@ const MessageriePage = () => {
           <Col md={9}>
             <Card className="h-100 shadow-sm">
               {/* Liste des messages */}
-              <Card.Body className="overflow-auto" style={{ maxHeight: '60vh' }}>
-                {loading.messages ? (
-                  <div className="text-center py-5">
-                    <Spinner animation="border" variant="primary" />
-                    <p className="mt-2 text-muted">Chargement des messages...</p>
-                  </div>
-                ) : currentMessages().length === 0 ? (
-                  <div className="text-center text-muted py-5">
-                    <i className="bi bi-envelope-open fs-1"></i>
-                    <h5 className="mt-3">Aucun message</h5>
-                    <p>
-                      {activeTab === 'inbox' 
-                        ? "Vous n'avez reçu aucun message" 
-                        : "Vous n'avez envoyé aucun message"}
-                    </p>
-                  </div>
-                ) : (
-                  <ListGroup variant="flush">
-                    {currentMessages().map((msg) => (
-                      <ListGroup.Item 
-                        key={msg.id}
-                        className={`py-3 ${!msg.is_read && activeTab === 'inbox' ? 'bg-light' : ''}`}
-                      >
-                        <div className="d-flex justify-content-between align-items-start mb-2">
-                          <div>
-                            <strong className="d-block">
-                              {activeTab === 'sent'
-                                ? `À: ${msg.recipient_prenom} ${msg.recipient_name}`
-                                : `De: ${msg.sender_prenom} ${msg.sender_name}`}
-                            </strong>
-                            {msg.group_id && (
-                              <Badge bg="info" className="me-2">Groupe</Badge>
-                            )}
-                          </div>
-                          <small className="text-muted">
-                            {new Date(msg.sent_at).toLocaleString()}
-                          </small>
-                        </div>
-                        <div className="message-content ps-2 border-start border-primary">
-                          {msg.content}
-                        </div>
-                      </ListGroup.Item>
-                    ))}
-                  </ListGroup>
-                )}
-              </Card.Body>
+            <Card.Body className="overflow-auto" style={{ maxHeight: '60vh' }}>
+  {loading.messages ? (
+    <div className="text-center py-5">
+      <Spinner animation="border" variant="primary" />
+      <p className="mt-2 text-muted">Chargement des messages...</p>
+    </div>
+  ) : currentMessages().length === 0 ? (
+    <div className="text-center text-muted py-5">
+      <i className={`bi ${
+        activeTab === 'inbox' ? 'bi-envelope-open' : 
+        activeTab === 'sent' ? 'bi-send' : 'bi-people'
+      } fs-1`}></i>
+      <h5 className="mt-3">
+        {activeTab === 'inbox' ? "Aucun message reçu" :
+         activeTab === 'sent' ? "Aucun message envoyé" : "Aucun message de groupe"}
+      </h5>
+      <p>
+        {activeTab === 'inbox' ? "Vous n'avez reçu aucun message" :
+         activeTab === 'sent' ? "Vous n'avez envoyé aucun message" : 
+         "Vous n'avez aucun message dans vos groupes"}
+      </p>
+    </div>
+  ) : (
+    <ListGroup variant="flush">
+      {currentMessages().map((msg) => (
+        <ListGroup.Item
+          key={msg.id}
+          className={`py-3 ${!msg.is_read && activeTab === 'inbox' ? 'bg-light' : ''}`}
+        >
+          <div className="d-flex justify-content-between align-items-start mb-2">
+            <div>
+              <strong className="d-block">
+                {activeTab === 'sent'
+                  ? `À: ${msg.recipient_prenom} ${msg.recipient_name}`
+                  : activeTab === 'group'
+                  ? `${msg.group_name} (De: ${msg.sender_prenom} ${msg.sender_name})`
+                  : `De: ${msg.sender_prenom} ${msg.sender_name}`}
+              </strong>
+              {msg.group_id && (
+                <Badge bg="info" className="me-2">Groupe</Badge>
+              )}
+            </div>
+            <small className="text-muted">
+              {new Date(msg.sent_at).toLocaleString()}
+            </small>
+          </div>
+          <div className="message-content ps-2 border-start border-primary">
+            {msg.content}
+          </div>
+        </ListGroup.Item>
+      ))}
+    </ListGroup>
+  )}
+</Card.Body>
 
               {/* Zone de composition */}
               <Card.Footer className="bg-white border-top">

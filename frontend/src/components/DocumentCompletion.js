@@ -185,7 +185,7 @@ const DocumentCompletion = () => {
   const validateCategoryFields = (category, values) => {
     switch (category) {
       case 'facture':
-        return values.num_facture && values.nom_entreprise && values.montant && values.date_facture;
+        return values.numero_facture && values.nom_entreprise && values.montant && values.date_facture;
       case 'cv':
         return values.num_cv && values.nom_candidat && values.metier && values.lieu;
       case 'demande_conge':
@@ -322,17 +322,17 @@ const DocumentCompletion = () => {
     setSuccessMessage(null);
 
     // Validation des champs obligatoires selon la catégorie
-    if (!validateCategoryFields(category, extraFields)) {
-      if (category === 'demande_conge' &&
-        extraFields.date_debut &&
-        extraFields.date_fin &&
+   if (!validateCategoryFields(category, extraFields)) {
+    if (category === 'demande_conge' && 
+        extraFields.date_debut && 
+        extraFields.date_fin && 
         !validateDates(extraFields.date_debut, extraFields.date_fin)) {
-        setErrorMessage("La date de fin doit être postérieure à la date de début");
-      } else {
-        setErrorMessage("Veuillez remplir tous les champs obligatoires");
-      }
-      return;
+      setErrorMessage("La date de fin doit être postérieure à la date de début");
+    } else {
+      setErrorMessage("Veuillez remplir tous les champs obligatoires");
     }
+    return;
+  }
 
     // Validation pour les nouvelles versions
     if (isNewVersion && !differenceNote.trim()) {

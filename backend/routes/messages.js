@@ -78,7 +78,8 @@ router.get('/', auth, async (req, res) => {
   try {
     const userId = req.user.id;
     
-    const [received, sent] = await Promise.all([
+    const [received, sent, groupMessages] = await Promise.all([
+      // Messages reçus (privés)
       pool.query(`
         SELECT m.*, u.prenom as sender_prenom, u.name as sender_name 
         FROM messages m
@@ -86,17 +87,32 @@ router.get('/', auth, async (req, res) => {
         WHERE m.recipient_id = $1
       `, [userId]),
       
+      // Messages envoyés (privés)
       pool.query(`
         SELECT m.*, u.prenom as recipient_prenom, u.name as recipient_name 
         FROM messages m
         JOIN users u ON m.recipient_id = u.id
-        WHERE m.sender_id = $1
+        WHERE m.sender_id = $1 AND m.group_id IS NULL
+      `, [userId]),
+      
+      // Messages de groupe
+      pool.query(`
+        SELECT m.*, 
+               u.prenom as sender_prenom, 
+               u.name as sender_name,
+               g.nom as group_name
+        FROM messages m
+        JOIN users u ON m.sender_id = u.id
+        JOIN groups g ON m.group_id = g.id
+        WHERE m.group_id IS NOT NULL 
+        AND (m.sender_id = $1 OR $1 = ANY(g.user_ids))
       `, [userId])
     ]);
     
     res.status(200).json({
       received: received.rows,
-      sent: sent.rows
+      sent: sent.rows,
+      groupMessages: groupMessages.rows
     });
   } catch (error) {
     console.error('Erreur:', error);
