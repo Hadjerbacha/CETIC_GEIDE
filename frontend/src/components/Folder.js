@@ -215,40 +215,45 @@ const FolderListPage = () => {
     }
   };
 
+const handleFolderUpload = async () => {
+  const formData = new FormData();
 
-  const handleFolderUpload = async () => {
-    const formData = new FormData();
+  folderFiles.forEach((file) => {
+    formData.append('files', file);
+  });
 
-    folderFiles.forEach((file) => {
-      formData.append('files', file);
+  formData.append('name', folderName);
+  formData.append('description', folderDescription);
+  if (userId?.id) { // Vérification plus sûre
+    formData.append('userId', userId.id);
+  }
+
+  try {
+    const token = localStorage.getItem('token');
+    const res = await axios.post('http://localhost:5000/api/folders', formData, { // Notez le /upload ajouté
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'multipart/form-data'
+      }
     });
 
-    formData.append('name', folderName);           // ✔️ nom du dossier
-    formData.append('description', folderDescription); // ✔️ description
-    if (userId) {
-      formData.append('userId', userId.id);           // ✔️ optionnel mais utile
+    // Vérifiez la structure de la réponse dans la console
+    console.log('Réponse du serveur:', res.data);
+    
+    // Assurez-vous que l'ID est bien dans res.data.id ou res.data.folderId
+    const folderId = res.data.id || res.data.folderId;
+    
+    if (folderId) {
+      setShowUploadFolderForm(false); // Ferme le modal
+      navigate(`/folder/${folderId}`); // Redirige vers le dossier créé
+    } else {
+      throw new Error('ID de dossier non reçu dans la réponse');
     }
-    console.log("Utilisateur connecté :", userId);
-    console.log("🧾 Données envoyées :");
-    console.log("userId", userId); // <-- Vérifie qu'il ne contient pas un objet
-    console.log("userId.id", userId?.id);
-
-
-    try {
-      const token = localStorage.getItem('token'); // si besoin
-      const res = await axios.post('http://localhost:5000/api/folders', formData, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-
-      const { folderId } = res.data;
-      navigate(`/folder/${folderId}`);
-    } catch (error) {
-      console.error('Erreur upload dossier :', error);
-    }
-  };
+  } catch (error) {
+    console.error('Erreur upload dossier :', error);
+    setErrorMessage(error.response?.data?.message || 'Erreur lors de la création du dossier');
+  }
+};
 
   return (
     <>
@@ -309,13 +314,11 @@ const FolderListPage = () => {
                     <span><FaFolderOpen className="me-2 text-primary" /> {folder.name}</span>
                   
                   </Card.Title>
-                  <Card.Text>{folder.description || 'Aucune description'}</Card.Text>
+                
                 </Card.Body>
                 <Card.Footer className="text-end bg-white border-top-0">
                   <div className="d-flex justify-content-between">
-                    <small className="text-muted">
-                      📅 {new Date(folder.date).toLocaleDateString()}
-                    </small>
+                   
                     <Button
                       variant="outline-primary"
                       size="sm"

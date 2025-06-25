@@ -360,19 +360,6 @@ const DocumentVersion = () => {
             <i className="bi bi-trash"></i>
           </Button>
 
-          <Button variant="light" onClick={() => openShareModal(doc)} title="Partager">
-            <img src={shareIcon} width="20" alt="Partager" />
-          </Button>
-
-          <Button
-            variant="dark"
-            size="sm"
-            className="ms-2"
-            title="Démarrer le workflow"
-            onClick={() => handleOpenConfirm(doc)}
-          >
-            <i className="bi bi-play-fill me-1"></i>
-          </Button>
         </td>
       </tr>
     )) : (
