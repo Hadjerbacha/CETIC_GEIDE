@@ -322,17 +322,17 @@ const DocumentCompletion = () => {
     setSuccessMessage(null);
 
     // Validation des champs obligatoires selon la catégorie
-    if (!validateCategoryFields(category, extraFields)) {
-      if (category === 'demande_conge' &&
-        extraFields.date_debut &&
-        extraFields.date_fin &&
+   if (!validateCategoryFields(category, extraFields)) {
+    if (category === 'demande_conge' && 
+        extraFields.date_debut && 
+        extraFields.date_fin && 
         !validateDates(extraFields.date_debut, extraFields.date_fin)) {
-        setErrorMessage("La date de fin doit être postérieure à la date de début");
-      } else {
-        setErrorMessage("Veuillez remplir tous les champs obligatoires");
-      }
-      return;
+      setErrorMessage("La date de fin doit être postérieure à la date de début");
+    } else {
+      setErrorMessage("Veuillez remplir tous les champs obligatoires");
     }
+    return;
+  }
 
     // Validation pour les nouvelles versions
     if (isNewVersion && !differenceNote.trim()) {
