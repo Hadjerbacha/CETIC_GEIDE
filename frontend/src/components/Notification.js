@@ -291,6 +291,17 @@ const NotificationsPage = () => {
                             </Button>
                           )
                         )}
+                        {(notif.type === 'task' || notif.type === 'task_rejected') && notif.related_task_id && (
+                        <Button
+                          variant="outline-primary"
+                          size="sm"
+                          className="action-btn"
+                          href={`/details_taches/${notif.related_task_id}`}
+                          title="Voir la tâche"
+                        >
+                          <i className="bi bi-eye"></i>
+                        </Button>
+                      )}
                         {!notif.is_read && (
                           <Button
                             variant="outline-success"
