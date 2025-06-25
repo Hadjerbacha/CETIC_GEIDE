@@ -13,6 +13,9 @@ import { FaShare,FaFolder } from 'react-icons/fa';
 import { jwtDecode } from 'jwt-decode'; 
 
 const FolderDetailsPage = () => {  
+  const [currentFolderFiles, setCurrentFolderFiles] = useState([]);
+  const [currentSubfolders, setCurrentSubfolders] = useState([]);
+  
   const getUserIdFromToken = () => {
   const token = localStorage.getItem('token');
   if (!token) return null;
@@ -27,6 +30,7 @@ const FolderDetailsPage = () => {
 };
 
 const usId = getUserIdFromToken();
+
   const { id } = useParams();
   const [currentUser, setCurrentUser] = useState(null);
   const [folders, setFolders] = useState([]);
@@ -270,44 +274,68 @@ const handleShareFolder = async (userIds, groupIds) => {
     return false;
   }
 };
-  const handleImportFolder = async () => {
-    if (!folderName || !pendingFile || pendingFile.length === 0) {
-      alert("Veuillez fournir un nom de dossier et au moins un fichier.");
-      return;
-    }
+const handleImportFolder = async () => {
+  if (!folderName || !pendingFile || pendingFile.length === 0) {
+    alert("Veuillez fournir un nom de dossier et au moins un fichier.");
+    return;
+  }
 
-    const formData = new FormData();
-    formData.append("name", folderName);
+  const formData = new FormData();
+  formData.append("name", folderName);
+  
+  // Ajout du parent_id si on est dans un dossier spécifique
+  if (currentFolderId) {
+    formData.append("parent_id", currentFolderId);
+  }
 
-    for (let i = 0; i < pendingFile.length; i++) {
-      formData.append("files", pendingFile[i]);
-    }
+  // Ajout des fichiers
+  for (let i = 0; i < pendingFile.length; i++) {
+    formData.append("files", pendingFile[i]);
+  }
 
-    try {
-      const res = await axios.post("http://localhost:5000/api/folders/import", formData, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "multipart/form-data"
-        }
-      });
+  try {
+    // 1. Création du dossier avec les fichiers
+    const res = await axios.post("http://localhost:5000/api/folders", formData, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "multipart/form-data"
+      }
+    });
 
-      console.log("Dossier importé :", res.data);
-      setShowImportFolderModal(false);
-      setFolderName('');
-      setPendingFile(null);
+    console.log("Dossier importé :", res.data);
+    
+    // Fermeture du modal et reset des états
+    setShowImportFolderModal(false);
+    setFolderName('');
+    setPendingFile(null);
 
-      // Recharger les dossiers
-      const updated = await axios.get('http://localhost:5000/api/folders', {
+    // 2. Rechargement des données
+    // a) Recharger l'arborescence des dossiers
+    const foldersResponse = await axios.get('http://localhost:5000/api/folders', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    setFolders(foldersResponse.data);
+
+    // b) Recharger le contenu du dossier courant si on est dans un dossier spécifique
+    if (currentFolderId) {
+      const contentResponse = await axios.get(`http://localhost:5000/api/folders/${currentFolderId}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      setFolders(updated.data);
-
-    } catch (err) {
-      console.error("Erreur lors de l'importation :", err);
-      alert("Erreur lors de l'importation du dossier.");
+      
+      // Mise à jour de l'état avec les nouveaux fichiers
+      // (Adaptez selon votre structure d'état)
+      setCurrentFolderFiles(contentResponse.data.files || []);
+      setCurrentSubfolders(contentResponse.data.subfolders || []);
     }
-  };
 
+    // Message de succès
+    alert("Dossier importé avec succès !");
+
+  } catch (err) {
+    console.error("Erreur lors de l'importation :", err.response?.data || err.message);
+    alert(`Erreur lors de l'importation : ${err.response?.data?.message || err.message}`);
+  }
+};
   const handleNextStep = async () => {
     if (!pendingFile) {
       setErrorMessage('Veuillez sélectionner un fichier.');
@@ -521,23 +549,6 @@ const handleShareFolder = async (userIds, groupIds) => {
                   {documents.map((doc) => (
                     <ListGroup.Item key={doc.id} action onClick={() => navigate(`/documents/${doc.id}`)}>
                       <strong>{doc.name}</strong> – {new Date(doc.date).toLocaleDateString()}
-                    </ListGroup.Item>
-                  ))}
-                </ListGroup>
-              )}
-
-
-              {subfolders.length === 0 ? (
-                <p>Aucun sous-dossier.</p>
-              ) : (
-                <ListGroup>
-                  {subfolders.map((sub) => (
-                    <ListGroup.Item
-                      key={sub.id}
-                      action
-                      onClick={() => navigate(`/folder/${sub.id}`)}
-                    >
-                      <strong> {sub.name}</strong>
                     </ListGroup.Item>
                   ))}
                 </ListGroup>
