@@ -1746,49 +1746,62 @@ router.get('/:id/metadata', auth, async (req, res) => {
     const category = docRes.rows[0].category;
     let meta = {};
 
-    switch (category) {
-      case 'contrat':
-        const contratRes = await pool.query('SELECT * FROM contrats WHERE document_id = $1', [documentId]);
-        meta = contratRes.rows[0] || {};
-        break;
+  switch (category) {
+  case 'contrat':
+    const contratRes = await pool.query(
+      'SELECT numero_contrat, type_contrat, partie_prenante, date_signature, date_echeance, montant, statut FROM contrats WHERE document_id = $1', 
+      [documentId]
+    );
+    meta = contratRes.rows[0] || {};
+    // Formatage des dates pour le frontend
+    if (meta.date_signature) meta.date_signature = new Date(meta.date_signature).toISOString().split('T')[0];
+    if (meta.date_echeance) meta.date_echeance = new Date(meta.date_echeance).toISOString().split('T')[0];
+    break;
 
-      case 'facture':
-        const factureRes = await pool.query('SELECT * FROM factures WHERE document_id = $1', [documentId]);
-        meta = factureRes.rows[0] || {};
-        // Formatage des dates pour le frontend
-        if (meta.date_facture) meta.date_facture = new Date(meta.date_facture).toISOString().split('T')[0];
-        break;
+  case 'facture':
+    const factureRes = await pool.query(
+      'SELECT numero_facture, montant, nom_entreprise, date_facture, produit FROM factures WHERE document_id = $1', 
+      [documentId]
+    );
+    meta = factureRes.rows[0] || {};
+    // Formatage des dates pour le frontend
+    if (meta.date_facture) meta.date_facture = new Date(meta.date_facture).toISOString().split('T')[0];
+    break;
 
-      case 'cv':
-        const cvRes = await pool.query('SELECT * FROM cv WHERE document_id = $1', [documentId]);
-        meta = cvRes.rows[0] || {};
-        break;
+  case 'cv':
+    const cvRes = await pool.query(
+      'SELECT nom_candidat, experience, domaine, num_cv, metier, lieu FROM cv WHERE document_id = $1', 
+      [documentId]
+    );
+    meta = cvRes.rows[0] || {};
+    break;
 
-      case 'demande_conge':
-        const demandeRes = await pool.query(`
-          SELECT 
-            num_demande, 
-            date_debut,
-            date_fin,
-            motif
-          FROM demande_conges 
-          WHERE document_id = $1
-        `, [documentId]);
+  case 'demande_conge':
+    const demandeRes = await pool.query(
+      `SELECT num_demande, date_debut, date_fin, motif 
+       FROM demande_conges 
+       WHERE document_id = $1`, 
+      [documentId]
+    );
+    meta = demandeRes.rows[0] || {};
+    // Formatage des dates pour le frontend
+    if (meta.date_debut) meta.date_debut = new Date(meta.date_debut).toISOString().split('T')[0];
+    if (meta.date_fin) meta.date_fin = new Date(meta.date_fin).toISOString().split('T')[0];
+    break;
 
-        // Transformation des dates au format ISO pour le frontend
-        meta = demandeRes.rows[0] || {};
-        if (meta.date_debut) meta.date_debut = new Date(meta.date_debut).toISOString().split('T')[0];
-        if (meta.date_fin) meta.date_fin = new Date(meta.date_fin).toISOString().split('T')[0];
-        break;
+  case 'rapport':
+    const rapportRes = await pool.query(
+      'SELECT type_rapport, auteur, date_rapport, periode_couverte, destinataire FROM rapports WHERE document_id = $1', 
+      [documentId]
+    );
+    meta = rapportRes.rows[0] || {};
+    // Formatage des dates pour le frontend
+    if (meta.date_rapport) meta.date_rapport = new Date(meta.date_rapport).toISOString().split('T')[0];
+    break;
 
-      case 'rapport':
-        const rapportRes = await pool.query('SELECT * FROM rapports WHERE document_id = $1', [documentId]);
-        meta = rapportRes.rows[0] || {};
-        break;
-
-      default:
-        meta = {};
-    }
+  default:
+    meta = {};
+}
 
     res.json(meta);
 
