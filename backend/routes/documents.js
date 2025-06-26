@@ -453,22 +453,31 @@ router.get('/', auth, async (req, res) => {
   } = req.query;
 
   try {
-    let baseQuery = `
-      SELECT DISTINCT d.*, dc.is_saved, dc.collection_name,
-        f.numero_facture, f.montant, f.date_facture, f.nom_entreprise, f.produit, 
-        cv.nom_candidat, cv.metier, cv.date_cv,
-        dcong.num_demande, dcong.date_debut, dcong.date_fin, dcong.motif,
-        c.numero_contrat, c.type_contrat, c.partie_prenante, 
-        c.date_signature, c.date_echeance, c.montant as montant_contrat, c.statut
-      FROM documents d
-      LEFT JOIN document_collections dc ON dc.document_id = d.id
-      LEFT JOIN factures f ON f.document_id = d.id
-      LEFT JOIN cv ON cv.document_id = d.id
-      LEFT JOIN demande_conges dcong ON dcong.document_id = d.id
-      LEFT JOIN contrats c ON c.document_id = d.id
-      ${!isAdmin ? 'LEFT JOIN document_permissions dp ON dp.document_id = d.id' : ''}
-      WHERE true
-    `;
+   // Modifiez la requête principale pour formater toutes les dates
+let baseQuery = `
+  SELECT DISTINCT d.*, dc.is_saved, dc.collection_name,
+    f.numero_facture, f.montant, 
+    TO_CHAR(f.date_facture, 'YYYY-MM-DD') as date_facture, 
+    f.nom_entreprise, f.produit, 
+    cv.nom_candidat, cv.metier, 
+    TO_CHAR(cv.date_cv, 'YYYY-MM-DD') as date_cv,
+    dcong.num_demande, 
+    TO_CHAR(dcong.date_debut, 'YYYY-MM-DD') as date_debut, 
+    TO_CHAR(dcong.date_fin, 'YYYY-MM-DD') as date_fin, 
+    dcong.motif,
+    c.numero_contrat, c.type_contrat, c.partie_prenante, 
+    TO_CHAR(c.date_signature, 'YYYY-MM-DD') as date_signature, 
+    TO_CHAR(c.date_echeance, 'YYYY-MM-DD') as date_echeance, 
+    c.montant as montant_contrat, c.statut
+  FROM documents d
+  LEFT JOIN document_collections dc ON dc.document_id = d.id
+  LEFT JOIN factures f ON f.document_id = d.id
+  LEFT JOIN cv ON cv.document_id = d.id
+  LEFT JOIN demande_conges dcong ON dcong.document_id = d.id
+  LEFT JOIN contrats c ON c.document_id = d.id
+  ${!isAdmin ? 'LEFT JOIN document_permissions dp ON dp.document_id = d.id' : ''}
+  WHERE true
+`;
 
     const params = [];
     let paramIndex = 1;
@@ -603,7 +612,7 @@ router.get('/', auth, async (req, res) => {
         paramIndex++;
       }
       if (date_facture) {
-        baseQuery += ` AND f.date_facture = $${paramIndex}`;
+       baseQuery += ` AND DATE_TRUNC('day', f.date_facture) = DATE_TRUNC('day', $${paramIndex}::timestamp)`;
         params.push(date_facture);
         paramIndex++;
       }
@@ -627,12 +636,12 @@ router.get('/', auth, async (req, res) => {
         paramIndex++;
       }
       if (date_debut) {
-        baseQuery += ` AND dcong.date_debut >= $${paramIndex}`;
+       baseQuery += ` AND DATE_TRUNC('day', dcong.date_debut) >= DATE_TRUNC('day', $${paramIndex}::timestamp)`;
         params.push(date_debut);
         paramIndex++;
       }
       if (date_fin) {
-        baseQuery += ` AND dcong.date_fin <= $${paramIndex}`;
+       baseQuery += ` AND DATE_TRUNC('day', dcong.date_fin) <= DATE_TRUNC('day', $${paramIndex}::timestamp)`;
         params.push(date_fin);
         paramIndex++;
       }
@@ -661,7 +670,7 @@ router.get('/', auth, async (req, res) => {
     // Filtres spécifiques Contrat
     if (selectedCategory === 'contrat') {
       if (numero_contrat) {
-        baseQuery += ` AND c.numero_contrat ILIKE $${paramIndex}`;
+       baseQuery += ` AND DATE_TRUNC('day', c.date_signature) = DATE_TRUNC('day', $${paramIndex}::timestamp)`;
         params.push(`%${numero_contrat}%`);
         paramIndex++;
       }
@@ -681,7 +690,7 @@ router.get('/', auth, async (req, res) => {
         paramIndex++;
       }
       if (date_echeance) {
-        baseQuery += ` AND c.date_echeance = $${paramIndex}`;
+      baseQuery += ` AND DATE_TRUNC('day', c.date_echeance) = DATE_TRUNC('day', $${paramIndex}::timestamp)`;
         params.push(date_echeance);
         paramIndex++;
       }
@@ -1747,54 +1756,69 @@ router.get('/:id/metadata', auth, async (req, res) => {
     let meta = {};
 
   switch (category) {
-  case 'contrat':
-    const contratRes = await pool.query(
-      'SELECT numero_contrat, type_contrat, partie_prenante, date_signature, date_echeance, montant, statut FROM contrats WHERE document_id = $1', 
-      [documentId]
-    );
-    meta = contratRes.rows[0] || {};
+ case 'contrat':
+  const contratRes = await pool.query(
+    `SELECT numero_contrat, type_contrat, partie_prenante, 
+     TO_CHAR(date_signature, 'YYYY-MM-DD') as date_signature, 
+     TO_CHAR(date_echeance, 'YYYY-MM-DD') as date_echeance, 
+     montant, statut 
+     FROM contrats WHERE document_id = $1`, 
+    [documentId]
+  );
+  meta = contratRes.rows[0] || {};
     // Formatage des dates pour le frontend
     if (meta.date_signature) meta.date_signature = new Date(meta.date_signature).toISOString().split('T')[0];
     if (meta.date_echeance) meta.date_echeance = new Date(meta.date_echeance).toISOString().split('T')[0];
     break;
 
   case 'facture':
-    const factureRes = await pool.query(
-      'SELECT numero_facture, montant, nom_entreprise, date_facture, produit FROM factures WHERE document_id = $1', 
-      [documentId]
-    );
-    meta = factureRes.rows[0] || {};
+   const factureRes = await pool.query(
+    `SELECT numero_facture, montant, nom_entreprise, 
+     TO_CHAR(date_facture, 'YYYY-MM-DD') as date_facture, 
+     produit 
+     FROM factures WHERE document_id = $1`, 
+    [documentId]
+  );
+  meta = factureRes.rows[0] || {};
     // Formatage des dates pour le frontend
     if (meta.date_facture) meta.date_facture = new Date(meta.date_facture).toISOString().split('T')[0];
     break;
 
   case 'cv':
     const cvRes = await pool.query(
-      'SELECT nom_candidat, experience, domaine, num_cv, metier, lieu FROM cv WHERE document_id = $1', 
-      [documentId]
-    );
-    meta = cvRes.rows[0] || {};
+    `SELECT nom_candidat, experience, domaine, num_cv, metier, lieu,
+     TO_CHAR(date_cv, 'YYYY-MM-DD') as date_cv 
+     FROM cv WHERE document_id = $1`, 
+    [documentId]
+  );
+  meta = cvRes.rows[0] || {};
     break;
 
   case 'demande_conge':
-    const demandeRes = await pool.query(
-      `SELECT num_demande, date_debut, date_fin, motif 
-       FROM demande_conges 
-       WHERE document_id = $1`, 
-      [documentId]
-    );
-    meta = demandeRes.rows[0] || {};
+   const demandeRes = await pool.query(
+    `SELECT num_demande, 
+     TO_CHAR(date_debut, 'YYYY-MM-DD') as date_debut, 
+     TO_CHAR(date_fin, 'YYYY-MM-DD') as date_fin, 
+     motif 
+     FROM demande_conges 
+     WHERE document_id = $1`, 
+    [documentId]
+  );
+  meta = demandeRes.rows[0] || {};
     // Formatage des dates pour le frontend
     if (meta.date_debut) meta.date_debut = new Date(meta.date_debut).toISOString().split('T')[0];
     if (meta.date_fin) meta.date_fin = new Date(meta.date_fin).toISOString().split('T')[0];
     break;
 
   case 'rapport':
-    const rapportRes = await pool.query(
-      'SELECT type_rapport, auteur, date_rapport, periode_couverte, destinataire FROM rapports WHERE document_id = $1', 
-      [documentId]
-    );
-    meta = rapportRes.rows[0] || {};
+   const rapportRes = await pool.query(
+    `SELECT type_rapport, auteur, 
+     TO_CHAR(date_rapport, 'YYYY-MM-DD') as date_rapport, 
+     periode_couverte, destinataire 
+     FROM rapports WHERE document_id = $1`, 
+    [documentId]
+  );
+  meta = rapportRes.rows[0] || {};
     // Formatage des dates pour le frontend
     if (meta.date_rapport) meta.date_rapport = new Date(meta.date_rapport).toISOString().split('T')[0];
     break;
