@@ -64,7 +64,7 @@ const classifyText = async (text, filePath) => {
   }
 
   // Si ce n'est pas un média, utiliser le NLP pour classification
-  const defaultCategories = ["contrat", "facture", "demande_conge", "cv","rapport", "autre"];
+  const defaultCategories = ["contrat", "facture", "demande_conge", "cv", "rapport", "autre"];
 
   try {
     const response = await axios.post(
@@ -541,53 +541,53 @@ router.get('/', auth, async (req, res) => {
     }
 
     // Filtres spécifiques pour CV
-if (selectedCategory.toLowerCase() === 'cv') {
-  // Changez LEFT JOIN en INNER JOIN pour ne garder que les documents avec CV
-  baseQuery = baseQuery.replace('LEFT JOIN cv ON cv.document_id = d.id', 'INNER JOIN cv ON cv.document_id = d.id');
-  
-  // Ajoutez le filtre de catégorie (en supposant que le champ s'appelle 'category')
-  baseQuery += ` AND LOWER(d.category) = $${paramIndex}`;
-  params.push('cv');
-  paramIndex++;
+    if (selectedCategory.toLowerCase() === 'cv') {
+      // Changez LEFT JOIN en INNER JOIN pour ne garder que les documents avec CV
+      baseQuery = baseQuery.replace('LEFT JOIN cv ON cv.document_id = d.id', 'INNER JOIN cv ON cv.document_id = d.id');
 
-  if (num_cv) {
-    baseQuery += ` AND cv.num_cv ILIKE $${paramIndex}`;
-    params.push(`%${num_cv}%`);
-    paramIndex++;
-  }
+      // Ajoutez le filtre de catégorie (en supposant que le champ s'appelle 'category')
+      baseQuery += ` AND LOWER(d.category) = $${paramIndex}`;
+      params.push('cv');
+      paramIndex++;
 
-  if (nom_candidat) {
-    baseQuery += ` AND cv.nom_candidat ILIKE $${paramIndex}`;
-    params.push(`%${nom_candidat}%`);
-    paramIndex++;
-  }
+      if (num_cv) {
+        baseQuery += ` AND cv.num_cv ILIKE $${paramIndex}`;
+        params.push(`%${num_cv}%`);
+        paramIndex++;
+      }
 
-  if (metier) {
-    baseQuery += ` AND cv.metier ILIKE $${paramIndex}`;
-    params.push(`%${metier}%`);
-    paramIndex++;
-  }
+      if (nom_candidat) {
+        baseQuery += ` AND cv.nom_candidat ILIKE $${paramIndex}`;
+        params.push(`%${nom_candidat}%`);
+        paramIndex++;
+      }
 
-  // Pour les autres champs
-  if (domaine) {
-    baseQuery += ` AND cv.domaine ILIKE $${paramIndex}`;
-    params.push(`%${domaine}%`);
-    paramIndex++;
-  }
-}
+      if (metier) {
+        baseQuery += ` AND cv.metier ILIKE $${paramIndex}`;
+        params.push(`%${metier}%`);
+        paramIndex++;
+      }
 
-  // Ajoutez ces filtres supplémentaires si besoin
-  if (req.query.domaine) {
-    baseQuery += ` AND cv.domaine ILIKE $${paramIndex}`;
-    params.push(`%${req.query.domaine}%`);
-    paramIndex++;
-  }
+      // Pour les autres champs
+      if (domaine) {
+        baseQuery += ` AND cv.domaine ILIKE $${paramIndex}`;
+        params.push(`%${domaine}%`);
+        paramIndex++;
+      }
+    }
 
-  if (req.query.experience) {
-    baseQuery += ` AND cv.experience ILIKE $${paramIndex}`;
-    params.push(`%${req.query.experience}%`);
-    paramIndex++;
-  }
+    // Ajoutez ces filtres supplémentaires si besoin
+    if (req.query.domaine) {
+      baseQuery += ` AND cv.domaine ILIKE $${paramIndex}`;
+      params.push(`%${req.query.domaine}%`);
+      paramIndex++;
+    }
+
+    if (req.query.experience) {
+      baseQuery += ` AND cv.experience ILIKE $${paramIndex}`;
+      params.push(`%${req.query.experience}%`);
+      paramIndex++;
+    }
 
 
     // Filtres spécifiques Facture
@@ -643,6 +643,21 @@ if (selectedCategory.toLowerCase() === 'cv') {
       }
     }
 
+    if (category === 'rapport') {
+      const rapportFilters = ['type_rapport', 'auteur', 'date_rapport', 'periode_couverte', 'destinataire'];
+      rapportFilters.forEach(filter => {
+        if (filters[filter]) {
+          if (filter === 'date_rapport') {
+            baseQuery += ` AND r.date_rapport = $${paramIndex}`;
+            params.push(filters[filter]);
+          } else {
+            baseQuery += ` AND LOWER(r.${filter}) LIKE $${paramIndex}`;
+            params.push(`%${filters[filter].toLowerCase()}%`);
+          }
+          paramIndex++;
+        }
+      });
+    }
     // Filtres spécifiques Contrat
     if (selectedCategory === 'contrat') {
       if (numero_contrat) {
@@ -735,7 +750,7 @@ if (selectedCategory.toLowerCase() === 'cv') {
 router.get('/last-completed', async (req, res) => {
   try {
     const { name, exclude_id } = req.query;
-    
+
     const query = `
       SELECT * FROM documents 
       WHERE name = $1 
@@ -744,11 +759,11 @@ router.get('/last-completed', async (req, res) => {
       ORDER BY version DESC 
       LIMIT 1
     `;
-    
+
     const params = exclude_id ? [name, exclude_id] : [name];
-    
+
     const result = await pool.query(query, params);
-    
+
     res.json({ document: result.rows[0] });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1055,14 +1070,14 @@ router.get('/latest', auth, async (req, res) => {
         statut_contrat: row.statut
       } : {}),
       ...(row.cv_id && {  // <-- Ajoutez cette section pour les CV
-    nom_candidat: row.nom_candidat,
-    metier: row.metier,
-    experience: row.experience,
-    domaine: row.domaine,
-    num_cv: row.num_cv,
-    lieu: row.lieu,
-    date_cv: row.date_cv
-  }),
+        nom_candidat: row.nom_candidat,
+        metier: row.metier,
+        experience: row.experience,
+        domaine: row.domaine,
+        num_cv: row.num_cv,
+        lieu: row.lieu,
+        date_cv: row.date_cv
+      }),
       ...(row.rapport_id ? {
         type_rapport: row.type_rapport,
         auteur: row.auteur,
@@ -1459,52 +1474,52 @@ router.put('/:id', auth, async (req, res) => {
     `, [name, summary, tags, prio, metadata, is_completed, documentId]);
 
     // 4. Si le document vient juste d’être complété, on lui attribue une version
- // 4. Si le document vient juste d'être complété, on lui attribue une version
-if (is_completed) {
-  const versionRes = await pool.query(`
+    // 4. Si le document vient juste d'être complété, on lui attribue une version
+    if (is_completed) {
+      const versionRes = await pool.query(`
     SELECT MAX(version) as max_version 
     FROM documents 
     WHERE name = $1 AND version IS NOT NULL AND id != $2
   `, [name, documentId]);
 
-  const lastVersion = versionRes.rows[0].max_version || 0;
-  const currentVersion = lastVersion + 1;
+      const lastVersion = versionRes.rows[0].max_version || 0;
+      const currentVersion = lastVersion + 1;
 
-  await pool.query(`
+      await pool.query(`
     UPDATE documents SET version = $1 WHERE id = $2 and is_completed=true
   `, [currentVersion, documentId]);
 
-  // Envoyer une notification seulement si c'est une nouvelle version (pas la première)
-  if (lastVersion > 0) {
-    // Trouver le document de la version précédente
-    const prevVersionRes = await pool.query(
-      `SELECT id FROM documents 
+      // Envoyer une notification seulement si c'est une nouvelle version (pas la première)
+      if (lastVersion > 0) {
+        // Trouver le document de la version précédente
+        const prevVersionRes = await pool.query(
+          `SELECT id FROM documents 
        WHERE name = $1 AND version = $2 
        ORDER BY created_at DESC LIMIT 1`,
-      [name, lastVersion]
-    );
-    
-    const prevVersionId = prevVersionRes.rows[0]?.id;
+          [name, lastVersion]
+        );
 
-    // Copier les permissions depuis la version précédente
-    if (prevVersionId) {
-      await copyDocumentPermissions(prevVersionId, documentId);
+        const prevVersionId = prevVersionRes.rows[0]?.id;
+
+        // Copier les permissions depuis la version précédente
+        if (prevVersionId) {
+          await copyDocumentPermissions(prevVersionId, documentId);
+        }
+
+        // Récupérer les utilisateurs ayant accès à ce document
+        const usersRes = await pool.query(
+          `SELECT user_id FROM document_permissions WHERE document_id = $1 AND can_read = true`,
+          [documentId]
+        );
+
+        const userIds = usersRes.rows.map(row => row.user_id);
+
+        if (userIds.length > 0) {
+          await sendNotification(documentId, name, currentVersion, userIds);
+        }
+      }
     }
 
-    // Récupérer les utilisateurs ayant accès à ce document
-    const usersRes = await pool.query(
-      `SELECT user_id FROM document_permissions WHERE document_id = $1 AND can_read = true`,
-      [documentId]
-    );
-    
-    const userIds = usersRes.rows.map(row => row.user_id);
-    
-    if (userIds.length > 0) {
-      await sendNotification(documentId, name, currentVersion, userIds);
-    }
-  }
-}
-    
 
     // 5. Ajout/MAJ dans la table spécialisée
     switch (category) {
@@ -1668,7 +1683,7 @@ if (is_completed) {
         collectionId = insert.rows[0].id;
       }
 
-      
+
 
       await pool.query(`
         INSERT INTO document_collections (document_id, collection_id, is_saved, collection_name)
@@ -1731,49 +1746,62 @@ router.get('/:id/metadata', auth, async (req, res) => {
     const category = docRes.rows[0].category;
     let meta = {};
 
-    switch (category) {
-      case 'contrat':
-        const contratRes = await pool.query('SELECT * FROM contrats WHERE document_id = $1', [documentId]);
-        meta = contratRes.rows[0] || {};
-        break;
+  switch (category) {
+  case 'contrat':
+    const contratRes = await pool.query(
+      'SELECT numero_contrat, type_contrat, partie_prenante, date_signature, date_echeance, montant, statut FROM contrats WHERE document_id = $1', 
+      [documentId]
+    );
+    meta = contratRes.rows[0] || {};
+    // Formatage des dates pour le frontend
+    if (meta.date_signature) meta.date_signature = new Date(meta.date_signature).toISOString().split('T')[0];
+    if (meta.date_echeance) meta.date_echeance = new Date(meta.date_echeance).toISOString().split('T')[0];
+    break;
 
-      case 'facture':
-        const factureRes = await pool.query('SELECT * FROM factures WHERE document_id = $1', [documentId]);
-        meta = factureRes.rows[0] || {};
-        // Formatage des dates pour le frontend
-        if (meta.date_facture) meta.date_facture = new Date(meta.date_facture).toISOString().split('T')[0];
-        break;
+  case 'facture':
+    const factureRes = await pool.query(
+      'SELECT numero_facture, montant, nom_entreprise, date_facture, produit FROM factures WHERE document_id = $1', 
+      [documentId]
+    );
+    meta = factureRes.rows[0] || {};
+    // Formatage des dates pour le frontend
+    if (meta.date_facture) meta.date_facture = new Date(meta.date_facture).toISOString().split('T')[0];
+    break;
 
-      case 'cv':
-        const cvRes = await pool.query('SELECT * FROM cv WHERE document_id = $1', [documentId]);
-        meta = cvRes.rows[0] || {};
-        break;
+  case 'cv':
+    const cvRes = await pool.query(
+      'SELECT nom_candidat, experience, domaine, num_cv, metier, lieu FROM cv WHERE document_id = $1', 
+      [documentId]
+    );
+    meta = cvRes.rows[0] || {};
+    break;
 
-      case 'demande_conge':
-        const demandeRes = await pool.query(`
-          SELECT 
-            num_demande, 
-            date_debut,
-            date_fin,
-            motif
-          FROM demande_conges 
-          WHERE document_id = $1
-        `, [documentId]);
+  case 'demande_conge':
+    const demandeRes = await pool.query(
+      `SELECT num_demande, date_debut, date_fin, motif 
+       FROM demande_conges 
+       WHERE document_id = $1`, 
+      [documentId]
+    );
+    meta = demandeRes.rows[0] || {};
+    // Formatage des dates pour le frontend
+    if (meta.date_debut) meta.date_debut = new Date(meta.date_debut).toISOString().split('T')[0];
+    if (meta.date_fin) meta.date_fin = new Date(meta.date_fin).toISOString().split('T')[0];
+    break;
 
-        // Transformation des dates au format ISO pour le frontend
-        meta = demandeRes.rows[0] || {};
-        if (meta.date_debut) meta.date_debut = new Date(meta.date_debut).toISOString().split('T')[0];
-        if (meta.date_fin) meta.date_fin = new Date(meta.date_fin).toISOString().split('T')[0];
-        break;
+  case 'rapport':
+    const rapportRes = await pool.query(
+      'SELECT type_rapport, auteur, date_rapport, periode_couverte, destinataire FROM rapports WHERE document_id = $1', 
+      [documentId]
+    );
+    meta = rapportRes.rows[0] || {};
+    // Formatage des dates pour le frontend
+    if (meta.date_rapport) meta.date_rapport = new Date(meta.date_rapport).toISOString().split('T')[0];
+    break;
 
-      case 'rapport':
-        const rapportRes = await pool.query('SELECT * FROM rapports WHERE document_id = $1', [documentId]);
-        meta = rapportRes.rows[0] || {};
-        break;
-
-      default:
-        meta = {};
-    }
+  default:
+    meta = {};
+}
 
     res.json(meta);
 
@@ -1880,65 +1908,65 @@ router.get('/:id/details', auth, async (req, res) => {
   }
 });
 router.post('/:id/share', auth, async (req, res) => {
-    const documentId = parseInt(req.params.id);
-    const userId = req.user.id;
+  const documentId = parseInt(req.params.id);
+  const userId = req.user.id;
 
-    const {
-        visibility,
-        id_share = [],
-        id_group = [],
-        can_modify = false,
-        can_delete = false,
-        can_share = false
-    } = req.body;
+  const {
+    visibility,
+    id_share = [],
+    id_group = [],
+    can_modify = false,
+    can_delete = false,
+    can_share = false
+  } = req.body;
 
-    if (!['public', 'private', 'custom'].includes(visibility)) {
-        return res.status(400).json({ error: "Type de visibilité invalide" });
+  if (!['public', 'private', 'custom'].includes(visibility)) {
+    return res.status(400).json({ error: "Type de visibilité invalide" });
+  }
+
+  try {
+    // 1. Récupération des informations
+    const { rows: [document] } = await pool.query(
+      'SELECT id, name, owner_id FROM documents WHERE id = $1',
+      [documentId]
+    );
+
+    const { rows: [sharer] } = await pool.query(
+      'SELECT name, prenom FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (!document) {
+      return res.status(404).json({ error: "Document non trouvé" });
     }
 
-    try {
-        // 1. Récupération des informations
-        const { rows: [document] } = await pool.query(
-            'SELECT id, name, owner_id FROM documents WHERE id = $1',
-            [documentId]
+    const sharerName = `${sharer.prenom} ${sharer.name}`;
+    const shareDate = new Date().toLocaleString('fr-FR');
+    const isOwner = userId === document.owner_id;
+
+    // 2. Transaction
+    await pool.query('BEGIN');
+
+    // 3. Mise à jour du document
+    await pool.query(
+      'UPDATE documents SET visibility = $1, id_share = $2, id_group = $3 WHERE id = $4',
+      [visibility, id_share, id_group, documentId]
+    );
+
+    // 4. Gestion des permissions
+    if (visibility === 'private') {
+      // Ne rien faire pour private
+    } else {
+      if (visibility === 'public') {
+        // Pour public, donner seulement can_read si non-propriétaire
+        const { rows: allUsers } = await pool.query(
+          'SELECT id FROM users WHERE id != $1',
+          [document.owner_id]
         );
 
-        const { rows: [sharer] } = await pool.query(
-            'SELECT name, prenom FROM users WHERE id = $1',
-            [userId]
-        );
-
-        if (!document) {
-            return res.status(404).json({ error: "Document non trouvé" });
-        }
-
-        const sharerName = `${sharer.prenom} ${sharer.name}`;
-        const shareDate = new Date().toLocaleString('fr-FR');
-        const isOwner = userId === document.owner_id;
-
-        // 2. Transaction
-        await pool.query('BEGIN');
-
-        // 3. Mise à jour du document
-        await pool.query(
-            'UPDATE documents SET visibility = $1, id_share = $2, id_group = $3 WHERE id = $4',
-            [visibility, id_share, id_group, documentId]
-        );
-
-        // 4. Gestion des permissions
-        if (visibility === 'private') {
-            // Ne rien faire pour private
-        } else {
-            if (visibility === 'public') {
-                // Pour public, donner seulement can_read si non-propriétaire
-                const { rows: allUsers } = await pool.query(
-                    'SELECT id FROM users WHERE id != $1',
-                    [document.owner_id]
-                );
-
-                if (allUsers.length > 0) {
-                    await pool.query(
-                        `INSERT INTO document_permissions 
+        if (allUsers.length > 0) {
+          await pool.query(
+            `INSERT INTO document_permissions 
                          (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
                          SELECT id, $1, 'public', true, $2, $3, $4 FROM users WHERE id != $5
                          ON CONFLICT (user_id, document_id) 
@@ -1948,19 +1976,19 @@ router.post('/:id/share', auth, async (req, res) => {
                              can_modify = CASE WHEN $6 THEN EXCLUDED.can_modify ELSE false END,
                              can_delete = CASE WHEN $6 THEN EXCLUDED.can_delete ELSE false END,
                              can_share = CASE WHEN $6 THEN EXCLUDED.can_share ELSE false END`,
-                        [documentId, 
-                         isOwner ? can_modify : false, 
-                         isOwner ? can_delete : false, 
-                         isOwner ? can_share : false,
-                         document.owner_id,
-                         isOwner]
-                    );
-                }
-            } else if (visibility === 'custom') {
-                // Pour custom, appliquer les règles spécifiques
-                if (id_share.length > 0) {
-                    await pool.query(
-                        `INSERT INTO document_permissions 
+            [documentId,
+              isOwner ? can_modify : false,
+              isOwner ? can_delete : false,
+              isOwner ? can_share : false,
+              document.owner_id,
+              isOwner]
+          );
+        }
+      } else if (visibility === 'custom') {
+        // Pour custom, appliquer les règles spécifiques
+        if (id_share.length > 0) {
+          await pool.query(
+            `INSERT INTO document_permissions 
                          (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
                          SELECT unnest($1::int[]), $2, 'shared', true, $3, $4, $5
                          ON CONFLICT (user_id, document_id) 
@@ -1970,18 +1998,18 @@ router.post('/:id/share', auth, async (req, res) => {
                              can_modify = CASE WHEN $6 THEN $3 ELSE false END,
                              can_delete = CASE WHEN $6 THEN $4 ELSE false END,
                              can_share = CASE WHEN $6 THEN $5 ELSE false END`,
-                        [id_share, 
-                         documentId, 
-                         isOwner ? can_modify : false, 
-                         isOwner ? can_delete : false, 
-                         isOwner ? can_share : false,
-                         isOwner]
-                    );
-                }
+            [id_share,
+              documentId,
+              isOwner ? can_modify : false,
+              isOwner ? can_delete : false,
+              isOwner ? can_share : false,
+              isOwner]
+          );
+        }
 
-                if (id_group.length > 0) {
-                    await pool.query(
-                        `INSERT INTO document_permissions 
+        if (id_group.length > 0) {
+          await pool.query(
+            `INSERT INTO document_permissions 
                          (user_id, document_id, access_type, can_read, can_modify, can_delete, can_share)
                          SELECT gm.user_id, $1, 'group', true, $2, $3, $4
                          FROM group_members gm
@@ -1993,148 +2021,148 @@ router.post('/:id/share', auth, async (req, res) => {
                              can_modify = CASE WHEN $6 THEN $2 ELSE false END,
                              can_delete = CASE WHEN $6 THEN $3 ELSE false END,
                              can_share = CASE WHEN $6 THEN $4 ELSE false END`,
-                        [documentId, 
-                         isOwner ? can_modify : false, 
-                         isOwner ? can_delete : false, 
-                         isOwner ? can_share : false,
-                         id_group,
-                         isOwner]
-                    );
-                }
-            }
+            [documentId,
+              isOwner ? can_modify : false,
+              isOwner ? can_delete : false,
+              isOwner ? can_share : false,
+              id_group,
+              isOwner]
+          );
         }
+      }
+    }
 
-        // 5. Gestion des notifications
-        const notificationsToInsert = [];
+    // 5. Gestion des notifications
+    const notificationsToInsert = [];
 
-        if (visibility === 'public') {
-            const { rows: allUsers } = await pool.query(
-                'SELECT id FROM users WHERE id != $1',
-                [userId]
-            );
+    if (visibility === 'public') {
+      const { rows: allUsers } = await pool.query(
+        'SELECT id FROM users WHERE id != $1',
+        [userId]
+      );
 
-            allUsers.forEach(user => {
-                notificationsToInsert.push([
-                    user.id,
-                    'Nouveau document public disponible',
-                    `Le document "${document.name}" a été rendu public par ${sharerName} le ${shareDate}`,
-                    'document_shared',
-                    documentId,
-                    false,
-                    new Date(),
-                    userId,
-                    null, null, null
-                ]);
-            });
-        } else if (visibility === 'custom') {
-            const usersToNotify = new Set();
+      allUsers.forEach(user => {
+        notificationsToInsert.push([
+          user.id,
+          'Nouveau document public disponible',
+          `Le document "${document.name}" a été rendu public par ${sharerName} le ${shareDate}`,
+          'document_shared',
+          documentId,
+          false,
+          new Date(),
+          userId,
+          null, null, null
+        ]);
+      });
+    } else if (visibility === 'custom') {
+      const usersToNotify = new Set();
 
-            // Notifier les utilisateurs directement partagés
-            for (const targetId of id_share) {
-                if (targetId !== userId) {
-                    usersToNotify.add(targetId);
-                }
-            }
-
-            // Notifier les membres des groupes (sauf ceux déjà notifiés individuellement)
-            if (id_group.length > 0) {
-                const { rows: groupMembers } = await pool.query(
-                    'SELECT DISTINCT user_id FROM group_members WHERE group_id = ANY($1) AND user_id != $2',
-                    [id_group, userId]
-                );
-
-                groupMembers.forEach(member => {
-                    if (!usersToNotify.has(member.user_id)) {
-                        usersToNotify.add(member.user_id);
-                    }
-                });
-            }
-
-            // Créer les notifications
-            Array.from(usersToNotify).forEach(userId => {
-                notificationsToInsert.push([
-                    userId,
-                    id_share.includes(userId)
-                        ? 'Document partagé avec vous'
-                        : 'Document partagé avec votre groupe',
-                    id_share.includes(userId)
-                        ? `${sharerName} vous a partagé le document "${document.name}" le ${shareDate}`
-                        : `${sharerName} a partagé le document "${document.name}" avec votre groupe le ${shareDate}`,
-                    'document_shared',
-                    documentId,
-                    false,
-                    new Date(),
-                    userId,
-                    null, null, null
-                ]);
-            });
+      // Notifier les utilisateurs directement partagés
+      for (const targetId of id_share) {
+        if (targetId !== userId) {
+          usersToNotify.add(targetId);
         }
+      }
 
-        // Insertion des notifications
-        if (notificationsToInsert.length > 0) {
-            await pool.query(
-                `INSERT INTO notifications 
+      // Notifier les membres des groupes (sauf ceux déjà notifiés individuellement)
+      if (id_group.length > 0) {
+        const { rows: groupMembers } = await pool.query(
+          'SELECT DISTINCT user_id FROM group_members WHERE group_id = ANY($1) AND user_id != $2',
+          [id_group, userId]
+        );
+
+        groupMembers.forEach(member => {
+          if (!usersToNotify.has(member.user_id)) {
+            usersToNotify.add(member.user_id);
+          }
+        });
+      }
+
+      // Créer les notifications
+      Array.from(usersToNotify).forEach(userId => {
+        notificationsToInsert.push([
+          userId,
+          id_share.includes(userId)
+            ? 'Document partagé avec vous'
+            : 'Document partagé avec votre groupe',
+          id_share.includes(userId)
+            ? `${sharerName} vous a partagé le document "${document.name}" le ${shareDate}`
+            : `${sharerName} a partagé le document "${document.name}" avec votre groupe le ${shareDate}`,
+          'document_shared',
+          documentId,
+          false,
+          new Date(),
+          userId,
+          null, null, null
+        ]);
+      });
+    }
+
+    // Insertion des notifications
+    if (notificationsToInsert.length > 0) {
+      await pool.query(
+        `INSERT INTO notifications 
                  (user_id, title, message, type, document_id, is_read, created_at, sender_id, related_task_id, decision, related_id)
                  SELECT * FROM UNNEST(
                      $1::int[], $2::varchar[], $3::text[], $4::varchar[], 
                      $5::int[], $6::boolean[], $7::timestamp[], $8::int[],
                      $9::int[], $10::boolean[], $11::int[]
                  )`,
-                [
-                    notificationsToInsert.map(n => n[0]),
-                    notificationsToInsert.map(n => n[1]),
-                    notificationsToInsert.map(n => n[2]),
-                    notificationsToInsert.map(n => n[3]),
-                    notificationsToInsert.map(n => n[4]),
-                    notificationsToInsert.map(n => n[5]),
-                    notificationsToInsert.map(n => n[6]),
-                    notificationsToInsert.map(n => n[7]),
-                    notificationsToInsert.map(n => n[8]),
-                    notificationsToInsert.map(n => n[9]),
-                    notificationsToInsert.map(n => n[10])
-                ]
-            );
-        }
-
-        // Journalisation
-        await logActivity(userId, 'share', 'document', documentId, {
-            visibility: visibility,
-            shared_with_users: visibility === 'public' ? 'all_users' : id_share,
-            shared_with_groups: id_group,
-            permissions: { 
-                can_modify: isOwner ? can_modify : false, 
-                can_delete: isOwner ? can_delete : false, 
-                can_share: isOwner ? can_share : false 
-            },
-            notifications_sent: notificationsToInsert.length,
-            shared_by_owner: isOwner
-        });
-
-        await pool.query('COMMIT');
-
-        res.status(200).json({
-            success: true,
-            message: `Document ${visibility === 'public' ? 'rendu public' : 'partagé'} avec succès`,
-            permissions_updated: true,
-            users_affected: visibility === 'public' ? 'all_users' : id_share.length,
-            is_owner: isOwner,
-            granted_permissions: {
-                can_read: true,
-                can_modify: isOwner ? can_modify : false,
-                can_delete: isOwner ? can_delete : false,
-                can_share: isOwner ? can_share : false
-            }
-        });
-
-    } catch (error) {
-        await pool.query('ROLLBACK');
-        console.error("Erreur lors du partage:", error);
-        res.status(500).json({
-            success: false,
-            error: "Échec de l'opération de partage",
-            details: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
+        [
+          notificationsToInsert.map(n => n[0]),
+          notificationsToInsert.map(n => n[1]),
+          notificationsToInsert.map(n => n[2]),
+          notificationsToInsert.map(n => n[3]),
+          notificationsToInsert.map(n => n[4]),
+          notificationsToInsert.map(n => n[5]),
+          notificationsToInsert.map(n => n[6]),
+          notificationsToInsert.map(n => n[7]),
+          notificationsToInsert.map(n => n[8]),
+          notificationsToInsert.map(n => n[9]),
+          notificationsToInsert.map(n => n[10])
+        ]
+      );
     }
+
+    // Journalisation
+    await logActivity(userId, 'share', 'document', documentId, {
+      visibility: visibility,
+      shared_with_users: visibility === 'public' ? 'all_users' : id_share,
+      shared_with_groups: id_group,
+      permissions: {
+        can_modify: isOwner ? can_modify : false,
+        can_delete: isOwner ? can_delete : false,
+        can_share: isOwner ? can_share : false
+      },
+      notifications_sent: notificationsToInsert.length,
+      shared_by_owner: isOwner
+    });
+
+    await pool.query('COMMIT');
+
+    res.status(200).json({
+      success: true,
+      message: `Document ${visibility === 'public' ? 'rendu public' : 'partagé'} avec succès`,
+      permissions_updated: true,
+      users_affected: visibility === 'public' ? 'all_users' : id_share.length,
+      is_owner: isOwner,
+      granted_permissions: {
+        can_read: true,
+        can_modify: isOwner ? can_modify : false,
+        can_delete: isOwner ? can_delete : false,
+        can_share: isOwner ? can_share : false
+      }
+    });
+
+  } catch (error) {
+    await pool.query('ROLLBACK');
+    console.error("Erreur lors du partage:", error);
+    res.status(500).json({
+      success: false,
+      error: "Échec de l'opération de partage",
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
 });
 
 // routes/documents.js
