@@ -240,6 +240,20 @@ const handleVersionDecision = async (notif, decision) => {
   }
 };
 
+const handleViewWorkflow = async (taskId) => {
+  try {
+    const token = localStorage.getItem('token');
+    const res = await axios.get(`http://localhost:5000/api/tasks/${taskId}/workflow`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const workflowId = res.data.workflow_id;
+    window.location.href = `/workflowz/${workflowId}`;
+  } catch (error) {
+    console.error('Erreur lors de la récupération du workflow:', error);
+    alert('Impossible de récupérer le workflow associé');
+  }
+};
+
   return (
     <>
       <Navbar />
@@ -313,13 +327,29 @@ const handleVersionDecision = async (notif, decision) => {
                             </Button>
                           )
                         )}
-                        {(notif.type === 'task' || notif.type === 'task_rejected') && notif.related_task_id && (
+                        {(notif.type === 'task' || notif.type === 'task_rejected') && notif.related_task_id && !notif.message.includes("marquée comme terminée") && !notif.message.includes("a été refusée") &&
+                        !notif.message.includes("Une réponse a été ajoutée") && !notif.message.includes("Un nouveau commentaire a été ajouté") && (
                         <Button
                           variant="outline-primary"
                           size="sm"
                           className="action-btn"
                           href={`/details_taches/${notif.related_task_id}`}
                           title="Voir la tâche"
+                        >
+                          <i className="bi bi-eye"></i>
+                        </Button>
+                      )}
+                      {(notif.type === 'task' || notif.type === 'task_rejected') && notif.related_task_id && 
+                        (notif.message.includes("marquée comme terminée") || 
+                        notif.message.includes("a été refusée") || 
+                        notif.message.includes("Une réponse") || 
+                        notif.message.includes("Un nouveau commentaire")) && (
+                        <Button
+                          variant="outline-primary"
+                          size="sm"
+                          className="action-btn"
+                          onClick={() => handleViewWorkflow(notif.related_task_id)}
+                          title="Voir le workflow"
                         >
                           <i className="bi bi-eye"></i>
                         </Button>

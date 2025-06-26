@@ -163,12 +163,6 @@ const Navbar = () => {
         </div>
       </div>
       <div className="dropdown-divider"></div>
-      <Link to="/profile" className="dropdown-item">
-        <FaIcons.FaUser /> Mon profil
-      </Link>
-      <Link to="/settings" className="dropdown-item">
-        <FaIcons.FaCog /> Paramètres
-      </Link>
       <Link to="/reclamation" className="dropdown-item">
         <FaIcons.FaQuestionCircle /> Aide
       </Link>

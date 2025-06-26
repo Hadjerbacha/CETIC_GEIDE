@@ -28,39 +28,69 @@ import {
   FiUpload,
   FiDownload,
   FiTrash2,
-  FiEdit2
+  FiEdit2,
+  FiMessageSquare,
+  FiArchive,
+  FiShare2,
+  FiBell
 } from 'react-icons/fi';
 import '../style/activity.css';
 
 const ACTION_ICONS = {
-  login: <FiLogIn size={18} className="text-primary" />,
-  logout: <FiLogOut size={18} className="text-secondary" />,
   user_login: <FiLogIn size={18} className="text-primary" />,
   user_logout: <FiLogOut size={18} className="text-secondary" />,
   user_create: <FiUserPlus size={18} className="text-success" />,
   user_update: <FiEdit size={18} className="text-warning" />,
   user_delete: <FiUserMinus size={18} className="text-danger" />,
+  user_reactivate: <FiUserPlus size={18} className="text-success" />,
+  user_deactivate: <FiUserMinus size={18} className="text-danger" />,
   upload: <FiUpload size={18} className="text-info" />,
   download: <FiDownload size={18} className="text-primary" />,
   delete: <FiTrash2 size={18} className="text-danger" />,
   update: <FiEdit2 size={18} className="text-warning" />,
   create_workflow: <FiFileText size={18} className="text-success" />,
+  create: <FiFileText size={18} className="text-success" />,
+  Demarrer_workflow: <FiFileText size={18} className="text-success" />,
+  MAJ_status: <FiEdit size={18} className="text-warning" />,
+  notification_send: <FiBell size={18} className="text-info" />,
+  notification_read: <FiBell size={18} className="text-secondary" />,
+  task_response: <FiEdit size={18} className="text-primary" />,
+  group_create: <FiUserPlus size={18} className="text-success" />,
+  group_update: <FiEdit size={18} className="text-warning" />,
+  group_delete: <FiUserMinus size={18} className="text-danger" />,
+  archive: <FiArchive size={18} className="text-secondary" />,
+  unarchive: <FiArchive size={18} className="text-success" />,
+  share: <FiShare2 size={18} className="text-info" />,
+  message_send: <FiMessageSquare size={18} className="text-primary" />,
   default: <FiFileText size={18} className="text-info" />
 };
 
 const ACTION_LABELS = {
-  login: 'Connexion',
-  logout: 'Déconnexion',
-  user_login: 'Connexion',
-  user_logout: 'Déconnexion',
+  user_login: 'Connexion utilisateur',
+  user_logout: 'Déconnexion utilisateur',
   user_create: 'Création utilisateur',
   user_update: 'Modification utilisateur',
   user_delete: 'Suppression utilisateur',
+  user_reactivate: 'Réactivation utilisateur',
+  user_deactivate: 'Désactivation utilisateur',
   upload: 'Ajout document',
   download: 'Téléchargement document',
   delete: 'Suppression document',
   update: 'Modification document',
   create_workflow: 'Création workflow',
+  create: 'Création',
+  Demarrer_workflow: 'Démarrage workflow',
+  MAJ_status: 'Mise à jour statut',
+  notification_send: 'Notification envoyée',
+  notification_read: 'Notification lue',
+  task_response: 'Réponse tâche',
+  group_create: 'Création groupe',
+  group_update: 'Mise à jour groupe',
+  group_delete: 'Suppression groupe',
+  archive: 'Archivage document',
+  unarchive: 'Désarchivage document',
+  share: 'Partage document',
+  message_send: 'Message envoyé',
   default: 'Action système'
 };
 
@@ -193,16 +223,28 @@ const ActivityLog = () => {
   const renderDetails = (activity) => {
     return (
       <div className="p-3">
-        <h6>Détails de l'activité :</h6>
+        <h6>Détails complets de l'activité :</h6>
         <div className="details-container">
           <div className="detail-item">
-            <strong>Type:</strong> {activity.entity_type}
+            <strong>ID:</strong> {activity.id}
+          </div>
+          <div className="detail-item">
+            <strong>Utilisateur ID:</strong> {activity.user_id}
+          </div>
+          <div className="detail-item">
+            <strong>Type d'entité:</strong> {activity.entity_type}
+          </div>
+          <div className="detail-item">
+            <strong>ID Entité:</strong> {activity.entity_id}
           </div>
           <div className="detail-item">
             <strong>Détails:</strong> 
             <pre className="mt-2 p-2 bg-light rounded">
               {JSON.stringify(activity.details, null, 2)}
             </pre>
+          </div>
+          <div className="detail-item">
+            <strong>Horodatage complet:</strong> {activity.timestamp}
           </div>
         </div>
       </div>
@@ -311,9 +353,12 @@ const filteredData = activities
                       <Form.Label>Filtrer par utilisateur</Form.Label>
                       <Dropdown>
                         <Dropdown.Toggle variant="outline-secondary" className="w-100 text-start">
-                          {selectedUser 
-                            ? users.find(u => u.id === selectedUser)?.name || 'Utilisateur inconnu'
-                            : 'Tous les utilisateurs'}
+                          {selectedUser
+                          ? (() => {
+                              const u = users.find(user => user.id === selectedUser);
+                              return u ? `${u.prenom} ${u.name}` : 'Utilisateur inconnu';
+                            })()
+                          : 'Tous les utilisateurs'}
                         </Dropdown.Toggle>
                         <Dropdown.Menu className="w-100">
                           <Dropdown.Item onClick={() => setSelectedUser(null)}>

@@ -258,4 +258,41 @@ if (result.rowCount > 0) {
   }
 });
 
+router.get('/with-workflow/:user_id', async (req, res) => {
+  const parsedUserId = parseInt(req.params.user_id, 10);
+  if (isNaN(parsedUserId)) {
+    return res.status(400).json({ message: 'user_id doit être un entier valide' });
+  }
+
+  try {
+    // D'abord récupérer les notifications
+    const notifsResult = await pool.query(
+      'SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC',
+      [parsedUserId]
+    );
+
+    // Enrichir chaque notification avec le workflow_id si elle a un related_task_id
+    const enrichedNotifications = await Promise.all(
+      notifsResult.rows.map(async (notif) => {
+        if (!notif.related_task_id) return notif;
+        
+        const taskResult = await pool.query(
+          'SELECT workflow_id FROM tasks WHERE id = $1',
+          [notif.related_task_id]
+        );
+        
+        return {
+          ...notif,
+          workflow_id: taskResult.rows[0]?.workflow_id || null
+        };
+      })
+    );
+
+    res.status(200).json(enrichedNotifications);
+  } catch (err) {
+    console.error('Erreur lors de la récupération des notifications avec workflow', err);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
+
 module.exports = router;

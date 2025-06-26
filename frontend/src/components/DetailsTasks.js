@@ -221,7 +221,6 @@ const DetailsTask = () => {
           <hr/>
           <p><strong>Description :</strong> {task.description}</p>
           <p><strong>Date limite :</strong> {new Date(task.due_date).toLocaleDateString()}</p>
-          <p><strong>Priorité :</strong> {task.priority}</p>
           <p>
             <strong>Statut :</strong> 
             <span 

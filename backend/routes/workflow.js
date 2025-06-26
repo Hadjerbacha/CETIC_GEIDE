@@ -654,4 +654,27 @@ router.post('/:id/notify-rejection', authMiddleware, async (req, res) => {
   }
 });
 
+// Ajoutez cette route dans workflow.js (avant module.exports)
+router.get('/:id/workflow', authMiddleware, async (req, res) => {
+  const taskId = parseInt(req.params.id);
+  
+  try {
+    const result = await pool.query(
+      `SELECT workflow_id FROM tasks WHERE id = $1`,
+      [taskId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'Tâche non trouvée' });
+    }
+
+    res.json({
+      workflow_id: result.rows[0].workflow_id
+    });
+  } catch (err) {
+    console.error('Erreur lors de la récupération du workflow:', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
 module.exports = router;
