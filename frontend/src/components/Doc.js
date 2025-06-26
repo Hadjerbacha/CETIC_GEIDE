@@ -450,17 +450,6 @@ const Doc = () => {
     };
   };
 
-  const normalizeDate = (date) => {
-    if (!date) return null;
-    // Si c'est déjà une string au format YYYY-MM-DD
-    if (typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date)) {
-      return date;
-    }
-    // Si c'est un objet Date ou une string ISO
-    const d = new Date(date);
-    return isNaN(d.getTime()) ? null : d.toISOString().split('T')[0];
-  };
-
   const filteredDocuments = latestDocs.filter((doc) => {
     // 1. Exclusion des fichiers média
     const filePath = doc.file_path?.toString() || '';
@@ -490,15 +479,9 @@ const Doc = () => {
     const docCreationDate = doc.creation_date ? new Date(doc.creation_date).toISOString().split('T')[0] : '';
 
     // 3. Filtres généraux
-
-    const normalizedDocDate = normalizeDate(doc.date);
-    const normalizedStartDate = normalizeDate(startDate);
-    const normalizedEndDate = normalizeDate(endDate);
-
     const matchesType = filterType === 'Tous les documents' || extension === filterType.toLowerCase();
-    const matchesDate = (!normalizedStartDate || (normalizedDocDate && normalizedDocDate >= normalizedStartDate)) &&
-    (!normalizedEndDate || (normalizedDocDate && normalizedDocDate <= normalizedEndDate));
-
+    const matchesDate = (!startDate || (docDate && docDate >= new Date(startDate))) &&
+      (!endDate || (docDate && docDate <= new Date(endDate)));
     const searchLower = searchQuery.toLowerCase();
     const matchesSearch = useAdvancedFilter ? (
       docContent.includes(searchLower) ||
@@ -511,20 +494,12 @@ const Doc = () => {
     const matchesCategory = !selectedCategory || docCategory === selectedCategory.toLowerCase();
 
     // 4. Filtres avancés spécifiques
-     const matchesAdvancedFilters = (() => {
-    if (!showAdvancedFilters) return true;
+    const matchesAdvancedFilters = (() => {
+      if (!showAdvancedFilters) return true;
 
-    const filters = Object.fromEntries(
-      Object.entries(searchFilters).map(([k, v]) => [k, v?.toString().toLowerCase() || ''])
-    );
-
-    // Fonction helper pour comparer les dates
-    const compareDates = (docDate, filterDate) => {
-      const normDocDate = normalizeDate(docDate);
-      const normFilterDate = normalizeDate(filterDate);
-      return normDocDate && normFilterDate && normDocDate === normFilterDate;
-    };
-
+      const filters = Object.fromEntries(
+        Object.entries(searchFilters).map(([k, v]) => [k, v?.toString().toLowerCase() || ''])
+      );
 
       // Filtres communs à toutes les catégories
       const commonFilters = {
@@ -546,7 +521,7 @@ const Doc = () => {
             commonFilters.tags &&
             (!filters.numero_facture || doc.numero_facture?.toString().toLowerCase().includes(filters.numero_facture)) &&
             (!filters.montant || Number(doc.montant) === Number(filters.montant)) &&
-              (!filters.date_facture || compareDates(doc.date_facture, filters.date_facture)) &&
+            (!filters.date_facture || (doc.date_facture && new Date(doc.date_facture).toISOString().split('T')[0] === filters.date_facture)) &&
             (!filters.nom_entreprise || doc.nom_entreprise?.toString().toLowerCase().includes(filters.nom_entreprise)) &&
             (!filters.produit || doc.produit?.toString().toLowerCase().includes(filters.produit))
           );
@@ -562,7 +537,7 @@ const Doc = () => {
             (!filters.experience || (doc.experience && doc.experience.toString().toLowerCase().includes(filters.experience))) &&
             (!filters.lieu || (doc.lieu && doc.lieu.toString().toLowerCase().includes(filters.lieu))) &&
             (!filters.num_cv || (doc.num_cv && doc.num_cv.toString().toLowerCase().includes(filters.num_cv))) && // Nouveau filtre
-             (!filters.date_cv || compareDates(doc.date_cv, filters.date_cv)) 
+            (!filters.date_cv || (doc.date_cv && new Date(doc.date_cv).toISOString().split('T')[0] === filters.date_cv))
           );
         case 'demande_conge':
           return (
@@ -570,8 +545,8 @@ const Doc = () => {
             commonFilters.summary &&
             commonFilters.tags &&
             (!filters.num_demande || doc.num_demande?.toString().includes(filters.num_demande)) &&
-            (!filters.date_debut || compareDates(doc.date_debut, filters.date_debut)) &&
-           (!filters.date_fin || compareDates(doc.date_fin, filters.date_fin))&&
+            (!filters.date_debut || (doc.date_debut && new Date(doc.date_debut).toISOString().split('T')[0] === filters.date_debut)) &&
+            (!filters.date_fin || (doc.date_fin && new Date(doc.date_fin).toISOString().split('T')[0] === filters.date_fin)) &&
             (!filters.motif || doc.motif?.toLowerCase().includes(filters.motif))
           );
 
@@ -583,10 +558,10 @@ const Doc = () => {
             commonFilters.tags &&
             (!filters.type_rapport || doc.type_rapport?.toLowerCase().includes(filters.type_rapport.toLowerCase())) &&
             (!filters.auteur || doc.auteur?.toLowerCase().includes(filters.auteur.toLowerCase())) &&
-             (!filters.date_rapport || compareDates(doc.date_rapport, filters.date_rapport)) &&
+            (!filters.date_rapport || (doc.date_rapport && new Date(doc.date_rapport).toISOString().split('T')[0] === filters.date_rapport) &&
               (!filters.periode_couverte || doc.periode_couverte?.toLowerCase().includes(filters.periode_couverte.toLowerCase())) &&
               (!filters.destinataire || doc.destinataire?.toLowerCase().includes(filters.destinataire.toLowerCase()))
-            );
+            ));
 
         case 'contrat':
           return (
@@ -596,8 +571,8 @@ const Doc = () => {
             (!filters.numero_contrat || doc.numero_contrat?.toString().includes(filters.numero_contrat)) &&
             (!filters.type_contrat || doc.type_contrat?.toLowerCase() === filters.type_contrat) &&
             (!filters.partie_prenante || doc.partie_prenante?.toLowerCase().includes(filters.partie_prenante)) &&
-            (!filters.date_signature || compareDates(doc.date_signature, filters.date_signature)) &&
-           (!filters.date_echeance || compareDates(doc.date_echeance, filters.date_echeance))  &&
+            (!filters.date_signature || (doc.date_signature && new Date(doc.date_signature).toISOString().split('T')[0] === filters.date_signature)) &&
+            (!filters.date_echeance || (doc.date_echeance && new Date(doc.date_echeance).toISOString().split('T')[0] === filters.date_echeance)) &&
             (!filters.montant || Number(doc.montant) === Number(filters.montant)) &&
             (!filters.statut || doc.statut?.toLowerCase() === filters.statut)
           );
@@ -1220,7 +1195,7 @@ const Doc = () => {
                               />
                             </Form.Group>
 
-
+            
 
                             <div className="d-flex align-items-end gap-2">
                               <Button
@@ -1289,12 +1264,12 @@ const Doc = () => {
                                 onChange={(e) => setSearchFilters({ ...searchFilters, experience: e.target.value })}
                               />
                             </Form.Group>
-                            <Button
-                              variant="outline-secondary"
-                              onClick={() => setSearchFilters({})}
-                            >
-                              Réinitialiser
-                            </Button>
+  <Button
+                                variant="outline-secondary"
+                                onClick={() => setSearchFilters({})}
+                              >
+                                Réinitialiser
+                              </Button>
                             <div className="d-flex align-items-end gap-2">
                               <Button className="btn-purple" onClick={() => setSearchFilters({})}>
                                 Rechercher
@@ -1354,12 +1329,12 @@ const Doc = () => {
                                 onChange={(e) => setSearchFilters({ ...searchFilters, produit: e.target.value })}
                               />
                             </Form.Group>
-                            <Button
-                              variant="outline-secondary"
-                              onClick={() => setSearchFilters({})}
-                            >
-                              Réinitialiser
-                            </Button>
+  <Button
+                                variant="outline-secondary"
+                                onClick={() => setSearchFilters({})}
+                              >
+                                Réinitialiser
+                              </Button>
                             <div className="d-flex align-items-end">
                               <Button className="btn-purple" onClick={filteredDocuments}>
                                 Rechercher
@@ -1423,12 +1398,12 @@ const Doc = () => {
                               />
                             </Form.Group>
 
-                            <Button
-                              variant="outline-secondary"
-                              onClick={() => setSearchFilters({})}
-                            >
-                              Réinitialiser
-                            </Button>
+                              <Button
+                                variant="outline-secondary"
+                                onClick={() => setSearchFilters({})}
+                              >
+                                Réinitialiser
+                              </Button>
 
                             <div className="d-flex align-items-end">
                               <Button className="btn-purple" onClick={filteredDocuments}>
@@ -1484,12 +1459,12 @@ const Doc = () => {
                                 <option value="haute">Haute</option>
                               </Form.Select>
                             </Form.Group>
-                            <Button
-                              variant="outline-secondary"
-                              onClick={() => setSearchFilters({})}
-                            >
-                              Réinitialiser
-                            </Button>
+  <Button
+                                variant="outline-secondary"
+                                onClick={() => setSearchFilters({})}
+                              >
+                                Réinitialiser
+                              </Button>
                             {/* Bouton de recherche */}
                             <div className="d-flex align-items-end">
                               <Button className="btn-purple" onClick={filteredDocuments}>

@@ -706,6 +706,7 @@ let baseQuery = `
       }
     }
 
+    
     baseQuery += ` ORDER BY d.date DESC`;
 
     const result = await pool.query(baseQuery, params);
