@@ -77,7 +77,7 @@ const Navbar = () => {
       icon: <AiIcons.AiFillHome />,
     },
     currentUser?.role === 'admin' && {
-      title: 'Ajouter utilisateur',
+      title: 'Utilisateurs',
       path: '/AdminUsers',
       icon: <FaIcons.FaUserPlus />,
     },
@@ -141,7 +141,7 @@ const Navbar = () => {
       path: '/ReclamationList',
       icon: <FaIcons.FaInbox />,
     },
-  ];
+  ]; 
 
 
   const userMenu = (
